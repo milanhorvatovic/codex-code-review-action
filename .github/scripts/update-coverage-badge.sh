@@ -1,8 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
+# Resolve coverage summary path (artifact download location may vary).
+if [ -f "coverage/coverage-summary.json" ]; then
+  COVERAGE_FILE="coverage/coverage-summary.json"
+elif [ -f "coverage-summary.json" ]; then
+  COVERAGE_FILE="coverage-summary.json"
+else
+  echo "Coverage summary file not found. Checked 'coverage/coverage-summary.json' and 'coverage-summary.json'." >&2
+  exit 1
+fi
+
 # Extract coverage total from vitest json-summary output.
-TOTAL_RAW=$(node -e "const s = JSON.parse(require('fs').readFileSync('coverage-summary.json','utf8')); console.log(s.total.lines.pct)")
+TOTAL_RAW=$(node -e "const s = JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); console.log(s.total.lines.pct)" "$COVERAGE_FILE")
 TOTAL=$(printf '%.0f' "$TOTAL_RAW")
 
 # Map coverage percentage to badge color.

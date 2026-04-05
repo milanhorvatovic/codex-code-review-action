@@ -30,6 +30,18 @@ describe("sanitizeText", () => {
     const input = "a".repeat(100);
     expect(sanitizeText(input, 100)).toBe(input);
   });
+
+  it("handles maxChars smaller than suffix length", () => {
+    const input = "a".repeat(200);
+    const result = sanitizeText(input, 5);
+    expect(result.length).toBeLessThanOrEqual(5);
+    expect(result).toBe("aaaaa");
+  });
+
+  it("handles maxChars equal to zero", () => {
+    const result = sanitizeText("hello", 0);
+    expect(result).toBe("");
+  });
 });
 
 describe("buildDynamicFence", () => {

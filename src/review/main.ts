@@ -5,11 +5,13 @@ import * as core from "@actions/core";
 
 import { defaultPrompt, defaultReference, defaultSchema } from "../config/defaults.js";
 import { getReviewInputs } from "../config/inputs.js";
+import type { ReviewOutput } from "../config/types.js";
 import { isAuthorAllowed } from "../core/allowlist.js";
-import { buildChunkMatrix, buildDiff, fetchBaseSha, splitDiff } from "../core/diff.js";
+import { buildChunkMatrix, splitDiff } from "../core/diff.js";
 import { mergeChunkReviews } from "../core/merge.js";
 import { assemblePrompt } from "../core/prompt.js";
 import { getPullRequestContext } from "../github/context.js";
+import { buildDiff, fetchBaseSha } from "../github/git.js";
 import { reviewChunk } from "../openai/client.js";
 
 const CODEX_DIR = ".codex";
@@ -21,12 +23,6 @@ const ARTIFACT_RETENTION_DAYS = 90;
 async function run(): Promise<void> {
   const inputs = getReviewInputs();
   const prContext = getPullRequestContext();
-
-  if (!inputs.apiKey) {
-    core.setOutput("skipped", "true");
-    core.warning("openai-api-key is required but was empty.");
-    return;
-  }
 
   if (!isAuthorAllowed(inputs.allowedUsers, prContext.author)) {
     core.setOutput("skipped", "true");
@@ -57,12 +53,18 @@ async function run(): Promise<void> {
   core.setOutput("chunk-matrix", buildChunkMatrix(chunks.length));
   core.endGroup();
 
-  const referenceContent = inputs.reviewReferenceFile
-    ? fs.readFileSync(inputs.reviewReferenceFile, "utf8")
-    : defaultReference;
+  const referenceFilePath = inputs.reviewReferenceFile.trim();
+  let referenceContent = defaultReference;
+  if (referenceFilePath) {
+    if (!fs.existsSync(referenceFilePath)) {
+      core.setFailed(`Review reference file not found: ${referenceFilePath}`);
+      return;
+    }
+    referenceContent = fs.readFileSync(referenceFilePath, "utf8");
+  }
 
   const schema = defaultSchema as Record<string, unknown>;
-  const chunkResults = [];
+  const chunkResults: ReviewOutput[] = [];
 
   for (let i = 0; i < chunks.length; i++) {
     core.startGroup(`Reviewing chunk ${i}...`);

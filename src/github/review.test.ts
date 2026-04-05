@@ -196,6 +196,15 @@ describe("buildInlineComment", () => {
     expect(comment.body).toContain("const x = 1;");
   });
 
+  it("falls back to safe fence when suggestion contains triple backticks", () => {
+    const comment = buildInlineComment(
+      { ...baseFinding, suggestion: "code with ``` inside" },
+      "abc123",
+    );
+    expect(comment.body).not.toContain("```suggestion");
+    expect(comment.body).toContain("code with ``` inside");
+  });
+
   it("includes reasoning in details block for P1+", () => {
     const comment = buildInlineComment(baseFinding, "abc123");
     expect(comment.body).toContain("<details>");

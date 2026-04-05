@@ -66,3 +66,21 @@ export interface PrContext {
   number: number;
   title: string;
 }
+
+export function isReviewOutput(value: unknown): value is ReviewOutput {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.summary === "string" &&
+    Array.isArray(obj.findings) &&
+    Array.isArray(obj.changes) &&
+    Array.isArray(obj.files) &&
+    typeof obj.model === "string" &&
+    (obj.overall_correctness === "patch is correct" ||
+      obj.overall_correctness === "patch is incorrect") &&
+    typeof obj.overall_confidence_score === "number" &&
+    Number.isFinite(obj.overall_confidence_score)
+  );
+}

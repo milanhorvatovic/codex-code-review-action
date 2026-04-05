@@ -3,6 +3,7 @@ import * as crypto from "node:crypto";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 
+import { isReviewOutput } from "../config/types.js";
 import type { NormalizedFinding, ReviewOutput } from "../config/types.js";
 
 const GITHUB_MAX_BODY_CHARS = 65_536;
@@ -168,9 +169,15 @@ export function buildInlineComment(
   };
   const alert = alertType[finding.priority] ?? "NOTE";
 
-  const suggestionBlock = finding.suggestion
-    ? `\n\n\`\`\`suggestion\n${finding.suggestion}\n\`\`\``
-    : "";
+  let suggestionBlock = "";
+  if (finding.suggestion) {
+    if (/`{3,}/.test(finding.suggestion)) {
+      const fence = buildSafeFence(finding.suggestion);
+      suggestionBlock = `\n\n${fence}\n${finding.suggestion}\n${fence}`;
+    } else {
+      suggestionBlock = `\n\n\`\`\`suggestion\n${finding.suggestion}\n\`\`\``;
+    }
+  }
 
   const reasoningBlock =
     finding.reasoning && finding.priority > 0
@@ -313,7 +320,7 @@ function buildVerdictSection(correctness: string, confidence: number): string {
 function buildReviewedLine(commentCount: number, totalChangedFiles: number): string {
   const commentLabel =
     commentCount > 0 ? `${commentCount} comment(s)` : "no new comments";
-  return `Codex reviewed ${totalChangedFiles} out of ${totalChangedFiles} changed files in this pull request and generated ${commentLabel}.`;
+  return `Codex reviewed ${totalChangedFiles} changed file(s) in this pull request and generated ${commentLabel}.`;
 }
 
 function buildFileTable(files: ReviewOutput["files"]): string {
@@ -331,6 +338,7 @@ function buildFileTable(files: ReviewOutput["files"]): string {
 function escapeTableCell(text: unknown): string {
   return String(text ?? "")
     .trim()
+    .replace(/\\/g, "\\\\")
     .replace(/\|/g, "\\|")
     .replace(/\n/g, " ");
 }
@@ -379,19 +387,19 @@ export function parseStructuredReview(raw: string): ReviewOutput | null {
   const trimmed = raw.trim();
 
   const direct = tryParseJson(trimmed);
-  if (isReviewShaped(direct)) return direct as ReviewOutput;
+  if (isReviewOutput(direct)) return direct;
 
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced) {
     const parsed = tryParseJson(fenced[1].trim());
-    if (isReviewShaped(parsed)) return parsed as ReviewOutput;
+    if (isReviewOutput(parsed)) return parsed;
   }
 
   const firstBrace = trimmed.indexOf("{");
   const lastBrace = trimmed.lastIndexOf("}");
   if (firstBrace !== -1 && lastBrace > firstBrace) {
     const parsed = tryParseJson(trimmed.slice(firstBrace, lastBrace + 1));
-    if (isReviewShaped(parsed)) return parsed as ReviewOutput;
+    if (isReviewOutput(parsed)) return parsed;
   }
 
   return null;
@@ -403,15 +411,6 @@ function tryParseJson(text: string): unknown {
   } catch {
     return null;
   }
-}
-
-function isReviewShaped(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Array.isArray((value as Record<string, unknown>).findings)
-  );
 }
 
 // ── Resolve model name ──────────────────────────────────────────────
@@ -432,7 +431,10 @@ export async function publishReview(params: PublishParams): Promise<void> {
   if (!pr) {
     throw new Error("No pull request payload found.");
   }
-  const prNumber = pr.number as number;
+  const prNumber = Number(pr.number);
+  if (!Number.isInteger(prNumber) || prNumber <= 0) {
+    throw new Error(`Invalid pull request number: ${String(pr.number)}`);
+  }
   const prHeadSha = String(pr.head?.sha ?? "");
 
   const codexReview = JSON.stringify(params.reviewOutput);

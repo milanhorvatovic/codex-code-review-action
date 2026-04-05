@@ -11,6 +11,9 @@ export function sanitizeText(text: string, maxChars: number): string {
   const suffix = "\n\n...(truncated)";
 
   if (sanitized.length > maxChars) {
+    if (maxChars <= suffix.length) {
+      return sanitized.slice(0, Math.max(0, maxChars));
+    }
     return sanitized.slice(0, maxChars - suffix.length) + suffix;
   }
 

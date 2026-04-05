@@ -1,6 +1,7 @@
 import * as core from "@actions/core";
 import OpenAI from "openai";
 
+import { isReviewOutput } from "../config/types.js";
 import type { ReviewOutput } from "../config/types.js";
 
 const REQUEST_TIMEOUT_MS = 300_000;
@@ -64,20 +65,3 @@ function extractResponseText(response: OpenAI.Responses.Response): string {
   );
 }
 
-function isReviewOutput(value: unknown): value is ReviewOutput {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.summary === "string" &&
-    Array.isArray(obj.findings) &&
-    Array.isArray(obj.changes) &&
-    Array.isArray(obj.files) &&
-    typeof obj.model === "string" &&
-    (obj.overall_correctness === "patch is correct" ||
-      obj.overall_correctness === "patch is incorrect") &&
-    typeof obj.overall_confidence_score === "number" &&
-    Number.isFinite(obj.overall_confidence_score)
-  );
-}

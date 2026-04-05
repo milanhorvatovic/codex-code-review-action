@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as core from "@actions/core";
 
 import { getPublishInputs } from "../config/inputs.js";
+import { isReviewOutput } from "../config/types.js";
 import type { ReviewOutput } from "../config/types.js";
 import { publishReview } from "../github/review.js";
 
@@ -20,13 +21,18 @@ async function run(): Promise<void> {
   }
 
   const rawReview = fs.readFileSync(REVIEW_OUTPUT_FILE, "utf8");
-  let reviewOutput: ReviewOutput;
+  let parsed: unknown;
   try {
-    reviewOutput = JSON.parse(rawReview) as ReviewOutput;
+    parsed = JSON.parse(rawReview);
   } catch {
     core.setFailed("Merged review output is not valid JSON.");
     return;
   }
+  if (!isReviewOutput(parsed)) {
+    core.setFailed("Merged review output does not match the expected ReviewOutput shape.");
+    return;
+  }
+  const reviewOutput: ReviewOutput = parsed;
 
   core.setOutput("review-file", REVIEW_OUTPUT_FILE);
 
