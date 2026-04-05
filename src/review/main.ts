@@ -12,7 +12,7 @@ import { mergeChunkReviews } from "../core/merge.js";
 import { assemblePrompt } from "../core/prompt.js";
 import { getPullRequestContext } from "../github/context.js";
 import { buildDiff, fetchBaseSha } from "../github/git.js";
-import { reviewChunk } from "../openai/client.js";
+import { createOpenAIClient, reviewChunk } from "../openai/client.js";
 
 const CODEX_DIR = ".codex";
 const REVIEW_OUTPUT_FILE = `${CODEX_DIR}/review-output.json`;
@@ -72,6 +72,7 @@ async function run(): Promise<void> {
   }
 
   const schema: Record<string, unknown> = defaultSchema;
+  const client = createOpenAIClient(inputs.apiKey);
   const chunkResults: ReviewOutput[] = [];
 
   for (let i = 0; i < chunks.length; i++) {
@@ -88,7 +89,7 @@ async function run(): Promise<void> {
         reviewRunId: `${Date.now()}-${i}`,
       });
 
-      const result = await reviewChunk(prompt, schema, inputs.model, inputs.apiKey);
+      const result = await reviewChunk(prompt, schema, inputs.model, client);
       chunkResults.push(result);
     } finally {
       core.endGroup();

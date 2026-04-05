@@ -433,26 +433,22 @@ export async function publishReview(params: PublishParams): Promise<void> {
   }
   const prHeadSha = String(pr.head?.sha ?? "");
 
-  const codexReview = JSON.stringify(params.reviewOutput);
-  const parsed = parseStructuredReview(codexReview);
-  const parsedFindings = Array.isArray(parsed?.findings) ? parsed.findings : [];
-  const allFindings = parsedFindings.map(normalizeFinding);
+  const output = params.reviewOutput;
+  const allFindings = output.findings.map(normalizeFinding);
   const validFindings = allFindings.filter(
     (f): f is NormalizedFinding => f !== null,
   );
   const skippedIncomplete = allFindings.length - validFindings.length;
 
-  const summaryText = String(parsed?.summary ?? "").trim();
-  const changes = Array.isArray(parsed?.changes)
-    ? parsed.changes.map((c: unknown) => String(c).trim()).filter(Boolean)
-    : [];
-  const files = Array.isArray(parsed?.files) ? parsed.files : [];
-  const overallCorrectness = String(parsed?.overall_correctness ?? "").trim();
-  const overallConfidenceScore = Number(parsed?.overall_confidence_score);
-  const model = resolveModel(parsed, params.model);
+  const summaryText = output.summary.trim();
+  const changes = output.changes.map((c) => String(c).trim()).filter(Boolean);
+  const files = output.files;
+  const overallCorrectness = output.overall_correctness;
+  const overallConfidenceScore = output.overall_confidence_score;
+  const model = resolveModel(output, params.model);
 
   const forceRawFallback =
-    parsed !== null && parsedFindings.length > 0 && validFindings.length === 0;
+    output.findings.length > 0 && validFindings.length === 0;
 
   validFindings.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
@@ -539,8 +535,8 @@ export async function publishReview(params: PublishParams): Promise<void> {
   };
 
   let reviewBody: string;
-  if (!parsed || forceRawFallback) {
-    reviewBody = buildFallbackBody(codexReview);
+  if (forceRawFallback) {
+    reviewBody = buildFallbackBody(JSON.stringify(output, null, 2));
   } else {
     reviewBody = buildReviewBody(bodyParams);
   }
@@ -563,8 +559,8 @@ export async function publishReview(params: PublishParams): Promise<void> {
     if (reviewComments.length > 0) {
       try {
         bodyParams.commentCount = 0;
-        const fallbackBody = !parsed || forceRawFallback
-          ? buildFallbackBody(codexReview)
+        const fallbackBody = forceRawFallback
+          ? buildFallbackBody(JSON.stringify(output, null, 2))
           : buildReviewBody(bodyParams);
 
         await octokit.rest.pulls.createReview({

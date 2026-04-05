@@ -12,10 +12,14 @@ export async function fetchBaseSha(
   ], { ignoreReturnCode: true, silent: true });
 
   if (check.exitCode !== 0) {
-    const credentials = Buffer.from(`x-access-token:${token}`).toString("base64");
-    core.setSecret(credentials);
-    const host = process.env.GITHUB_SERVER_URL ?? "https://github.com";
-    const extraHeader = `AUTHORIZATION: basic ${credentials}`;
+    const authArgs: string[] = [];
+    if (token) {
+      const credentials = Buffer.from(`x-access-token:${token}`).toString("base64");
+      core.setSecret(credentials);
+      const host = process.env.GITHUB_SERVER_URL ?? "https://github.com";
+      const extraHeader = `AUTHORIZATION: basic ${credentials}`;
+      authArgs.push("-c", `http.${host}/.extraheader=${extraHeader}`);
+    }
 
     const isShallow = await getExecOutput("git", [
       "rev-parse",
@@ -27,7 +31,7 @@ export async function fetchBaseSha(
       : ["--depth=1"];
 
     await getExecOutput("git", [
-      "-c", `http.${host}/.extraheader=${extraHeader}`,
+      ...authArgs,
       "fetch",
       "--no-tags",
       ...depthArgs,

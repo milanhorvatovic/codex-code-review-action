@@ -7,18 +7,21 @@ import type { ReviewOutput } from "../config/types.js";
 const REQUEST_TIMEOUT_MS = 300_000;
 const MAX_RETRIES = 3;
 
-export async function reviewChunk(
-  prompt: string,
-  schema: Record<string, unknown>,
-  model: string,
-  apiKey: string,
-): Promise<ReviewOutput> {
-  const resolvedModel = model.trim() || undefined;
-  const client = new OpenAI({
+export function createOpenAIClient(apiKey: string): OpenAI {
+  return new OpenAI({
     apiKey,
     maxRetries: MAX_RETRIES,
     timeout: REQUEST_TIMEOUT_MS,
   });
+}
+
+export async function reviewChunk(
+  prompt: string,
+  schema: Record<string, unknown>,
+  model: string,
+  client: OpenAI,
+): Promise<ReviewOutput> {
+  const resolvedModel = model.trim() || undefined;
 
   core.info(`Model: ${resolvedModel ?? "(API default)"}`);
   core.info(`Prompt: ${prompt.length} chars`);
@@ -37,7 +40,13 @@ export async function reviewChunk(
   });
 
   const text = extractResponseText(response);
-  const parsed: unknown = JSON.parse(text);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    const excerpt = text.slice(0, 200);
+    throw new Error(`API response is not valid JSON (${text.length} chars). Excerpt: ${excerpt}`);
+  }
 
   if (!isReviewOutput(parsed)) {
     throw new Error("API response does not match ReviewOutput shape");

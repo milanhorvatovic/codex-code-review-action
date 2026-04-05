@@ -15,7 +15,7 @@ vi.mock("@actions/core", () => ({
 }));
 
 import type { ReviewOutput } from "../config/types.js";
-import { reviewChunk } from "./client.js";
+import { createOpenAIClient, reviewChunk } from "./client.js";
 
 const validReview: ReviewOutput = {
   changes: ["Added validation"],
@@ -26,6 +26,8 @@ const validReview: ReviewOutput = {
   overall_correctness: "patch is correct",
   summary: "Test summary",
 };
+
+const client = createOpenAIClient("test-key");
 
 beforeEach(() => {
   mockCreate.mockReset();
@@ -44,14 +46,14 @@ describe("reviewChunk", () => {
       ],
     });
 
-    const result = await reviewChunk("test prompt", {}, "test-model", "key");
+    const result = await reviewChunk("test prompt", {}, "test-model", client);
     expect(result).toEqual(validReview);
   });
 
   it("throws on unexpected response structure", async () => {
     mockCreate.mockResolvedValueOnce({ output: [] });
 
-    await expect(reviewChunk("prompt", {}, "model", "key")).rejects.toThrow(
+    await expect(reviewChunk("prompt", {}, "model", client)).rejects.toThrow(
       "Unexpected API response structure",
     );
   });
@@ -66,7 +68,7 @@ describe("reviewChunk", () => {
       ],
     });
 
-    await expect(reviewChunk("prompt", {}, "model", "key")).rejects.toThrow(
+    await expect(reviewChunk("prompt", {}, "model", client)).rejects.toThrow(
       "does not match ReviewOutput shape",
     );
   });
@@ -83,7 +85,7 @@ describe("reviewChunk", () => {
       ],
     });
 
-    await reviewChunk("prompt", {}, "", "key");
+    await reviewChunk("prompt", {}, "", client);
 
     const callArgs = mockCreate.mock.calls[0][0] as Record<string, unknown>;
     expect(callArgs.model).toBeUndefined();
@@ -101,7 +103,7 @@ describe("reviewChunk", () => {
       ],
     });
 
-    await reviewChunk("prompt", {}, "o4-mini", "key");
+    await reviewChunk("prompt", {}, "o4-mini", client);
 
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({ model: "o4-mini" }),
