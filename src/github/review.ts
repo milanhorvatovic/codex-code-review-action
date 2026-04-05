@@ -502,6 +502,13 @@ export async function publishReview(params: PublishParams): Promise<void> {
     }
 
     const comment = buildInlineComment(finding, signature);
+    if (
+      comment.start_line !== undefined &&
+      !addedLines?.has(comment.start_line)
+    ) {
+      delete comment.start_line;
+      delete comment.start_side;
+    }
     reviewComments.push(comment);
   }
 

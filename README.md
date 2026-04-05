@@ -70,7 +70,7 @@ The action is split into two Node 22 TypeScript actions for security isolation:
 | `review` | `contents: read` | Build diff, split into chunks, assemble prompts, call OpenAI API, merge results |
 | `publish` | `contents: read`, `pull-requests: write` | Validate review output, post PR review with inline comments |
 
-The review job never gets write access to the repository. The publish job never sees the OpenAI API key. Artifact handoff between jobs is explicit.
+The review job never gets write access to the repository — it only needs a read-only GitHub token (for fetching the base commit) and the OpenAI API key. The publish job never sees the OpenAI API key. Artifact handoff between jobs is explicit.
 
 ```
 review job                              publish job

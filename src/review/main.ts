@@ -32,12 +32,16 @@ async function run(): Promise<void> {
 
   core.setOutput("skipped", "false");
 
+  let diff: string;
   core.startGroup("Building PR diff");
-  await fetchBaseSha(prContext.baseSha, inputs.githubToken);
-  const diff = await buildDiff(prContext.baseSha, prContext.headSha);
-  fs.mkdirSync(CODEX_DIR, { recursive: true });
-  fs.writeFileSync(DIFF_FILE, diff);
-  core.endGroup();
+  try {
+    await fetchBaseSha(prContext.baseSha, inputs.githubToken);
+    diff = await buildDiff(prContext.baseSha, prContext.headSha);
+    fs.mkdirSync(CODEX_DIR, { recursive: true });
+    fs.writeFileSync(DIFF_FILE, diff);
+  } finally {
+    core.endGroup();
+  }
 
   if (diff.trim().length === 0) {
     core.setOutput("has-changes", "false");
@@ -47,11 +51,15 @@ async function run(): Promise<void> {
   core.setOutput("has-changes", "true");
 
   core.startGroup("Splitting diff into chunks");
-  const chunks = splitDiff(diff, inputs.maxChunkBytes);
-  core.info(`Created ${chunks.length} chunk(s)`);
-  core.setOutput("chunk-count", String(chunks.length));
-  core.setOutput("chunk-matrix", buildChunkMatrix(chunks.length));
-  core.endGroup();
+  let chunks: string[];
+  try {
+    chunks = splitDiff(diff, inputs.maxChunkBytes);
+    core.info(`Created ${chunks.length} chunk(s)`);
+    core.setOutput("chunk-count", String(chunks.length));
+    core.setOutput("chunk-matrix", buildChunkMatrix(chunks.length));
+  } finally {
+    core.endGroup();
+  }
 
   const referenceFilePath = inputs.reviewReferenceFile.trim();
   let referenceContent = defaultReference;
@@ -88,25 +96,32 @@ async function run(): Promise<void> {
   }
 
   core.startGroup("Merging chunk reviews");
-  const merged = mergeChunkReviews(chunkResults, chunks.length);
-  fs.writeFileSync(REVIEW_OUTPUT_FILE, JSON.stringify(merged, null, 2));
-  core.info(`Merged review: ${merged.findings.length} finding(s) -> ${REVIEW_OUTPUT_FILE}`);
-  core.endGroup();
+  let merged: ReviewOutput;
+  try {
+    merged = mergeChunkReviews(chunkResults, chunks.length);
+    fs.writeFileSync(REVIEW_OUTPUT_FILE, JSON.stringify(merged, null, 2));
+    core.info(`Merged review: ${merged.findings.length} finding(s) -> ${REVIEW_OUTPUT_FILE}`);
+  } finally {
+    core.endGroup();
+  }
 
   core.setOutput("findings-count", String(merged.findings.length));
   core.setOutput("verdict", merged.overall_correctness);
 
   if (inputs.retainFindings) {
     core.startGroup("Uploading review findings artifact");
-    const client = new artifact.DefaultArtifactClient();
-    await client.uploadArtifact(
-      ARTIFACT_NAME,
-      [REVIEW_OUTPUT_FILE, DIFF_FILE],
-      CODEX_DIR,
-      { retentionDays: ARTIFACT_RETENTION_DAYS },
-    );
-    core.info(`Uploaded findings artifact: ${ARTIFACT_NAME}`);
-    core.endGroup();
+    try {
+      const client = new artifact.DefaultArtifactClient();
+      await client.uploadArtifact(
+        ARTIFACT_NAME,
+        [REVIEW_OUTPUT_FILE, DIFF_FILE],
+        CODEX_DIR,
+        { retentionDays: ARTIFACT_RETENTION_DAYS },
+      );
+      core.info(`Uploaded findings artifact: ${ARTIFACT_NAME}`);
+    } finally {
+      core.endGroup();
+    }
   }
 }
 
