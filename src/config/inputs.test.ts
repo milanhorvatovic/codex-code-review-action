@@ -23,6 +23,7 @@ describe("getReviewInputs", () => {
     mockGetInput.mockImplementation((name: string) => {
       const inputs: Record<string, string> = {
         "allowed-users": "user1,user2",
+        "github-token": "ghp-token",
         "max-chunk-bytes": "100000",
         "model": "o4-mini",
         "openai-api-key": "sk-test-key",
@@ -35,6 +36,7 @@ describe("getReviewInputs", () => {
     const result = getReviewInputs();
 
     expect(result.apiKey).toBe("sk-test-key");
+    expect(result.githubToken).toBe("ghp-token");
     expect(result.model).toBe("o4-mini");
     expect(result.allowedUsers).toBe("user1,user2");
     expect(result.maxChunkBytes).toBe(100000);

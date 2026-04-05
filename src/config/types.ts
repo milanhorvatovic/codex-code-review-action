@@ -42,6 +42,7 @@ export interface NormalizedFinding {
 export interface ReviewInputs {
   allowedUsers: string;
   apiKey: string;
+  githubToken: string;
   maxChunkBytes: number;
   model: string;
   retainFindings: boolean;

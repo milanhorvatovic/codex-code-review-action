@@ -37,7 +37,7 @@ async function run(): Promise<void> {
   core.setOutput("skipped", "false");
 
   core.startGroup("Building PR diff");
-  await fetchBaseSha(prContext.baseSha, inputs.apiKey);
+  await fetchBaseSha(prContext.baseSha, inputs.githubToken);
   const diff = await buildDiff(prContext.baseSha, prContext.headSha);
   fs.mkdirSync(CODEX_DIR, { recursive: true });
   fs.writeFileSync(DIFF_FILE, diff);

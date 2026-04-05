@@ -11,6 +11,11 @@ inputs:
     required: false
     default: ""
 
+  github-token:
+    description: "GitHub token for fetching PR base commit. Only needs contents: read permission."
+    required: false
+    default: ${{ github.token }}
+
   max-chunk-bytes:
     description: "Maximum bytes per diff chunk before splitting."
     required: false

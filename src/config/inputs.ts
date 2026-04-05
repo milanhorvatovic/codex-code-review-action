@@ -14,9 +14,15 @@ export function getReviewInputs(): ReviewInputs {
       ? rawMaxChunkBytes
       : MAX_CHUNK_BYTES_DEFAULT;
 
+  const githubToken = core.getInput("github-token");
+  if (githubToken) {
+    core.setSecret(githubToken);
+  }
+
   return {
     allowedUsers: core.getInput("allowed-users"),
     apiKey,
+    githubToken,
     maxChunkBytes,
     model: core.getInput("model"),
     retainFindings: core.getBooleanInput("retain-findings"),
