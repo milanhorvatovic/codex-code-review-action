@@ -27,6 +27,7 @@ describe("getReviewInputs", () => {
         "max-chunk-bytes": "100000",
         "model": "o4-mini",
         "openai-api-key": "sk-test-key",
+        "retain-findings-days": "30",
         "review-reference-file": ".github/codex/reference.md",
       };
       return inputs[name] ?? "";
@@ -41,6 +42,7 @@ describe("getReviewInputs", () => {
     expect(result.allowedUsers).toBe("user1,user2");
     expect(result.maxChunkBytes).toBe(100000);
     expect(result.retainFindings).toBe(false);
+    expect(result.retainFindingsDays).toBe(30);
     expect(result.reviewReferenceFile).toBe(".github/codex/reference.md");
   });
 
@@ -63,6 +65,26 @@ describe("getReviewInputs", () => {
 
     const result = getReviewInputs();
     expect(result.maxChunkBytes).toBe(204800);
+  });
+
+  it("uses default retain-findings-days for invalid input", () => {
+    mockGetInput.mockImplementation((name: string) =>
+      name === "openai-api-key" ? "key" : name === "retain-findings-days" ? "invalid" : "",
+    );
+    mockGetBooleanInput.mockReturnValue(false);
+
+    const result = getReviewInputs();
+    expect(result.retainFindingsDays).toBe(90);
+  });
+
+  it("uses default retain-findings-days for negative value", () => {
+    mockGetInput.mockImplementation((name: string) =>
+      name === "openai-api-key" ? "key" : name === "retain-findings-days" ? "-5" : "",
+    );
+    mockGetBooleanInput.mockReturnValue(false);
+
+    const result = getReviewInputs();
+    expect(result.retainFindingsDays).toBe(90);
   });
 
   it("uses default max-chunk-bytes for negative value", () => {

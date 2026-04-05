@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 import * as artifact from "@actions/artifact";
 import * as core from "@actions/core";
@@ -18,7 +19,7 @@ const CODEX_DIR = ".codex";
 const REVIEW_OUTPUT_FILE = `${CODEX_DIR}/review-output.json`;
 const DIFF_FILE = `${CODEX_DIR}/pr.diff`;
 const ARTIFACT_NAME = "codex-review-findings";
-const ARTIFACT_RETENTION_DAYS = 90;
+
 
 async function run(): Promise<void> {
   const inputs = getReviewInputs();
@@ -74,7 +75,7 @@ async function run(): Promise<void> {
   let referenceContent = defaultReference;
   if (referenceFilePath) {
     if (!fs.existsSync(referenceFilePath)) {
-      core.setFailed(`Review reference file not found: ${referenceFilePath}`);
+      core.setFailed(`Review reference file not found: ${referenceFilePath} (resolved: ${path.resolve(referenceFilePath)}, cwd: ${process.cwd()})`);
       return;
     }
     referenceContent = fs.readFileSync(referenceFilePath, "utf8");
@@ -126,7 +127,7 @@ async function run(): Promise<void> {
         ARTIFACT_NAME,
         [REVIEW_OUTPUT_FILE, DIFF_FILE],
         CODEX_DIR,
-        { retentionDays: ARTIFACT_RETENTION_DAYS },
+        { retentionDays: inputs.retainFindingsDays },
       );
       core.info(`Uploaded findings artifact: ${ARTIFACT_NAME}`);
     } finally {

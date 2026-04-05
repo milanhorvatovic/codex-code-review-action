@@ -46,6 +46,7 @@ export interface ReviewInputs {
   maxChunkBytes: number;
   model: string;
   retainFindings: boolean;
+  retainFindingsDays: number;
   reviewReferenceFile: string;
 }
 

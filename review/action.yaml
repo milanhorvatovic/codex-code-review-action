@@ -34,6 +34,11 @@ inputs:
     required: false
     default: "false"
 
+  retain-findings-days:
+    description: "Number of days to retain the findings artifact. Only applies when retain-findings is true."
+    required: false
+    default: "90"
+
   review-reference-file:
     description: "Path to a custom review reference markdown file. Uses the built-in default if empty."
     required: false

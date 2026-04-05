@@ -3,6 +3,7 @@ import * as core from "@actions/core";
 import type { PublishInputs, ReviewInputs } from "./types.js";
 
 const MAX_CHUNK_BYTES_DEFAULT = 204800;
+const RETAIN_FINDINGS_DAYS_DEFAULT = 90;
 
 export function getReviewInputs(): ReviewInputs {
   const apiKey = core.getInput("openai-api-key", { required: true });
@@ -19,6 +20,12 @@ export function getReviewInputs(): ReviewInputs {
     core.setSecret(githubToken);
   }
 
+  const rawRetainDays = Number(core.getInput("retain-findings-days"));
+  const retainFindingsDays =
+    Number.isInteger(rawRetainDays) && rawRetainDays > 0
+      ? rawRetainDays
+      : RETAIN_FINDINGS_DAYS_DEFAULT;
+
   return {
     allowedUsers: core.getInput("allowed-users"),
     apiKey,
@@ -26,6 +33,7 @@ export function getReviewInputs(): ReviewInputs {
     maxChunkBytes,
     model: core.getInput("model"),
     retainFindings: core.getBooleanInput("retain-findings"),
+    retainFindingsDays,
     reviewReferenceFile: core.getInput("review-reference-file"),
   };
 }
