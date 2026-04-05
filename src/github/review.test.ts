@@ -196,12 +196,12 @@ describe("buildInlineComment", () => {
     expect(comment.body).toContain("const x = 1;");
   });
 
-  it("falls back to safe fence when suggestion contains triple backticks", () => {
+  it("uses dynamic fence with suggestion info string when suggestion contains triple backticks", () => {
     const comment = buildInlineComment(
       { ...baseFinding, suggestion: "code with ``` inside" },
       "abc123",
     );
-    expect(comment.body).not.toContain("```suggestion");
+    expect(comment.body).toContain("````suggestion");
     expect(comment.body).toContain("code with ``` inside");
   });
 

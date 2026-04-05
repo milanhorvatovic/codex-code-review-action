@@ -16,11 +16,21 @@ export async function fetchBaseSha(
     core.setSecret(credentials);
     const host = process.env.GITHUB_SERVER_URL ?? "https://github.com";
     const extraHeader = `AUTHORIZATION: basic ${credentials}`;
+
+    const isShallow = await getExecOutput("git", [
+      "rev-parse",
+      "--is-shallow-repository",
+    ], { ignoreReturnCode: true, silent: true });
+
+    const depthArgs = isShallow.stdout.trim() === "true"
+      ? ["--deepen=50"]
+      : ["--depth=1"];
+
     await getExecOutput("git", [
       "-c", `http.${host}/.extraheader=${extraHeader}`,
       "fetch",
       "--no-tags",
-      "--depth=1",
+      ...depthArgs,
       "origin",
       baseSha,
     ], { silent: true });

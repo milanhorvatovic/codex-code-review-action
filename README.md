@@ -1,7 +1,7 @@
-# codex-review-action
+# codex-code-review-action
 
-[![Tests](https://github.com/milanhorvatovic/codex-review-action/actions/workflows/tests.yaml/badge.svg)](https://github.com/milanhorvatovic/codex-review-action/actions/workflows/tests.yaml)
-[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmilanhorvatovic%2Fcodex-review-action%2Fbadges%2Fcoverage.json)](https://github.com/milanhorvatovic/codex-review-action/actions/workflows/tests.yaml)
+[![Tests](https://github.com/milanhorvatovic/codex-code-review-action/actions/workflows/tests.yaml/badge.svg)](https://github.com/milanhorvatovic/codex-code-review-action/actions/workflows/tests.yaml)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmilanhorvatovic%2Fcodex-code-review-action%2Fbadges%2Fcoverage.json)](https://github.com/milanhorvatovic/codex-code-review-action/actions/workflows/tests.yaml)
 
 AI-powered code review GitHub Action using OpenAI Codex. Two-job design with security isolation: read-only review job (diff chunking, prompt assembly, structured findings) and write-access publish job (inline PR comments, per-file summaries, verdict). Fully configurable prompts, models, confidence thresholds, and user allowlists.
 
@@ -33,7 +33,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: milanhorvatovic/codex-review-action/review@v1
+      - uses: milanhorvatovic/codex-code-review-action/review@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
 
@@ -58,7 +58,7 @@ jobs:
           name: codex-review
           path: .codex/
 
-      - uses: milanhorvatovic/codex-review-action/publish@v1
+      - uses: milanhorvatovic/codex-code-review-action/publish@v1
 ```
 
 ## Architecture
@@ -134,7 +134,7 @@ The review reference file controls what the AI focuses on during reviews — lan
 To customize, create `.github/codex/review-reference.md` in your repository and pass it:
 
 ```yaml
-- uses: milanhorvatovic/codex-review-action/review@v1
+- uses: milanhorvatovic/codex-code-review-action/review@v1
   with:
     openai-api-key: ${{ secrets.OPENAI_API_KEY }}
     review-reference-file: .github/codex/review-reference.md

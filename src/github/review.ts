@@ -173,7 +173,7 @@ export function buildInlineComment(
   if (finding.suggestion) {
     if (/`{3,}/.test(finding.suggestion)) {
       const fence = buildSafeFence(finding.suggestion);
-      suggestionBlock = `\n\n${fence}\n${finding.suggestion}\n${fence}`;
+      suggestionBlock = `\n\n${fence}suggestion\n${finding.suggestion}\n${fence}`;
     } else {
       suggestionBlock = `\n\n\`\`\`suggestion\n${finding.suggestion}\n\`\`\``;
     }
@@ -492,6 +492,10 @@ export async function publishReview(params: PublishParams): Promise<void> {
       continue;
     }
 
+    if (reviewComments.length >= params.maxComments) {
+      break;
+    }
+
     const signature = computeSignature(finding);
     if (existingInlineMarkers.has(signature)) {
       continue;
@@ -499,10 +503,6 @@ export async function publishReview(params: PublishParams): Promise<void> {
 
     const comment = buildInlineComment(finding, signature);
     reviewComments.push(comment);
-
-    if (reviewComments.length >= params.maxComments) {
-      break;
-    }
   }
 
   const existingReviews = await octokit.paginate(
