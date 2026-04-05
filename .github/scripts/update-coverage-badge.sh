@@ -46,7 +46,6 @@ git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
 git checkout --orphan badges
 git rm -rf .
-mv coverage.json .
 git add coverage.json
 git commit -m "Update coverage badge to ${TOTAL}% [skip ci]"
 git push origin badges --force
