@@ -42,7 +42,7 @@ async function run(): Promise<void> {
 
   const runUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${process.env.GITHUB_REPOSITORY ?? ""}/actions/runs/${process.env.GITHUB_RUN_ID ?? ""}`;
 
-  await publishReview({
+  const published = await publishReview({
     diffText,
     githubToken: inputs.githubToken,
     maxComments: inputs.maxComments,
@@ -53,7 +53,10 @@ async function run(): Promise<void> {
     runUrl,
   });
 
-  core.setOutput("published", "true");
+  core.setOutput("published", String(published));
+  if (!published) {
+    core.setFailed("Failed to publish review. See warnings above for details.");
+  }
 }
 
 run().catch((error) => {

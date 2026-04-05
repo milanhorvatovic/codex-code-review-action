@@ -85,7 +85,7 @@ describe("publishReview", () => {
   it("publishes a review successfully", async () => {
     mockCreateReview.mockResolvedValueOnce({});
 
-    await publishReview({
+    const result = await publishReview({
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -97,6 +97,7 @@ describe("publishReview", () => {
     });
 
     expect(mockCreateReview).toHaveBeenCalledTimes(1);
+    expect(result).toBe(true);
   });
 
   it("publishes review with no findings", async () => {
@@ -141,7 +142,7 @@ describe("publishReview", () => {
       .mockRejectedValueOnce(new Error("inline failed"))
       .mockResolvedValueOnce({});
 
-    await publishReview({
+    const result = await publishReview({
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -153,6 +154,7 @@ describe("publishReview", () => {
     });
 
     expect(mockCreateReview).toHaveBeenCalledTimes(2);
+    expect(result).toBe(true);
   });
 
   it("limits comments when maxComments is set", async () => {
@@ -253,12 +255,12 @@ describe("publishReview", () => {
     expect(mockCreateReview).toHaveBeenCalledTimes(1);
   });
 
-  it("handles retry failure gracefully", async () => {
+  it("returns false when all publish attempts fail", async () => {
     mockCreateReview
       .mockRejectedValueOnce(new Error("first fail"))
       .mockRejectedValueOnce(new Error("second fail"));
 
-    await publishReview({
+    const result = await publishReview({
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -270,6 +272,7 @@ describe("publishReview", () => {
     });
 
     expect(mockCreateReview).toHaveBeenCalledTimes(2);
+    expect(result).toBe(false);
   });
 
   it("publishes with correct verdict", async () => {

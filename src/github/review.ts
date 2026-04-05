@@ -420,7 +420,7 @@ export function resolveModel(parsed: ReviewOutput | null, envModel: string): str
 
 // ── Main publish function ───────────────────────────────────────────
 
-export async function publishReview(params: PublishParams): Promise<void> {
+export async function publishReview(params: PublishParams): Promise<boolean> {
   const octokit = github.getOctokit(params.githubToken);
   const { owner, repo } = github.context.repo;
   const pr = github.context.payload.pull_request;
@@ -552,6 +552,7 @@ export async function publishReview(params: PublishParams): Promise<void> {
       repo,
     });
     core.info(`Published review with ${reviewComments.length} inline comment(s)`);
+    return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     core.warning(`Failed to create review with inline comments: ${message}`);
@@ -572,6 +573,7 @@ export async function publishReview(params: PublishParams): Promise<void> {
           repo,
         });
         core.info("Published review without inline comments (fallback)");
+        return true;
       } catch (retryError) {
         const retryMessage =
           retryError instanceof Error ? retryError.message : String(retryError);
@@ -579,6 +581,8 @@ export async function publishReview(params: PublishParams): Promise<void> {
       }
     }
   }
+
+  return false;
 }
 
 function buildFallbackBody(rawReview: string): string {
