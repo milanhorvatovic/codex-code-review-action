@@ -26,6 +26,11 @@ async function run(): Promise<void> {
 
   if (!isAuthorAllowed(inputs.allowedUsers, prContext.author)) {
     core.setOutput("skipped", "true");
+    core.setOutput("has-changes", "false");
+    core.setOutput("chunk-count", "0");
+    core.setOutput("chunk-matrix", buildChunkMatrix(0));
+    core.setOutput("findings-count", "0");
+    core.setOutput("verdict", "");
     core.info(`PR author '${prContext.author}' is not in the allowed users list. Skipping review.`);
     return;
   }
@@ -45,6 +50,10 @@ async function run(): Promise<void> {
 
   if (diff.trim().length === 0) {
     core.setOutput("has-changes", "false");
+    core.setOutput("chunk-count", "0");
+    core.setOutput("chunk-matrix", buildChunkMatrix(0));
+    core.setOutput("findings-count", "0");
+    core.setOutput("verdict", "");
     core.info("Diff is empty — nothing to review.");
     return;
   }
