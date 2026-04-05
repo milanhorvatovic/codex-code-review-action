@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+*.js.map
+*.tsbuildinfo
+
+# Secrets
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp

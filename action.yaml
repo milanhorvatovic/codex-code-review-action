@@ -1,0 +1,12 @@
+name: "Codex Code Review"
+description: "AI-powered code review using OpenAI Codex"
+inputs:
+  openai-api-key:
+    description: "OpenAI API key"
+    required: true
+  github-token:
+    description: "GitHub token for posting review comments"
+    required: true
+runs:
+  using: "node22"
+  main: "dist/main.js"
