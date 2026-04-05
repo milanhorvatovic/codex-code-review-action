@@ -34,10 +34,12 @@ jobs:
           persist-credentials: false
 
       - uses: milanhorvatovic/codex-code-review-action/review@v1
+        id: review
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.review.outputs.skipped != 'true' && steps.review.outputs.has-changes == 'true'
         with:
           name: codex-review
           path: |
@@ -46,8 +48,13 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
+    outputs:
+      skipped: ${{ steps.review.outputs.skipped }}
+      has-changes: ${{ steps.review.outputs.has-changes }}
+
   publish:
     needs: review
+    if: needs.review.outputs.skipped != 'true' && needs.review.outputs.has-changes == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
