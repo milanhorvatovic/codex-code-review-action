@@ -52,4 +52,37 @@ describe("isReviewOutput", () => {
   it("returns false for missing model", () => {
     expect(isReviewOutput({ ...valid, model: undefined })).toBe(false);
   });
+
+  it("returns false for malformed files element", () => {
+    expect(isReviewOutput({ ...valid, files: [null] })).toBe(false);
+  });
+
+  it("returns false for files element missing path", () => {
+    expect(isReviewOutput({ ...valid, files: [{ description: "d" }] })).toBe(false);
+  });
+
+  it("returns false for non-string changes element", () => {
+    expect(isReviewOutput({ ...valid, changes: [123] })).toBe(false);
+  });
+
+  it("returns false for malformed findings element", () => {
+    expect(isReviewOutput({ ...valid, findings: [{ body: "b" }] })).toBe(false);
+  });
+
+  it("returns true for valid findings with all fields", () => {
+    expect(isReviewOutput({
+      ...valid,
+      findings: [{
+        body: "Fix this",
+        confidence_score: 0.8,
+        line: 10,
+        path: "src/main.ts",
+        priority: 1,
+        reasoning: "Because",
+        start_line: null,
+        suggestion: null,
+        title: "Bug",
+      }],
+    })).toBe(true);
+  });
 });

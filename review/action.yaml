@@ -17,7 +17,7 @@ inputs:
     default: ${{ github.token }}
 
   max-chunk-bytes:
-    description: "Maximum bytes per diff chunk before splitting."
+    description: "Target maximum bytes per diff chunk. Splitting occurs at file boundaries, so a chunk may exceed this size if a single file's diff is larger."
     required: false
     default: "204800"
 

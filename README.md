@@ -96,7 +96,7 @@ merge chunk results                       └── per-file summary
 | `github-token` | No | `github.token` | GitHub token for fetching PR base commit |
 | `allowed-users` | No | all users | Comma-separated allowlist of GitHub usernames |
 | `review-reference-file` | No | built-in | Path to custom review reference |
-| `max-chunk-bytes` | No | `204800` | Max bytes per diff chunk |
+| `max-chunk-bytes` | No | `204800` | Target max bytes per diff chunk (splits at file boundaries) |
 | `retain-findings` | No | `false` | Upload findings as long-lived artifact |
 
 ### Publish action inputs

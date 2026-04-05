@@ -15,7 +15,7 @@ async function run(): Promise<void> {
 
   if (!fs.existsSync(REVIEW_OUTPUT_FILE)) {
     core.setFailed(
-      "Merged review output is missing. Did the review action run and upload artifacts?",
+      `Merged review output not found at ${REVIEW_OUTPUT_FILE}. Ensure the review action ran successfully and the workflow downloads the .codex/ artifact before this step.`,
     );
     return;
   }

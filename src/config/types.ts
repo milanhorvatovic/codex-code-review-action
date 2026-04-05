@@ -67,20 +67,53 @@ export interface PrContext {
   title: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isReviewFile(value: unknown): value is ReviewFile {
+  return (
+    isRecord(value) &&
+    typeof value.description === "string" &&
+    typeof value.path === "string"
+  );
+}
+
+function isFinding(value: unknown): value is Finding {
+  return (
+    isRecord(value) &&
+    typeof value.body === "string" &&
+    typeof value.confidence_score === "number" &&
+    Number.isFinite(value.confidence_score) &&
+    typeof value.line === "number" &&
+    Number.isFinite(value.line) &&
+    typeof value.path === "string" &&
+    typeof value.priority === "number" &&
+    Number.isFinite(value.priority) &&
+    typeof value.reasoning === "string" &&
+    (value.start_line === null ||
+      (typeof value.start_line === "number" && Number.isFinite(value.start_line))) &&
+    (value.suggestion === null || typeof value.suggestion === "string") &&
+    typeof value.title === "string"
+  );
+}
+
 export function isReviewOutput(value: unknown): value is ReviewOutput {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return false;
   }
-  const obj = value as Record<string, unknown>;
   return (
-    typeof obj.summary === "string" &&
-    Array.isArray(obj.findings) &&
-    Array.isArray(obj.changes) &&
-    Array.isArray(obj.files) &&
-    typeof obj.model === "string" &&
-    (obj.overall_correctness === "patch is correct" ||
-      obj.overall_correctness === "patch is incorrect") &&
-    typeof obj.overall_confidence_score === "number" &&
-    Number.isFinite(obj.overall_confidence_score)
+    typeof value.summary === "string" &&
+    Array.isArray(value.findings) &&
+    value.findings.every(isFinding) &&
+    Array.isArray(value.changes) &&
+    value.changes.every((c) => typeof c === "string") &&
+    Array.isArray(value.files) &&
+    value.files.every(isReviewFile) &&
+    typeof value.model === "string" &&
+    (value.overall_correctness === "patch is correct" ||
+      value.overall_correctness === "patch is incorrect") &&
+    typeof value.overall_confidence_score === "number" &&
+    Number.isFinite(value.overall_confidence_score)
   );
 }
