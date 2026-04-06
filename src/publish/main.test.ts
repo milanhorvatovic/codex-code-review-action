@@ -17,9 +17,11 @@ vi.mock("@actions/core", () => ({
   warning: (...args: unknown[]) => mockWarning(...args),
 }));
 
+const mockUploadArtifact = vi.fn().mockResolvedValue({});
+
 vi.mock("@actions/artifact", () => ({
   DefaultArtifactClient: class {
-    uploadArtifact = vi.fn().mockResolvedValue({});
+    uploadArtifact = mockUploadArtifact;
   },
 }));
 
@@ -89,9 +91,11 @@ describe("publish/main", () => {
     mockReaddirSync.mockReset();
     mockReadFileSync.mockReset();
     mockWriteFileSync.mockReset();
+    mockUploadArtifact.mockReset();
     mockPublishReview.mockReset();
 
     process.env = { ...originalEnv };
+    mockUploadArtifact.mockResolvedValue({});
     mockPublishReview.mockResolvedValue(true);
   });
 
@@ -247,6 +251,69 @@ describe("publish/main", () => {
 
     const params = mockPublishReview.mock.calls[0][0] as Record<string, unknown>;
     expect(params.model).toBe("test-model");
+  });
+
+  it("uploads retain-findings artifact when enabled", async () => {
+    vi.resetModules();
+    vi.doMock("../config/inputs.js", () => ({
+      getPublishInputs: () => ({
+        expectedChunks: null,
+        githubToken: "token",
+        maxComments: Infinity,
+        minConfidence: 0,
+        model: "",
+        retainFindings: true,
+        retainFindingsDays: 30,
+        reviewEffort: "",
+      }),
+    }));
+
+    mockExistsSync.mockImplementation((p: string) =>
+      p === ".codex" || p === ".codex/pr.diff",
+    );
+    mockReaddirSync.mockReturnValue(["chunk-0-output.json"]);
+    mockReadFileSync.mockReturnValue(validReview);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockUploadArtifact).toHaveBeenCalled();
+    });
+
+    expect(mockUploadArtifact).toHaveBeenCalledWith(
+      "codex-review-findings",
+      expect.arrayContaining([".codex/review-output.json"]),
+      ".codex",
+      { retentionDays: 30 },
+    );
+  });
+
+  it("does not upload artifact when retain-findings is disabled", async () => {
+    vi.resetModules();
+    vi.doMock("../config/inputs.js", () => ({
+      getPublishInputs: () => ({
+        expectedChunks: null,
+        githubToken: "token",
+        maxComments: Infinity,
+        minConfidence: 0,
+        model: "fallback-model",
+        retainFindings: false,
+        retainFindingsDays: 90,
+        reviewEffort: "medium",
+      }),
+    }));
+
+    mockExistsSync.mockImplementation((p: string) =>
+      p === ".codex" || p === ".codex/pr.diff",
+    );
+    mockReaddirSync.mockReturnValue(["chunk-0-output.json"]);
+    mockReadFileSync.mockReturnValue(validReview);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockPublishReview).toHaveBeenCalled();
+    });
+
+    expect(mockUploadArtifact).not.toHaveBeenCalled();
   });
 
   it("ignores non-chunk files in .codex directory", async () => {
