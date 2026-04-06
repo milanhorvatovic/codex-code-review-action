@@ -1,4 +1,8 @@
 {
+  "author": "Milan Horvatovič",
+  "bugs": {
+    "url": "https://github.com/milanhorvatovic/codex-code-review-action/issues"
+  },
   "dependencies": {
     "@actions/artifact": "6.2.1",
     "@actions/core": "3.0.0",
@@ -20,9 +24,14 @@
   "engines": {
     "node": "22.22.2"
   },
+  "homepage": "https://github.com/milanhorvatovic/codex-code-review-action#readme",
   "license": "MIT",
   "name": "codex-code-review-action",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/milanhorvatovic/codex-code-review-action.git"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "lint": "eslint src/",
@@ -30,5 +39,5 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
-  "version": "0.1.0"
+  "version": "1.0.0"
 }

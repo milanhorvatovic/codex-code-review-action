@@ -17,7 +17,7 @@ inputs:
     default: ${{ github.token }}
 
   max-chunk-bytes:
-    description: "Target maximum bytes per diff chunk. Splitting occurs at file boundaries, so a chunk may exceed this size if a single file's diff is larger."
+    description: "Target maximum bytes per diff chunk. Splitting occurs at file boundaries, so a chunk may exceed this size if a single file's diff is larger. Must be a positive integer."
     required: false
     default: "204800"
 
@@ -35,7 +35,7 @@ inputs:
     default: "false"
 
   retain-findings-days:
-    description: "Number of days to retain the findings artifact. Only applies when retain-findings is true."
+    description: "Number of days to retain the findings artifact. Only applies when retain-findings is true. Must be a positive integer, clamped to a maximum of 90."
     required: false
     default: "90"
 

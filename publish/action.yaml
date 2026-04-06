@@ -9,10 +9,9 @@ inputs:
   github-token:
     description: "GitHub token for posting PR reviews. Requires pull-requests: write permission."
     required: true
-    default: ${{ github.token }}
 
   max-comments:
-    description: "Maximum number of inline review comments posted on the PR. Omit for unlimited."
+    description: "Maximum number of inline review comments posted on the PR. Omit for unlimited. Must be a non-negative integer."
     required: false
     default: ""
 
