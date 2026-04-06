@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-04-06
+
+### Fixed
+
+- Action runtime updated from `node22` to `node24` — `node22` is not supported by GitHub Actions runners
+- Node version aligned to 24.14.1 across build target, CI workflows, and local tooling
+
 ## [1.0.3] - 2026-04-06
 
 ### Changed
