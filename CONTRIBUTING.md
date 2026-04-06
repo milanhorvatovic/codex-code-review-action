@@ -71,6 +71,8 @@ New code should include tests. Aim to maintain or improve coverage.
 > ```bash
 > gh release create vx.y.z --generate-notes
 > ```
+>
+> The release workflow will still run on the tag push to verify the build, run tests, and update the major version tag.
 
 ## License
 
