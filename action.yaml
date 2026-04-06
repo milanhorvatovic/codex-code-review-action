@@ -1,4 +1,4 @@
-name: "Codex Review"
+name: "Codex Code Review"
 description: "AI-powered code review using OpenAI Codex. Use the review and publish sub-actions."
 
 branding:
