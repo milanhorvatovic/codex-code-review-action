@@ -11,7 +11,7 @@ inputs:
     required: true
 
   max-comments:
-    description: "Maximum number of inline review comments posted on the PR. Omit for unlimited. Must be a non-negative integer."
+    description: "Maximum number of inline review comments posted on the PR. Omit for unlimited. When set, must be a non-negative integer."
     required: false
     default: ""
 
