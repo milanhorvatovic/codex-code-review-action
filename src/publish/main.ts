@@ -37,7 +37,13 @@ function discoverChunkFiles(): ChunkEntry[] {
 }
 
 function parseChunkFile(filePath: string): ReviewOutput | null {
-  const raw = fs.readFileSync(filePath, "utf8");
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, "utf8");
+  } catch (error) {
+    core.warning(`Failed to read chunk file: ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
