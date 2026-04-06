@@ -10,5 +10,5 @@ runs:
   steps:
     - shell: bash
       run: |
-        echo "::error::Do not use 'milanhorvatovic/codex-ai-code-review-action' directly. Please use 'milanhorvatovic/codex-ai-code-review-action/review' and 'milanhorvatovic/codex-ai-code-review-action/publish' instead. See the README for usage instructions."
+        echo "::error::Do not use 'milanhorvatovic/codex-ai-code-review-action' directly. Please use the 'prepare', 'review', and 'publish' sub-actions. See the README for usage instructions."
         exit 1

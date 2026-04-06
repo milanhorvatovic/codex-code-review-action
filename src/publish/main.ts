@@ -1,40 +1,108 @@
 import * as fs from "node:fs";
 
+import * as artifact from "@actions/artifact";
 import * as core from "@actions/core";
 
 import { getPublishInputs } from "../config/inputs.js";
 import { isReviewOutput } from "../config/types.js";
 import type { ReviewOutput } from "../config/types.js";
+import { mergeChunkReviews } from "../core/merge.js";
 import { publishReview } from "../github/review.js";
 
-const REVIEW_OUTPUT_FILE = ".codex/review-output.json";
-const DIFF_FILE = ".codex/pr.diff";
+const CODEX_DIR = ".codex";
+const REVIEW_OUTPUT_FILE = `${CODEX_DIR}/review-output.json`;
+const DIFF_FILE = `${CODEX_DIR}/pr.diff`;
+const ARTIFACT_NAME = "codex-review-findings";
+
+const CHUNK_OUTPUT_PATTERN = /^chunk-(\d+)-output\.json$/;
+
+interface ChunkEntry {
+  index: number;
+  path: string;
+}
+
+function discoverChunkFiles(): ChunkEntry[] {
+  if (!fs.existsSync(CODEX_DIR)) {
+    return [];
+  }
+
+  return fs.readdirSync(CODEX_DIR)
+    .map((name: string) => {
+      const match = CHUNK_OUTPUT_PATTERN.exec(name);
+      if (!match) return null;
+      return { index: Number(match[1]), path: `${CODEX_DIR}/${name}` };
+    })
+    .filter((entry: ChunkEntry | null): entry is ChunkEntry => entry !== null)
+    .sort((a: ChunkEntry, b: ChunkEntry) => a.index - b.index);
+}
+
+function parseChunkFile(filePath: string): ReviewOutput | null {
+  const raw = fs.readFileSync(filePath, "utf8");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    core.warning(`Chunk file is not valid JSON: ${filePath}`);
+    return null;
+  }
+  if (!isReviewOutput(parsed)) {
+    core.warning(`Chunk file does not match ReviewOutput shape: ${filePath}`);
+    return null;
+  }
+  return parsed;
+}
 
 async function run(): Promise<void> {
   const inputs = getPublishInputs();
 
-  if (!fs.existsSync(REVIEW_OUTPUT_FILE)) {
+  core.startGroup("Discovering and merging chunk reviews");
+  let reviewOutput: ReviewOutput;
+  try {
+    const chunkFiles = discoverChunkFiles();
+
+    if (chunkFiles.length === 0) {
+      core.setFailed(
+        `No chunk review outputs found in ${CODEX_DIR}/. Ensure the review step ran successfully and artifacts were downloaded.`,
+      );
+      return;
+    }
+
+    if (inputs.expectedChunks !== null && chunkFiles.length < inputs.expectedChunks) {
+      const missing = inputs.expectedChunks - chunkFiles.length;
+      core.warning(
+        `Expected ${inputs.expectedChunks} chunk(s) but found ${chunkFiles.length}. ${missing} chunk(s) may have failed. Proceeding with partial review.`,
+      );
+    }
+
+    const chunkResults: ReviewOutput[] = [];
+    for (const chunk of chunkFiles) {
+      const result = parseChunkFile(chunk.path);
+      if (result) {
+        chunkResults.push(result);
+        core.info(`Parsed chunk ${chunk.index}: ${result.findings.length} finding(s)`);
+      }
+    }
+
+    if (chunkResults.length === 0) {
+      core.setFailed("All chunk review outputs failed validation. Cannot publish review.");
+      return;
+    }
+
+    reviewOutput = mergeChunkReviews(chunkResults);
+    fs.writeFileSync(REVIEW_OUTPUT_FILE, JSON.stringify(reviewOutput, null, 2));
+    core.info(`Merged ${chunkResults.length} chunk(s): ${reviewOutput.findings.length} finding(s) -> ${REVIEW_OUTPUT_FILE}`);
+  } catch (error) {
     core.setFailed(
-      `Merged review output not found at ${REVIEW_OUTPUT_FILE}. Ensure the review action ran successfully and the workflow downloads the .codex/ artifact before this step.`,
+      `Failed to merge chunk reviews: ${error instanceof Error ? error.message : String(error)}`,
     );
     return;
+  } finally {
+    core.endGroup();
   }
-
-  const rawReview = fs.readFileSync(REVIEW_OUTPUT_FILE, "utf8");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawReview);
-  } catch {
-    core.setFailed("Merged review output is not valid JSON.");
-    return;
-  }
-  if (!isReviewOutput(parsed)) {
-    core.setFailed("Merged review output does not match the expected ReviewOutput shape.");
-    return;
-  }
-  const reviewOutput: ReviewOutput = parsed;
 
   core.setOutput("review-file", REVIEW_OUTPUT_FILE);
+  core.setOutput("findings-count", String(reviewOutput.findings.length));
+  core.setOutput("verdict", reviewOutput.overall_correctness);
 
   let diffText = "";
   if (fs.existsSync(DIFF_FILE)) {
@@ -51,18 +119,43 @@ async function run(): Promise<void> {
       ? `${serverUrl}/${repository}/actions/runs/${runId}`
       : "";
 
+  const model = reviewOutput.model && reviewOutput.model !== "unknown"
+    ? reviewOutput.model
+    : inputs.model;
+
   const published = await publishReview({
     diffText,
     githubToken: inputs.githubToken,
     maxComments: inputs.maxComments,
     minConfidence: inputs.minConfidence,
-    model: inputs.model,
+    model,
     reviewEffort: inputs.reviewEffort,
     reviewOutput,
     runUrl,
   });
 
   core.setOutput("published", String(published));
+
+  if (inputs.retainFindings) {
+    core.startGroup("Uploading review findings artifact");
+    try {
+      const artifactFiles = [REVIEW_OUTPUT_FILE];
+      if (fs.existsSync(DIFF_FILE)) {
+        artifactFiles.push(DIFF_FILE);
+      }
+      const client = new artifact.DefaultArtifactClient();
+      await client.uploadArtifact(
+        ARTIFACT_NAME,
+        artifactFiles,
+        CODEX_DIR,
+        { retentionDays: inputs.retainFindingsDays },
+      );
+      core.info(`Uploaded findings artifact: ${ARTIFACT_NAME}`);
+    } finally {
+      core.endGroup();
+    }
+  }
+
   if (!published) {
     core.setFailed("Failed to publish review. See warnings above for details.");
   }

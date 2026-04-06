@@ -3,7 +3,7 @@
 [![Tests](https://github.com/milanhorvatovic/codex-ai-code-review-action/actions/workflows/tests.yaml/badge.svg)](https://github.com/milanhorvatovic/codex-ai-code-review-action/actions/workflows/tests.yaml)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmilanhorvatovic%2Fcodex-ai-code-review-action%2Fbadges%2Fcoverage.json)](https://github.com/milanhorvatovic/codex-ai-code-review-action/actions/workflows/tests.yaml)
 
-AI-powered code review GitHub Action using OpenAI Codex. Two-job design with security isolation: read-only review job (diff chunking, prompt assembly, structured findings) and write-access publish job (inline PR comments, per-file summaries, verdict). Fully configurable prompts, models, confidence thresholds, and user allowlists.
+AI-powered code review GitHub Action using [OpenAI Codex](https://github.com/openai/codex-action). Three-job design with security isolation: read-only prepare job (diff chunking, prompt assembly), read-only review job (parallel chunk reviews via `openai/codex-action`), and write-access publish job (chunk merging, inline PR comments, per-file summaries, verdict). Fully configurable prompts, models, confidence thresholds, and user allowlists.
 
 ## Quick start
 
@@ -21,118 +21,146 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  review:
+  prepare:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      skipped: ${{ steps.prepare.outputs.skipped }}
+      has-changes: ${{ steps.prepare.outputs.has-changes }}
+      chunk-count: ${{ steps.prepare.outputs.chunk-count }}
+      chunk-matrix: ${{ steps.prepare.outputs.chunk-matrix }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: milanhorvatovic/codex-ai-code-review-action/review@v1
-        id: review
+      - id: prepare
+        uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          allowed-users: ""
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: steps.review.outputs.skipped != 'true' && steps.review.outputs.has-changes == 'true'
+      - uses: actions/upload-artifact@v4
+        if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
         with:
-          name: codex-review
-          path: |
-            .codex/review-output.json
-            .codex/pr.diff
+          name: codex-prepare
+          path: .codex/
           include-hidden-files: true
           retention-days: 1
 
-    outputs:
-      skipped: ${{ steps.review.outputs.skipped }}
-      has-changes: ${{ steps.review.outputs.has-changes }}
+  review:
+    needs: prepare
+    if: needs.prepare.outputs.skipped != 'true' && needs.prepare.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.chunk-matrix) }}
+    steps:
+      - uses: milanhorvatovic/codex-ai-code-review-action/review@v2
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          chunk: ${{ matrix.chunk }}
 
   publish:
-    needs: review
-    if: needs.review.outputs.skipped != 'true' && needs.review.outputs.has-changes == 'true'
+    needs: [prepare, review]
+    if: always() && needs.prepare.outputs.skipped != 'true' && needs.prepare.outputs.has-changes == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@v4
         with:
-          name: codex-review
+          pattern: codex-*
           path: .codex/
+          merge-multiple: true
 
-      - uses: milanhorvatovic/codex-ai-code-review-action/publish@v1
+      - uses: milanhorvatovic/codex-ai-code-review-action/publish@v2
+        with:
+          github-token: ${{ github.token }}
+          expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
 ```
 
 ## Architecture
 
-The action is split into two Node 22 TypeScript actions for security isolation:
+The workflow is split into three jobs for security isolation:
 
-| Action | Job permissions | Purpose |
-|--------|----------------|---------|
-| `review` | `contents: read` | Build diff, split into chunks, assemble prompts, call OpenAI API, merge results |
-| `publish` | `contents: read`, `pull-requests: write` | Validate review output, post PR review with inline comments |
+| Job | Permissions | Purpose |
+|-----|-------------|---------|
+| `prepare` | `contents: read` | Build diff, split into chunks, assemble prompts |
+| `review` | `contents: read` | Review each chunk in parallel via matrix, powered by [`openai/codex-action`](https://github.com/openai/codex-action) |
+| `publish` | `contents: read`, `pull-requests: write` | Merge chunk reviews, post PR review with inline comments |
 
-The review job never gets write access to the repository — it only needs a read-only GitHub token (for fetching the base commit) and the OpenAI API key. The publish job never sees the OpenAI API key. Artifact handoff between jobs is explicit.
+The prepare job never gets write access. The review job has the OpenAI API key but no write access. The publish job never sees the API key. Artifact handoff between jobs is explicit.
 
 ```
-review job                              publish job
-───────────                             ────────────
-check allowlist                         validate JSON
-build PR diff (git)                     publish review
-split diff into chunks                    ├── PR review body
-assemble prompts                          ├── inline comments
-call OpenAI API (per chunk)               ├── verdict + confidence
-merge chunk results                       └── per-file summary
-       │                                        ▲
-       └── upload .codex/ ──────────── download .codex/
+prepare job                 review job (matrix)         publish job
+───────────                 ───────────────────         ────────────
+check allowlist             download artifacts          download all artifacts
+build PR diff (git)         run openai/codex-action     merge chunk reviews
+split diff into chunks      upload chunk output         validate merged JSON
+assemble prompts                                        publish review
+write schema                                              ├── PR review body
+upload artifacts ────────── ▶                              ├── inline comments
+                                          ──────────── ▶   ├── verdict + confidence
+                                                           └── per-file summary
 ```
 
 ## Configuration
 
-### Review action inputs
+### Prepare action inputs
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `openai-api-key` | Yes | — | OpenAI API key |
-| `model` | No | API default | OpenAI model to use (e.g. `o4-mini`, `codex-mini-latest`). When omitted, the OpenAI API selects its current default model. |
 | `github-token` | No | `github.token` | GitHub token for fetching PR base commit |
 | `allowed-users` | No | all users | Comma-separated allowlist of GitHub usernames |
 | `review-reference-file` | No | built-in | Path to custom review reference |
 | `max-chunk-bytes` | No | `204800` | Target max bytes per diff chunk (splits at file boundaries) |
-| `retain-findings` | No | `false` | Upload findings as long-lived artifact |
-| `retain-findings-days` | No | `90` | Number of days to retain the findings artifact when `retain-findings` is `true` (must be between `1` and `90`) |
 
-### Publish action inputs
-
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `github-token` | Yes | `github.token` | Token for posting reviews (`pull-requests: write`) |
-| `model` | No | — | Model name for review footer |
-| `review-effort` | No | — | Effort label for review footer |
-| `min-confidence` | No | `0` | Minimum confidence threshold (0.0-1.0) |
-| `max-comments` | No | unlimited | Maximum inline comments (0 to disable) |
-
-### Review action outputs
+### Prepare action outputs
 
 | Output | Description |
 |--------|-------------|
 | `skipped` | Whether review was skipped (`true`/`false`) |
 | `has-changes` | Whether the diff has changes |
-| `chunk-count` | Number of chunks processed |
-| `chunk-matrix` | JSON-encoded chunk metadata for the review run |
-| `findings-count` | Total findings |
-| `verdict` | `patch is correct` or `patch is incorrect` |
+| `chunk-count` | Number of chunks produced |
+| `chunk-matrix` | JSON-encoded matrix for chunk-based jobs |
+
+### Review action inputs
+
+The review action wraps [`openai/codex-action`](https://github.com/openai/codex-action) and handles artifact download/upload automatically.
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `openai-api-key` | Yes | — | OpenAI API key for Codex |
+| `chunk` | Yes | — | Chunk index to review (from `chunk-matrix` output) |
+| `model` | No | Codex CLI default | OpenAI model to use |
+
+### Publish action inputs
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `github-token` | Yes | — | Token for posting reviews (`pull-requests: write`) |
+| `expected-chunks` | No | — | Expected chunk count. Warns on mismatch but still publishes partial review. |
+| `model` | No | — | Model name for review footer (overridden by the model field in review output) |
+| `review-effort` | No | — | Effort label for review footer |
+| `min-confidence` | No | `0` | Minimum confidence threshold (0.0-1.0) |
+| `max-comments` | No | unlimited | Maximum inline comments (0 to disable) |
+| `retain-findings` | No | `false` | Upload findings as long-lived artifact |
+| `retain-findings-days` | No | `90` | Days to retain findings artifact (1-90, clamped to 90) |
 
 ### Publish action outputs
 
 | Output | Description |
 |--------|-------------|
-| `review-file` | Path to the review JSON |
+| `findings-count` | Total findings in merged review |
+| `verdict` | `patch is correct` or `patch is incorrect` |
+| `review-file` | Path to the merged review JSON |
 | `published` | Whether review was posted (`true`/`false`) |
 
 ## Customizing review rules per repository
@@ -142,9 +170,9 @@ The review reference file controls what the AI focuses on during reviews — lan
 To customize, create `.github/codex/review-reference.md` in your repository and pass it:
 
 ```yaml
-- uses: milanhorvatovic/codex-ai-code-review-action/review@v1
+- id: prepare
+  uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
   with:
-    openai-api-key: ${{ secrets.OPENAI_API_KEY }}
     review-reference-file: .github/codex/review-reference.md
 ```
 
@@ -159,7 +187,7 @@ See [`defaults/review-reference.md`](defaults/review-reference.md) for the struc
 
 ## Development
 
-Prerequisites: Node 22
+Prerequisites: Node 24
 
 ```bash
 npm install          # Install dependencies

@@ -39,22 +39,21 @@ export interface NormalizedFinding {
   title: string;
 }
 
-export interface ReviewInputs {
+export interface PrepareInputs {
   allowedUsers: string;
-  apiKey: string;
   githubToken: string;
   maxChunkBytes: number;
-  model: string;
-  retainFindings: boolean;
-  retainFindingsDays: number;
   reviewReferenceFile: string;
 }
 
 export interface PublishInputs {
+  expectedChunks: number | null;
   githubToken: string;
   maxComments: number;
   minConfidence: number;
   model: string;
+  retainFindings: boolean;
+  retainFindingsDays: number;
   reviewEffort: string;
 }
 

@@ -13,8 +13,8 @@ const shared = {
 await Promise.all([
   build({
     ...shared,
-    entryPoints: ["src/review/main.ts"],
-    outfile: "dist/review/main.js",
+    entryPoints: ["src/prepare/main.ts"],
+    outfile: "dist/prepare/main.js",
   }),
   build({
     ...shared,

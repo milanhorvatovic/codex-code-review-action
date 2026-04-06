@@ -15,11 +15,13 @@ vi.mock("@actions/core", () => ({
   startGroup: (...args: unknown[]) => mockStartGroup(...args),
 }));
 
+const mockWriteFileSync = vi.fn();
+
 vi.mock("node:fs", () => ({
   existsSync: () => false,
   mkdirSync: vi.fn(),
   readFileSync: vi.fn(),
-  writeFileSync: vi.fn(),
+  writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
 }));
 
 vi.mock("node:path", () => ({
@@ -41,19 +43,6 @@ vi.mock("../core/diff.js", () => ({
   splitDiff: (...args: unknown[]) => mockSplitDiff(...args),
 }));
 
-const mockReviewChunk = vi.fn();
-
-vi.mock("../openai/client.js", () => ({
-  createOpenAIClient: () => ({}),
-  reviewChunk: (...args: unknown[]) => mockReviewChunk(...args),
-}));
-
-const mockMergeChunkReviews = vi.fn();
-
-vi.mock("../core/merge.js", () => ({
-  mergeChunkReviews: (...args: unknown[]) => mockMergeChunkReviews(...args),
-}));
-
 vi.mock("../core/prompt.js", () => ({
   assemblePrompt: () => "test prompt",
 }));
@@ -61,20 +50,14 @@ vi.mock("../core/prompt.js", () => ({
 vi.mock("../config/defaults.js", () => ({
   defaultPrompt: "prompt",
   defaultReference: "reference",
-  defaultSchema: {},
+  defaultSchema: { type: "object" },
 }));
 
-vi.mock("@actions/artifact", () => ({
-  DefaultArtifactClient: class {
-    uploadArtifact = vi.fn().mockResolvedValue({});
-  },
-}));
-
-const mockGetReviewInputs = vi.fn();
+const mockGetPrepareInputs = vi.fn();
 const mockGetPullRequestContext = vi.fn();
 
 vi.mock("../config/inputs.js", () => ({
-  getReviewInputs: () => mockGetReviewInputs(),
+  getPrepareInputs: () => mockGetPrepareInputs(),
 }));
 
 vi.mock("../github/context.js", () => ({
@@ -87,12 +70,8 @@ vi.mock("../core/allowlist.js", () => ({
 
 const defaultInputs = {
   allowedUsers: "*",
-  apiKey: "test-key",
   githubToken: "token",
   maxChunkBytes: 200000,
-  model: "test-model",
-  retainFindings: false,
-  retainFindingsDays: 90,
   reviewReferenceFile: "",
 };
 
@@ -106,17 +85,7 @@ const defaultContext = {
   title: "Test PR",
 };
 
-const validReviewOutput = {
-  changes: ["Added validation"],
-  files: [{ description: "Main file", path: "src/main.ts" }],
-  findings: [],
-  model: "test-model",
-  overall_confidence_score: 0.95,
-  overall_correctness: "patch is correct",
-  summary: "Test summary",
-};
-
-describe("review/main error handling", () => {
+describe("prepare/main error handling", () => {
   beforeEach(() => {
     vi.resetModules();
     mockSetFailed.mockReset();
@@ -124,15 +93,14 @@ describe("review/main error handling", () => {
     mockStartGroup.mockReset();
     mockEndGroup.mockReset();
     mockInfo.mockReset();
+    mockWriteFileSync.mockReset();
     mockFetchBaseSha.mockReset();
     mockBuildDiff.mockReset();
     mockSplitDiff.mockReset();
-    mockReviewChunk.mockReset();
-    mockMergeChunkReviews.mockReset();
-    mockGetReviewInputs.mockReset();
+    mockGetPrepareInputs.mockReset();
     mockGetPullRequestContext.mockReset();
 
-    mockGetReviewInputs.mockReturnValue(defaultInputs);
+    mockGetPrepareInputs.mockReturnValue(defaultInputs);
     mockGetPullRequestContext.mockReturnValue(defaultContext);
   });
 
@@ -184,40 +152,45 @@ describe("review/main error handling", () => {
     );
   });
 
-  it("calls setFailed with chunk index when reviewChunk throws", async () => {
+  it("writes prompt files for each chunk", async () => {
+    mockFetchBaseSha.mockResolvedValueOnce(undefined);
+    mockBuildDiff.mockResolvedValueOnce("diff content");
+    mockSplitDiff.mockReturnValueOnce(["chunk0", "chunk1"]);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockWriteFileSync).toHaveBeenCalled();
+    });
+
+    const writeCalls = mockWriteFileSync.mock.calls.map((c) => c[0]);
+    expect(writeCalls).toContain(".codex/pr.diff");
+    expect(writeCalls).toContain(".codex/chunk-0-prompt.md");
+    expect(writeCalls).toContain(".codex/chunk-1-prompt.md");
+    expect(writeCalls).toContain(".codex/review-output-schema.json");
+  });
+
+  it("sets outputs for empty diff", async () => {
+    mockFetchBaseSha.mockResolvedValueOnce(undefined);
+    mockBuildDiff.mockResolvedValueOnce("");
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockSetOutput).toHaveBeenCalledWith("has-changes", "false");
+    });
+
+    expect(mockSetOutput).toHaveBeenCalledWith("chunk-count", "0");
+  });
+
+  it("sets chunk-count and chunk-matrix outputs", async () => {
     mockFetchBaseSha.mockResolvedValueOnce(undefined);
     mockBuildDiff.mockResolvedValueOnce("diff content");
     mockSplitDiff.mockReturnValueOnce(["chunk0", "chunk1", "chunk2"]);
-    mockReviewChunk
-      .mockResolvedValueOnce(validReviewOutput)
-      .mockRejectedValueOnce(new Error("API rate limit"));
 
     await import("./main.js");
     await vi.waitFor(() => {
-      expect(mockSetFailed).toHaveBeenCalled();
+      expect(mockSetOutput).toHaveBeenCalledWith("chunk-count", "3");
     });
 
-    expect(mockSetFailed).toHaveBeenCalledWith(
-      "Chunk 1 review failed: API rate limit",
-    );
-  });
-
-  it("calls setFailed when mergeChunkReviews throws", async () => {
-    mockFetchBaseSha.mockResolvedValueOnce(undefined);
-    mockBuildDiff.mockResolvedValueOnce("diff content");
-    mockSplitDiff.mockReturnValueOnce(["chunk0"]);
-    mockReviewChunk.mockResolvedValueOnce(validReviewOutput);
-    mockMergeChunkReviews.mockImplementationOnce(() => {
-      throw new Error("merge conflict");
-    });
-
-    await import("./main.js");
-    await vi.waitFor(() => {
-      expect(mockSetFailed).toHaveBeenCalled();
-    });
-
-    expect(mockSetFailed).toHaveBeenCalledWith(
-      "Failed to merge chunk reviews: merge conflict",
-    );
+    expect(mockSetOutput).toHaveBeenCalledWith("has-changes", "true");
   });
 });

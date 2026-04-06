@@ -1,11 +1,16 @@
 name: "Codex Review — Publish"
-description: "Validate and publish Codex review as a GitHub PR review with inline comments (write-access job). Requires .codex/ artifacts from the review action."
+description: "Merge chunk reviews and publish as a GitHub PR review with inline comments. Requires .codex/ artifacts from the prepare and review steps."
 
 branding:
   color: "green"
   icon: "message-square"
 
 inputs:
+  expected-chunks:
+    description: "Expected number of chunk review outputs. When set, a warning is logged if some chunks are missing. Empty = skip validation."
+    required: false
+    default: ""
+
   github-token:
     description: "GitHub token for posting PR reviews. Requires pull-requests: write permission."
     required: true
@@ -21,9 +26,19 @@ inputs:
     default: "0"
 
   model:
-    description: "Model name shown in the review footer. Should match the model used in the review action."
+    description: "Model name shown in the review footer. Overridden by the model field in the review output when available."
     required: false
     default: ""
+
+  retain-findings:
+    description: "Upload merged review findings as a long-lived artifact for auditing or analytics."
+    required: false
+    default: "false"
+
+  retain-findings-days:
+    description: "Number of days to retain the findings artifact. Only applies when retain-findings is true. Must be a positive integer; invalid or non-positive values fail the action. Values greater than 90 are clamped to 90."
+    required: false
+    default: "90"
 
   review-effort:
     description: "Effort label shown in the review footer (e.g. medium, high)."
@@ -31,11 +46,17 @@ inputs:
     default: ""
 
 outputs:
+  findings-count:
+    description: "Total number of findings in the merged review."
+
   published:
     description: "Whether the review was published (true/false)."
 
   review-file:
-    description: "Path to the review output JSON file."
+    description: "Path to the merged review output JSON file."
+
+  verdict:
+    description: "Overall correctness verdict."
 
 runs:
   main: "../dist/publish/main.js"
