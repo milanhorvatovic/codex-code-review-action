@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- Shorten root action description to meet GitHub Marketplace 125-character limit
+- Root action description shortened to meet GitHub Marketplace 125-character limit
 
 ## [1.0.0] - 2026-04-06
 
