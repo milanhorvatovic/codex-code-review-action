@@ -34,7 +34,7 @@ describe("getReviewInputs", () => {
       };
       return inputs[name] ?? "";
     });
-    mockGetBooleanInput.mockReturnValue(false);
+    mockGetBooleanInput.mockReturnValue(true);
 
     const result = getReviewInputs();
 
@@ -43,7 +43,7 @@ describe("getReviewInputs", () => {
     expect(result.model).toBe("o4-mini");
     expect(result.allowedUsers).toBe("user1,user2");
     expect(result.maxChunkBytes).toBe(100000);
-    expect(result.retainFindings).toBe(false);
+    expect(result.retainFindings).toBe(true);
     expect(result.retainFindingsDays).toBe(30);
     expect(result.reviewReferenceFile).toBe(".github/codex/reference.md");
   });
@@ -69,31 +69,38 @@ describe("getReviewInputs", () => {
     expect(result.maxChunkBytes).toBe(204800);
   });
 
-  it("uses default retain-findings-days for invalid input", () => {
+  it("throws for non-integer retain-findings-days when retain-findings is enabled", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "openai-api-key" ? "key" : name === "retain-findings-days" ? "invalid" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockGetBooleanInput.mockReturnValue(true);
 
-    const result = getReviewInputs();
-    expect(result.retainFindingsDays).toBe(90);
+    expect(() => getReviewInputs()).toThrow("must be a positive integer");
   });
 
-  it("uses default retain-findings-days for negative value", () => {
+  it("throws for negative retain-findings-days when retain-findings is enabled", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "openai-api-key" ? "key" : name === "retain-findings-days" ? "-5" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockGetBooleanInput.mockReturnValue(true);
 
-    const result = getReviewInputs();
-    expect(result.retainFindingsDays).toBe(90);
+    expect(() => getReviewInputs()).toThrow("must be a positive integer");
+  });
+
+  it("throws for zero retain-findings-days when retain-findings is enabled", () => {
+    mockGetInput.mockImplementation((name: string) =>
+      name === "openai-api-key" ? "key" : name === "retain-findings-days" ? "0" : "",
+    );
+    mockGetBooleanInput.mockReturnValue(true);
+
+    expect(() => getReviewInputs()).toThrow("must be a positive integer");
   });
 
   it("clamps retain-findings-days exceeding 90 and warns", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "openai-api-key" ? "key" : name === "retain-findings-days" ? "365" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockGetBooleanInput.mockReturnValue(true);
 
     const result = getReviewInputs();
     expect(result.retainFindingsDays).toBe(90);
@@ -106,11 +113,31 @@ describe("getReviewInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "openai-api-key" ? "key" : name === "retain-findings-days" ? "45" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockGetBooleanInput.mockReturnValue(true);
 
     const result = getReviewInputs();
     expect(result.retainFindingsDays).toBe(45);
     expect(mockWarning).not.toHaveBeenCalled();
+  });
+
+  it("skips retain-findings-days validation when retain-findings is disabled", () => {
+    mockGetInput.mockImplementation((name: string) =>
+      name === "openai-api-key" ? "key" : name === "retain-findings-days" ? "invalid" : "",
+    );
+    mockGetBooleanInput.mockReturnValue(false);
+
+    const result = getReviewInputs();
+    expect(result.retainFindingsDays).toBe(90);
+  });
+
+  it("uses default retain-findings-days when input is empty and retain-findings is enabled", () => {
+    mockGetInput.mockImplementation((name: string) =>
+      name === "openai-api-key" ? "key" : "",
+    );
+    mockGetBooleanInput.mockReturnValue(true);
+
+    const result = getReviewInputs();
+    expect(result.retainFindingsDays).toBe(90);
   });
 
   it("uses default max-chunk-bytes for negative value", () => {

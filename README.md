@@ -105,7 +105,7 @@ merge chunk results                       └── per-file summary
 | `review-reference-file` | No | built-in | Path to custom review reference |
 | `max-chunk-bytes` | No | `204800` | Target max bytes per diff chunk (splits at file boundaries) |
 | `retain-findings` | No | `false` | Upload findings as long-lived artifact |
-| `retain-findings-days` | No | `90` | Number of days to retain the findings artifact |
+| `retain-findings-days` | No | `90` | Number of days to retain the findings artifact when `retain-findings` is `true` (must be between `1` and `90`) |
 
 ### Publish action inputs
 

@@ -4,7 +4,6 @@ import type { PublishInputs, ReviewInputs } from "./types.js";
 
 const MAX_CHUNK_BYTES_DEFAULT = 204800;
 const RETAIN_FINDINGS_DAYS_DEFAULT = 90;
-const RETAIN_FINDINGS_DAYS_MIN = 1;
 const RETAIN_FINDINGS_DAYS_MAX = 90;
 
 export function getReviewInputs(): ReviewInputs {
@@ -22,12 +21,17 @@ export function getReviewInputs(): ReviewInputs {
     core.setSecret(githubToken);
   }
 
-  const rawRetainDays = Number(core.getInput("retain-findings-days"));
+  const retainFindings = core.getBooleanInput("retain-findings");
   let retainFindingsDays = RETAIN_FINDINGS_DAYS_DEFAULT;
-  if (Number.isInteger(rawRetainDays) && rawRetainDays > 0) {
-    retainFindingsDays = Math.min(RETAIN_FINDINGS_DAYS_MAX, Math.max(RETAIN_FINDINGS_DAYS_MIN, rawRetainDays));
-    if (retainFindingsDays !== rawRetainDays) {
-      core.warning(`Input 'retain-findings-days' was clamped from ${rawRetainDays} to ${retainFindingsDays} (valid range: ${RETAIN_FINDINGS_DAYS_MIN}-${RETAIN_FINDINGS_DAYS_MAX}).`);
+  const retainDaysInput = core.getInput("retain-findings-days").trim();
+  if (retainFindings && retainDaysInput !== "") {
+    const parsed = Number(retainDaysInput);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new Error(`Input 'retain-findings-days' must be a positive integer (got '${retainDaysInput}').`);
+    }
+    retainFindingsDays = Math.min(RETAIN_FINDINGS_DAYS_MAX, parsed);
+    if (retainFindingsDays !== parsed) {
+      core.warning(`Input 'retain-findings-days' was clamped from ${parsed} to ${retainFindingsDays} (maximum: ${RETAIN_FINDINGS_DAYS_MAX}).`);
     }
   }
 
@@ -37,7 +41,7 @@ export function getReviewInputs(): ReviewInputs {
     githubToken,
     maxChunkBytes,
     model: core.getInput("model"),
-    retainFindings: core.getBooleanInput("retain-findings"),
+    retainFindings,
     retainFindingsDays,
     reviewReferenceFile: core.getInput("review-reference-file"),
   };
