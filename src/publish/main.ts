@@ -43,7 +43,13 @@ async function run(): Promise<void> {
     core.warning(`Diff file not found at ${DIFF_FILE}. Inline comments will be skipped because findings cannot be matched to changed lines.`);
   }
 
-  const runUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${process.env.GITHUB_REPOSITORY ?? ""}/actions/runs/${process.env.GITHUB_RUN_ID ?? ""}`;
+  const serverUrl = process.env.GITHUB_SERVER_URL || "https://github.com";
+  const repository = process.env.GITHUB_REPOSITORY || "";
+  const runId = process.env.GITHUB_RUN_ID || "";
+  const runUrl =
+    repository && runId
+      ? `${serverUrl}/${repository}/actions/runs/${runId}`
+      : "";
 
   const published = await publishReview({
     diffText,

@@ -45,6 +45,11 @@ async function run(): Promise<void> {
     diff = await buildDiff(prContext.baseSha, prContext.headSha);
     fs.mkdirSync(CODEX_DIR, { recursive: true });
     fs.writeFileSync(DIFF_FILE, diff);
+  } catch (error) {
+    core.setFailed(
+      `Failed to build PR diff: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return;
   } finally {
     core.endGroup();
   }
@@ -67,6 +72,11 @@ async function run(): Promise<void> {
     core.info(`Created ${chunks.length} chunk(s)`);
     core.setOutput("chunk-count", String(chunks.length));
     core.setOutput("chunk-matrix", buildChunkMatrix(chunks.length));
+  } catch (error) {
+    core.setFailed(
+      `Failed to split diff: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return;
   } finally {
     core.endGroup();
   }
@@ -101,6 +111,11 @@ async function run(): Promise<void> {
 
       const result = await reviewChunk(prompt, schema, inputs.model, client);
       chunkResults.push(result);
+    } catch (error) {
+      core.setFailed(
+        `Chunk ${i} review failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
     } finally {
       core.endGroup();
     }
@@ -112,6 +127,11 @@ async function run(): Promise<void> {
     merged = mergeChunkReviews(chunkResults, chunks.length);
     fs.writeFileSync(REVIEW_OUTPUT_FILE, JSON.stringify(merged, null, 2));
     core.info(`Merged review: ${merged.findings.length} finding(s) -> ${REVIEW_OUTPUT_FILE}`);
+  } catch (error) {
+    core.setFailed(
+      `Failed to merge chunk reviews: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return;
   } finally {
     core.endGroup();
   }

@@ -377,6 +377,17 @@ describe("buildReviewBody", () => {
     const body = buildReviewBody({ ...baseParams, commentCount: 0 });
     expect(body).toContain("no new comments");
   });
+
+  it("renders plain text footer when runUrl is empty", () => {
+    const body = buildReviewBody({ ...baseParams, runUrl: "" });
+    expect(body).toContain("Codex Review");
+    expect(body).not.toContain("[Codex Review]");
+  });
+
+  it("renders linked footer when runUrl is provided", () => {
+    const body = buildReviewBody({ ...baseParams, runUrl: "https://example.com/run/1" });
+    expect(body).toContain("[Codex Review](https://example.com/run/1)");
+  });
 });
 
 describe("parseStructuredReview", () => {
