@@ -1,4 +1,4 @@
-# codex-code-review-action
+# Codex AI Code Review
 
 [![Tests](https://github.com/milanhorvatovic/codex-code-review-action/actions/workflows/tests.yaml/badge.svg)](https://github.com/milanhorvatovic/codex-code-review-action/actions/workflows/tests.yaml)
 [![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmilanhorvatovic%2Fcodex-code-review-action%2Fbadges%2Fcoverage.json)](https://github.com/milanhorvatovic/codex-code-review-action/actions/workflows/tests.yaml)

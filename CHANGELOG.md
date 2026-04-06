@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Root action renamed from "Codex Review" to "Codex Code Review" for Marketplace URL
+- Root action renamed from "Codex Review" to "Codex AI Code Review" for Marketplace URL
 
 ## [1.0.1] - 2026-04-06
 
