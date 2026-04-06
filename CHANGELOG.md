@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [1.0.0] - 2026-04-06
 
 ### Added
 
@@ -24,3 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - CodeQL security scanning workflow
 - Dependabot configuration with auto-merge for patch/minor updates
 - CI pipeline with linting, type checking, test coverage, and dist verification
+- Security policy (`.github/SECURITY.md`)
+- Package metadata (`author`, `repository`, `bugs`, `homepage`) in `package.json`
+- Root composite `action.yaml` for GitHub Marketplace listing
+- Automated release process via tag-triggered workflow
