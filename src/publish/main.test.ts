@@ -25,6 +25,7 @@ vi.mock("@actions/artifact", () => ({
 
 const validReview = JSON.stringify({
   changes: ["Added validation"],
+  effort: null,
   files: [{ description: "Main file", path: "src/main.ts" }],
   findings: [],
   model: "test-model",

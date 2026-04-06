@@ -7,6 +7,7 @@ import { mergeChunkReviews } from "./merge.js";
 function makeChunk(overrides: Partial<ReviewOutput> = {}): ReviewOutput {
   return {
     changes: ["change A"],
+    effort: null,
     files: [{ description: "file desc", path: "src/a.ts" }],
     findings: [
       {

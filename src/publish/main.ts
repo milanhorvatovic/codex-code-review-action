@@ -123,13 +123,15 @@ async function run(): Promise<void> {
     ? reviewOutput.model
     : inputs.model;
 
+  const effort = reviewOutput.effort || inputs.reviewEffort;
+
   const published = await publishReview({
     diffText,
     githubToken: inputs.githubToken,
     maxComments: inputs.maxComments,
     minConfidence: inputs.minConfidence,
     model,
-    reviewEffort: inputs.reviewEffort,
+    reviewEffort: effort,
     reviewOutput,
     runUrl,
   });

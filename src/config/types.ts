@@ -19,6 +19,7 @@ export interface ReviewFile {
 
 export interface ReviewOutput {
   changes: string[];
+  effort: string | null;
   files: ReviewFile[];
   findings: Finding[];
   model: string;
@@ -104,6 +105,7 @@ export function isReviewOutput(value: unknown): value is ReviewOutput {
   }
   return (
     typeof value.summary === "string" &&
+    (value.effort === null || typeof value.effort === "string") &&
     Array.isArray(value.findings) &&
     value.findings.every(isFinding) &&
     Array.isArray(value.changes) &&

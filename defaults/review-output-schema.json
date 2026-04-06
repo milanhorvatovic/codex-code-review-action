@@ -74,6 +74,10 @@
       },
       "type": "array"
     },
+    "effort": {
+      "description": "Self-reported reasoning effort used for this review. Null when unknown.",
+      "type": ["string", "null"]
+    },
     "model": {
       "description": "Self-reported model identifier.",
       "type": "string"
@@ -94,6 +98,7 @@
   },
   "required": [
     "changes",
+    "effort",
     "files",
     "findings",
     "model",

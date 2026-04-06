@@ -5,6 +5,7 @@ import { isReviewOutput } from "./types.js";
 describe("isReviewOutput", () => {
   const valid = {
     changes: ["Added feature"],
+    effort: null,
     files: [{ description: "Main file", path: "src/main.ts" }],
     findings: [],
     model: "test-model",

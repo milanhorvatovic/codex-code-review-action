@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Publish action now handles chunk merging, retain-findings artifact upload, and exposes `findings-count` and `verdict` outputs
 - Model defaults are handled by the Codex CLI — no more 400 errors when `model` is omitted (fixes #24)
 - Added `effort` input to the review action for controlling reasoning effort
+- Added `effort` field to the review output schema so the publish action can display the reasoning effort used in the review footer
 - Removed `openai` npm dependency
 
 ### Removed
