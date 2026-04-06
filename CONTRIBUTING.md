@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for considering contributing to Codex Code Review Action!
+Thank you for considering contributing to Codex AI Code Review Action!
 
 ## Prerequisites
 
