@@ -1,0 +1,26 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## Unreleased
+
+### Added
+
+- Two-action architecture with security isolation: read-only `review` job and write-access `publish` job
+- OpenAI Codex integration with structured JSON output via the Responses API
+- Diff chunking at file boundaries with configurable `max-chunk-bytes`
+- Multi-chunk review merging with deduplication of findings, files, and changes
+- Inline PR comments on changed lines with automatic diff-line mapping
+- Configurable confidence threshold (`min-confidence`) and comment cap (`max-comments`)
+- User allowlist to restrict which PR authors trigger reviews
+- Custom review reference file support for per-repository review rules
+- Prompt injection defences (backtick neutralisation, dynamic fencing, untrusted-data labelling)
+- Long-lived artifact upload for audit/analytics via `retain-findings`
+- Per-file summary and overall correctness verdict in PR review body
+- Automatic truncation to GitHub API limits (65K body, 65K inline comment)
+- Fallback to body-only review when inline comment posting fails
+- CodeQL security scanning workflow
+- Dependabot configuration with auto-merge for patch/minor updates
+- CI pipeline with linting, type checking, test coverage, and dist verification
