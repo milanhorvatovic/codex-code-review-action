@@ -7,7 +7,7 @@ const shared = {
   },
   minify: true,
   platform: "node",
-  target: "node22",
+  target: "node24",
 };
 
 await Promise.all([

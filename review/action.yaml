@@ -65,4 +65,4 @@ outputs:
 
 runs:
   main: "../dist/review/main.js"
-  using: "node22"
+  using: "node24"

@@ -39,4 +39,4 @@ outputs:
 
 runs:
   main: "../dist/publish/main.js"
-  using: "node22"
+  using: "node24"
