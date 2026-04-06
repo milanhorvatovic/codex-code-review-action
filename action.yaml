@@ -10,5 +10,5 @@ runs:
   steps:
     - shell: bash
       run: |
-        echo "::error::The path 'milanhorvatovic/codex-review-action' is not a valid action. Please use 'milanhorvatovic/codex-review-action/review' and 'milanhorvatovic/codex-review-action/publish' instead. See the README for usage instructions."
+        echo "::error::Do not use 'milanhorvatovic/codex-code-review-action' directly. Please use 'milanhorvatovic/codex-code-review-action/review' and 'milanhorvatovic/codex-code-review-action/publish' instead. See the README for usage instructions."
         exit 1
