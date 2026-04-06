@@ -76,7 +76,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: codex-*
+          name: codex-prepare
+          path: .codex/
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: codex-review-chunk-*
           path: .codex/
           merge-multiple: true
 

@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - **Breaking:** Replaced direct OpenAI API calls with [`openai/codex-action`](https://github.com/openai/codex-action) for reviews
-- **Breaking:** Renamed `review` sub-action to `prepare` — it now builds diffs, splits chunks, and writes prompt files instead of calling the API
+- **Breaking:** Replaced the Node-based `review` sub-action with a split design: new `prepare` builds diffs, splits chunks, and writes prompt files, while `review` remains as a composite wrapper around `openai/codex-action`
 - **Breaking:** Architecture changed from 2-job (review → publish) to 3-job (prepare → review matrix → publish) workflow
 - **Breaking:** Renamed `allowed-users` input to `allow-users` to align with `openai/codex-action` naming
 - Chunk reviews now run in parallel via GitHub Actions matrix strategy (resolves #20)
