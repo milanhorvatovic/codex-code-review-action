@@ -1,5 +1,5 @@
 name: "Codex Review"
-description: "AI-powered code review GitHub Action using OpenAI Codex. Use the review and publish sub-actions — see the documentation for details."
+description: "AI-powered code review using OpenAI Codex. Use the review and publish sub-actions."
 
 branding:
   color: "blue"
