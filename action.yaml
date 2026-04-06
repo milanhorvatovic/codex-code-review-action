@@ -1,0 +1,14 @@
+name: "Codex Review"
+description: "AI-powered code review GitHub Action using OpenAI Codex. Use the review and publish sub-actions — see the documentation for details."
+
+branding:
+  color: "blue"
+  icon: "search"
+
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        echo "::error::Do not use 'milanhorvatovic/codex-code-review-action' directly. Please use 'milanhorvatovic/codex-code-review-action/review' and 'milanhorvatovic/codex-code-review-action/publish' instead. See the README for usage instructions."
+        exit 1
