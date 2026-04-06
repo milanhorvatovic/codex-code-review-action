@@ -3,6 +3,8 @@ import * as core from "@actions/core";
 import type { PublishInputs, ReviewInputs } from "./types.js";
 
 const MAX_CHUNK_BYTES_DEFAULT = 204800;
+const RETAIN_FINDINGS_DAYS_DEFAULT = 90;
+const RETAIN_FINDINGS_DAYS_MAX = 90;
 
 export function getReviewInputs(): ReviewInputs {
   const apiKey = core.getInput("openai-api-key", { required: true });
@@ -19,13 +21,28 @@ export function getReviewInputs(): ReviewInputs {
     core.setSecret(githubToken);
   }
 
+  const retainFindings = core.getBooleanInput("retain-findings");
+  let retainFindingsDays = RETAIN_FINDINGS_DAYS_DEFAULT;
+  const retainDaysInput = core.getInput("retain-findings-days").trim();
+  if (retainFindings && retainDaysInput !== "") {
+    const parsed = Number(retainDaysInput);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new Error(`Input 'retain-findings-days' must be a positive integer (got '${retainDaysInput}').`);
+    }
+    retainFindingsDays = Math.min(RETAIN_FINDINGS_DAYS_MAX, parsed);
+    if (retainFindingsDays !== parsed) {
+      core.warning(`Input 'retain-findings-days' was clamped from ${parsed} to ${retainFindingsDays} (maximum: ${RETAIN_FINDINGS_DAYS_MAX}).`);
+    }
+  }
+
   return {
     allowedUsers: core.getInput("allowed-users"),
     apiKey,
     githubToken,
     maxChunkBytes,
     model: core.getInput("model"),
-    retainFindings: core.getBooleanInput("retain-findings"),
+    retainFindings,
+    retainFindingsDays,
     reviewReferenceFile: core.getInput("review-reference-file"),
   };
 }
