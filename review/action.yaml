@@ -1,68 +1,50 @@
 name: "Codex Review — Review"
-description: "Prepare diff, split into chunks, and run Codex review (read-only job). Produces .codex/ artifacts for the publish action."
+description: "Run a Codex review for a single diff chunk using openai/codex-action. Downloads prepare artifacts, invokes the review, and uploads the chunk output."
 
 branding:
-  color: "blue"
-  icon: "search"
+  color: "yellow"
+  icon: "cpu"
 
 inputs:
-  allowed-users:
-    description: "Comma-separated GitHub usernames allowed to trigger reviews. Empty = all users allowed."
+  chunk:
+    description: "Chunk index to review (from the prepare action's chunk-matrix output)."
+    required: true
+
+  effort:
+    description: "Reasoning effort the agent should use. Empty = Codex CLI default."
     required: false
     default: ""
 
-  github-token:
-    description: "GitHub token for fetching PR base commit. Only needs contents: read permission."
-    required: false
-    default: ${{ github.token }}
-
-  max-chunk-bytes:
-    description: "Target maximum bytes per diff chunk. Splitting occurs at file boundaries, so a chunk may exceed this size if a single file's diff is larger. Must be a positive integer; invalid or non-positive values fall back to the default."
-    required: false
-    default: "204800"
-
   model:
-    description: "OpenAI model to use (e.g. o4-mini, codex-mini-latest). Uses the API default when omitted."
+    description: "OpenAI model to use. Empty = Codex CLI default."
     required: false
+    default: ""
 
   openai-api-key:
     description: "OpenAI API key for Codex."
     required: true
 
-  retain-findings:
-    description: "Upload review findings as a long-lived artifact for auditing or analytics."
-    required: false
-    default: "false"
-
-  retain-findings-days:
-    description: "Number of days to retain the findings artifact. Only applies when retain-findings is true. Must be a positive integer; invalid or non-positive values fail the action. Values greater than 90 are clamped to 90."
-    required: false
-    default: "90"
-
-  review-reference-file:
-    description: "Path to a custom review reference markdown file. Uses the built-in default if empty."
-    required: false
-    default: ""
-
-outputs:
-  chunk-count:
-    description: "Number of diff chunks processed."
-
-  chunk-matrix:
-    description: "JSON-encoded chunk metadata for the review run."
-
-  findings-count:
-    description: "Total number of findings in the merged review."
-
-  has-changes:
-    description: "Whether the PR diff contains changes (true/false)."
-
-  skipped:
-    description: "Whether the review was skipped (true/false)."
-
-  verdict:
-    description: "Overall correctness verdict."
-
 runs:
-  main: "../dist/review/main.js"
-  using: "node24"
+  using: "composite"
+  steps:
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+      with:
+        name: codex-prepare
+        path: .codex/
+
+    - uses: openai/codex-action@086169432f1d2ab2f4057540b1754d550f6a1189 # v1.4
+      with:
+        effort: ${{ inputs.effort }}
+        model: ${{ inputs.model }}
+        openai-api-key: ${{ inputs.openai-api-key }}
+        output-file: .codex/chunk-${{ inputs.chunk }}-output.json
+        output-schema-file: .codex/review-output-schema.json
+        prompt-file: .codex/chunk-${{ inputs.chunk }}-prompt.md
+        sandbox: read-only
+
+    - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: codex-review-chunk-${{ inputs.chunk }}
+        path: .codex/chunk-${{ inputs.chunk }}-output.json
+        include-hidden-files: true
+        retention-days: 1

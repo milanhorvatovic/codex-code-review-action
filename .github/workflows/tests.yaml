@@ -65,7 +65,7 @@ jobs:
 
       - name: Verify dist files exist
         run: |
-          test -f dist/review/main.js || (echo "::error::dist/review/main.js not found" && exit 1)
+          test -f dist/prepare/main.js || (echo "::error::dist/prepare/main.js not found" && exit 1)
           test -f dist/publish/main.js || (echo "::error::dist/publish/main.js not found" && exit 1)
 
       - name: Check dist is up-to-date

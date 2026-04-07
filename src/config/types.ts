@@ -19,6 +19,7 @@ export interface ReviewFile {
 
 export interface ReviewOutput {
   changes: string[];
+  effort: string | null;
   files: ReviewFile[];
   findings: Finding[];
   model: string;
@@ -39,22 +40,21 @@ export interface NormalizedFinding {
   title: string;
 }
 
-export interface ReviewInputs {
+export interface PrepareInputs {
   allowedUsers: string;
-  apiKey: string;
   githubToken: string;
   maxChunkBytes: number;
-  model: string;
-  retainFindings: boolean;
-  retainFindingsDays: number;
   reviewReferenceFile: string;
 }
 
 export interface PublishInputs {
+  expectedChunks: number | null;
   githubToken: string;
   maxComments: number;
   minConfidence: number;
   model: string;
+  retainFindings: boolean;
+  retainFindingsDays: number;
   reviewEffort: string;
 }
 
@@ -105,6 +105,7 @@ export function isReviewOutput(value: unknown): value is ReviewOutput {
   }
   return (
     typeof value.summary === "string" &&
+    (value.effort === null || typeof value.effort === "string") &&
     Array.isArray(value.findings) &&
     value.findings.every(isFinding) &&
     Array.isArray(value.changes) &&

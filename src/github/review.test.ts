@@ -393,6 +393,7 @@ describe("buildReviewBody", () => {
 describe("parseStructuredReview", () => {
   const validJson = JSON.stringify({
     changes: [],
+    effort: null,
     files: [],
     findings: [],
     model: "test",

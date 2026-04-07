@@ -22,6 +22,7 @@ export function mergeChunkReviews(
   const findings: ReviewOutput["findings"] = [];
   let worstVerdict: ReviewOutput["overall_correctness"] = "patch is correct";
   let lowestConfidence = Infinity;
+  let effort: string | null = null;
   let model = "unknown";
 
   for (const chunk of chunks) {
@@ -51,6 +52,11 @@ export function mergeChunkReviews(
       lowestConfidence = chunk.overall_confidence_score;
     }
 
+    const trimmedEffort = chunk.effort?.trim() || null;
+    if (effort === null && trimmedEffort !== null) {
+      effort = trimmedEffort;
+    }
+
     if (model === "unknown" && chunk.model !== "") {
       model = chunk.model;
     }
@@ -58,6 +64,7 @@ export function mergeChunkReviews(
 
   return {
     changes,
+    effort,
     files,
     findings,
     model,

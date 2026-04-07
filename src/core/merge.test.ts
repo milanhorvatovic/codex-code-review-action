@@ -7,6 +7,7 @@ import { mergeChunkReviews } from "./merge.js";
 function makeChunk(overrides: Partial<ReviewOutput> = {}): ReviewOutput {
   return {
     changes: ["change A"],
+    effort: null,
     files: [{ description: "file desc", path: "src/a.ts" }],
     findings: [
       {
@@ -127,5 +128,22 @@ describe("mergeChunkReviews", () => {
 
     const result = mergeChunkReviews([chunk1, chunk2, chunk3]);
     expect(result.model).toBe("gpt-4o");
+  });
+
+  it("effort taken from first non-null chunk", () => {
+    const chunk1 = makeChunk({ effort: null });
+    const chunk2 = makeChunk({ effort: "high" });
+    const chunk3 = makeChunk({ effort: "low" });
+
+    const result = mergeChunkReviews([chunk1, chunk2, chunk3]);
+    expect(result.effort).toBe("high");
+  });
+
+  it("effort remains null when all chunks have null effort", () => {
+    const chunk1 = makeChunk({ effort: null });
+    const chunk2 = makeChunk({ effort: null });
+
+    const result = mergeChunkReviews([chunk1, chunk2]);
+    expect(result.effort).toBeNull();
   });
 });

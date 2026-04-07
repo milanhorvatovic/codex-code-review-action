@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-06
+
+### Changed
+
+- **Breaking:** Replaced direct OpenAI API calls with [`openai/codex-action`](https://github.com/openai/codex-action) for reviews
+- **Breaking:** Replaced the Node-based `review` sub-action with a split design: new `prepare` builds diffs, splits chunks, and writes prompt files, while `review` remains as a composite wrapper around `openai/codex-action`
+- **Breaking:** Architecture changed from 2-job (review → publish) to 3-job (prepare → review matrix → publish) workflow
+- **Breaking:** Renamed `allowed-users` input to `allow-users` to align with `openai/codex-action` naming
+- Chunk reviews now run in parallel via GitHub Actions matrix strategy (resolves #20)
+- Publish action now handles chunk merging, retain-findings artifact upload, and exposes `findings-count` and `verdict` outputs
+- Model defaults are handled by the Codex CLI — no more 400 errors when `model` is omitted (fixes #24)
+- Added `effort` input to the review action for controlling reasoning effort
+- Added `effort` field to the review output schema so the publish action can display the reasoning effort used in the review footer
+- Removed `openai` npm dependency
+
+### Removed
+
+- Node-based `review` implementation that called the OpenAI API directly (the `review` sub-action now remains as a composite wrapper around `openai/codex-action`)
+- Direct OpenAI SDK integration (`src/openai/client.ts`) and the `openai` npm dependency
+
 ## [1.0.4] - 2026-04-06
 
 ### Fixed

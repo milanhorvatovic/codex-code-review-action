@@ -1,28 +1,23 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import * as artifact from "@actions/artifact";
 import * as core from "@actions/core";
 
 import { defaultPrompt, defaultReference, defaultSchema } from "../config/defaults.js";
-import { getReviewInputs } from "../config/inputs.js";
-import type { ReviewOutput } from "../config/types.js";
+import { getPrepareInputs } from "../config/inputs.js";
 import { isAuthorAllowed } from "../core/allowlist.js";
 import { buildChunkMatrix, splitDiff } from "../core/diff.js";
-import { mergeChunkReviews } from "../core/merge.js";
 import { assemblePrompt } from "../core/prompt.js";
 import { getPullRequestContext } from "../github/context.js";
 import { buildDiff, fetchBaseSha } from "../github/git.js";
-import { createOpenAIClient, reviewChunk } from "../openai/client.js";
 
 const CODEX_DIR = ".codex";
-const REVIEW_OUTPUT_FILE = `${CODEX_DIR}/review-output.json`;
 const DIFF_FILE = `${CODEX_DIR}/pr.diff`;
-const ARTIFACT_NAME = "codex-review-findings";
+const SCHEMA_FILE = `${CODEX_DIR}/review-output-schema.json`;
 
 
 async function run(): Promise<void> {
-  const inputs = getReviewInputs();
+  const inputs = getPrepareInputs();
   const prContext = getPullRequestContext();
 
   if (!isAuthorAllowed(inputs.allowedUsers, prContext.author)) {
@@ -30,8 +25,6 @@ async function run(): Promise<void> {
     core.setOutput("has-changes", "false");
     core.setOutput("chunk-count", "0");
     core.setOutput("chunk-matrix", buildChunkMatrix(0));
-    core.setOutput("findings-count", "0");
-    core.setOutput("verdict", "");
     core.info(`PR author '${prContext.author}' is not in the allowed users list. Skipping review.`);
     return;
   }
@@ -58,8 +51,6 @@ async function run(): Promise<void> {
     core.setOutput("has-changes", "false");
     core.setOutput("chunk-count", "0");
     core.setOutput("chunk-matrix", buildChunkMatrix(0));
-    core.setOutput("findings-count", "0");
-    core.setOutput("verdict", "");
     core.info("Diff is empty — nothing to review.");
     return;
   }
@@ -91,13 +82,9 @@ async function run(): Promise<void> {
     referenceContent = fs.readFileSync(referenceFilePath, "utf8");
   }
 
-  const schema: Record<string, unknown> = defaultSchema;
-  const client = createOpenAIClient(inputs.apiKey);
-  const chunkResults: ReviewOutput[] = [];
-
-  for (let i = 0; i < chunks.length; i++) {
-    core.startGroup(`Reviewing chunk ${i}...`);
-    try {
+  core.startGroup("Writing prompt and schema files");
+  try {
+    for (let i = 0; i < chunks.length; i++) {
       const prompt = assemblePrompt({
         diff: chunks[i],
         headSha: prContext.headSha,
@@ -109,50 +96,20 @@ async function run(): Promise<void> {
         reviewRunId: `${Date.now()}-${i}`,
       });
 
-      const result = await reviewChunk(prompt, schema, inputs.model, client);
-      chunkResults.push(result);
-    } catch (error) {
-      core.setFailed(
-        `Chunk ${i} review failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return;
-    } finally {
-      core.endGroup();
+      const promptFile = `${CODEX_DIR}/chunk-${i}-prompt.md`;
+      fs.writeFileSync(promptFile, prompt);
+      core.info(`Wrote ${promptFile} (${prompt.length} chars)`);
     }
-  }
 
-  core.startGroup("Merging chunk reviews");
-  let merged: ReviewOutput;
-  try {
-    merged = mergeChunkReviews(chunkResults, chunks.length);
-    fs.writeFileSync(REVIEW_OUTPUT_FILE, JSON.stringify(merged, null, 2));
-    core.info(`Merged review: ${merged.findings.length} finding(s) -> ${REVIEW_OUTPUT_FILE}`);
+    fs.writeFileSync(SCHEMA_FILE, JSON.stringify(defaultSchema, null, 2));
+    core.info(`Wrote ${SCHEMA_FILE}`);
   } catch (error) {
     core.setFailed(
-      `Failed to merge chunk reviews: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to write prompt/schema files: ${error instanceof Error ? error.message : String(error)}`,
     );
     return;
   } finally {
     core.endGroup();
-  }
-
-  core.setOutput("findings-count", String(merged.findings.length));
-  core.setOutput("verdict", merged.overall_correctness);
-
-  if (inputs.retainFindings) {
-    core.startGroup("Uploading review findings artifact");
-    try {
-      const client = new artifact.DefaultArtifactClient();
-      await client.uploadArtifact(
-        ARTIFACT_NAME,
-        [REVIEW_OUTPUT_FILE, DIFF_FILE],
-        CODEX_DIR,
-        { retentionDays: inputs.retainFindingsDays },
-      );
-      core.info(`Uploaded findings artifact: ${ARTIFACT_NAME}`);
-    } finally {
-      core.endGroup();
-    }
   }
 }
 

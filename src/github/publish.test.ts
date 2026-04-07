@@ -37,6 +37,7 @@ import { publishReview } from "./review.js";
 
 const validReviewOutput: ReviewOutput = {
   changes: ["Added validation"],
+  effort: null,
   files: [{ description: "Main file", path: "src/main.ts" }],
   findings: [
     {
