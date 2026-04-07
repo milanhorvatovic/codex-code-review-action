@@ -174,7 +174,7 @@ describe("publish/main", () => {
     });
 
     expect(mockWarning).toHaveBeenCalledWith(
-      expect.stringContaining("Expected 3 chunk(s) but found 1"),
+      expect.stringContaining("Expected 3 chunk(s) but merged 1"),
     );
   });
 

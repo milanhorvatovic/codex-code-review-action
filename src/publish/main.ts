@@ -73,13 +73,6 @@ async function run(): Promise<void> {
       return;
     }
 
-    if (inputs.expectedChunks !== null && chunkFiles.length < inputs.expectedChunks) {
-      const missing = inputs.expectedChunks - chunkFiles.length;
-      core.warning(
-        `Expected ${inputs.expectedChunks} chunk(s) but found ${chunkFiles.length}. ${missing} chunk(s) may have failed. Proceeding with partial review.`,
-      );
-    }
-
     const chunkResults: ReviewOutput[] = [];
     for (const chunk of chunkFiles) {
       const result = parseChunkFile(chunk.path);
@@ -92,6 +85,20 @@ async function run(): Promise<void> {
     if (chunkResults.length === 0) {
       core.setFailed("All chunk review outputs failed validation. Cannot publish review.");
       return;
+    }
+
+    if (inputs.expectedChunks !== null && chunkResults.length < inputs.expectedChunks) {
+      const missing = inputs.expectedChunks - chunkResults.length;
+      const invalid = chunkFiles.length - chunkResults.length;
+      const parts = [`Expected ${inputs.expectedChunks} chunk(s) but merged ${chunkResults.length}.`];
+      if (invalid > 0) {
+        parts.push(`${invalid} chunk(s) failed validation.`);
+      }
+      if (missing - invalid > 0) {
+        parts.push(`${missing - invalid} chunk(s) were not produced.`);
+      }
+      parts.push("Proceeding with partial review.");
+      core.warning(parts.join(" "));
     }
 
     reviewOutput = mergeChunkReviews(chunkResults);
