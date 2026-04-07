@@ -61,6 +61,15 @@ function parseChunkFile(filePath: string): ReviewOutput | null {
 async function run(): Promise<void> {
   const inputs = getPublishInputs();
 
+  if (inputs.expectedChunks === 0) {
+    core.info("Expected 0 chunks — nothing to publish.");
+    core.setOutput("published", "false");
+    core.setOutput("findings-count", "0");
+    core.setOutput("verdict", "");
+    core.setOutput("review-file", "");
+    return;
+  }
+
   core.startGroup("Discovering and merging chunk reviews");
   let reviewOutput: ReviewOutput;
   try {
@@ -89,7 +98,7 @@ async function run(): Promise<void> {
       return;
     }
 
-    if (inputs.expectedChunks !== null && inputs.expectedChunks > 0) {
+    if (inputs.expectedChunks !== null) {
       const missingIndices: number[] = [];
       for (let i = 0; i < inputs.expectedChunks; i++) {
         if (!mergedIndices.has(i)) {

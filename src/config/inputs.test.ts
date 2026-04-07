@@ -186,6 +186,16 @@ describe("getPublishInputs", () => {
     expect(result.expectedChunks).toBe(5);
   });
 
+  it("allows expected-chunks of 0", () => {
+    mockGetInput.mockImplementation((name: string) =>
+      name === "github-token" ? "token" : name === "expected-chunks" ? "0" : "",
+    );
+    mockGetBooleanInput.mockReturnValue(false);
+
+    const result = getPublishInputs();
+    expect(result.expectedChunks).toBe(0);
+  });
+
   it("throws for negative expected-chunks", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "expected-chunks" ? "-1" : "",
