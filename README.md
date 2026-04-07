@@ -196,6 +196,10 @@ npm run lint         # Lint source code
 npm run typecheck    # Type check
 ```
 
+## Version history
+
+See the [`CHANGELOG`](CHANGELOG.md) for details.
+
 ## License
 
 This project is licensed under the [MIT](LICENSE).
