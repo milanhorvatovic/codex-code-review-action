@@ -131,16 +131,23 @@ async function run(): Promise<void> {
 
   const effort = reviewOutput.effort || inputs.reviewEffort;
 
-  const published = await publishReview({
-    diffText,
-    githubToken: inputs.githubToken,
-    maxComments: inputs.maxComments,
-    minConfidence: inputs.minConfidence,
-    model,
-    reviewEffort: effort,
-    reviewOutput,
-    runUrl,
-  });
+  let published = false;
+  try {
+    published = await publishReview({
+      diffText,
+      githubToken: inputs.githubToken,
+      maxComments: inputs.maxComments,
+      minConfidence: inputs.minConfidence,
+      model,
+      reviewEffort: effort,
+      reviewOutput,
+      runUrl,
+    });
+  } catch (error) {
+    core.setFailed(
+      `Failed to publish review: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 
   core.setOutput("published", String(published));
 
