@@ -44,6 +44,35 @@ jobs:
             echo "dist/ is already up to date; nothing to commit."
           fi
 
+      - name: Validate rebuild-dist configuration
+        if: steps.dist.outputs.changed == 'true'
+        env:
+          REBUILD_TOKEN: ${{ secrets.DEPENDABOT_REBUILD_TOKEN }}
+          GPG_PRIVATE_KEY: ${{ secrets.DEPENDABOT_GPG_PRIVATE_KEY }}
+          COMMITTER_NAME: ${{ vars.DEPENDABOT_GIT_COMMITTER_NAME }}
+          COMMITTER_EMAIL: ${{ vars.DEPENDABOT_GIT_COMMITTER_EMAIL }}
+        run: |
+          missing=0
+          if [ -z "$REBUILD_TOKEN" ]; then
+            echo "::error::Dependabot secret DEPENDABOT_REBUILD_TOKEN is missing — required to push the rebuilt dist/ back to the PR. Create a fine-grained PAT scoped to this repo (Contents: read/write, Pull requests: read/write) and store it as DEPENDABOT_REBUILD_TOKEN under Settings → Secrets and variables → Dependabot."
+            missing=1
+          fi
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::Dependabot secret DEPENDABOT_GPG_PRIVATE_KEY is missing — required to sign the rebuilt dist/ commit so it satisfies main's required_signatures rule. Export an armored sign-only GPG subkey ('gpg --armor --export-secret-subkeys <subkey-id>!') and store it as DEPENDABOT_GPG_PRIVATE_KEY under Settings → Secrets and variables → Dependabot."
+            missing=1
+          fi
+          if [ -z "$COMMITTER_NAME" ]; then
+            echo "::error::Repo variable DEPENDABOT_GIT_COMMITTER_NAME is missing — required as the committer name for the signed rebuild-dist commit. Set it under Settings → Secrets and variables → Actions → Variables."
+            missing=1
+          fi
+          if [ -z "$COMMITTER_EMAIL" ]; then
+            echo "::error::Repo variable DEPENDABOT_GIT_COMMITTER_EMAIL is missing — required as the committer email for the signed rebuild-dist commit. It must match a UID on the imported GPG key and a verified email on the GitHub account that owns the public key. Set it under Settings → Secrets and variables → Actions → Variables."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Import GPG key
         if: steps.dist.outputs.changed == 'true'
         uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
@@ -62,10 +91,6 @@ jobs:
           BRANCH: ${{ github.event.pull_request.head.ref }}
           REPO: ${{ github.repository }}
         run: |
-          if [ -z "$REBUILD_TOKEN" ]; then
-            echo "::error::Dependabot secret DEPENDABOT_REBUILD_TOKEN is missing — required to push the rebuilt dist/ back to the PR. Create a fine-grained PAT scoped to this repo (Contents: read/write, Pull requests: read/write) and store it as DEPENDABOT_REBUILD_TOKEN under Settings → Secrets and variables → Dependabot."
-            exit 1
-          fi
           git add dist/
           git commit -m "chore: rebuild dist after dependency update"
           git push "https://x-access-token:${REBUILD_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}"
