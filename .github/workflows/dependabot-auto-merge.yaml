@@ -35,8 +35,8 @@ jobs:
             echo "dist/ is already up to date; nothing to commit."
             exit 0
           fi
-          git config user.name "dependabot[bot]"
-          git config user.email "49699333+dependabot[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dist/
           git commit -m "chore: rebuild dist after dependency update"
           git push
