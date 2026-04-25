@@ -8,8 +8,62 @@ permissions:
   pull-requests: read
 
 jobs:
+  rebuild-dist:
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Verify rebuild token is configured
+        env:
+          REBUILD_TOKEN: ${{ secrets.DEPENDABOT_REBUILD_TOKEN }}
+        run: |
+          if [ -z "$REBUILD_TOKEN" ]; then
+            echo "::error::Repo secret DEPENDABOT_REBUILD_TOKEN is missing. Create a fine-grained PAT scoped to this repo (Contents: read/write, Pull requests: read/write) and store it as DEPENDABOT_REBUILD_TOKEN under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Disable git hooks
+        run: git config --local core.hooksPath /dev/null
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          cache: "npm"
+          node-version: "24.14.1"
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit and push dist if changed
+        env:
+          REBUILD_TOKEN: ${{ secrets.DEPENDABOT_REBUILD_TOKEN }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$(git status --porcelain dist/)" ]; then
+            echo "dist/ is already up to date; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/
+          git commit -m "chore: rebuild dist after dependency update"
+          git push "https://x-access-token:${REBUILD_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}"
+
   auto-merge:
-    if: github.actor == 'dependabot[bot]'
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    needs: rebuild-dist
     runs-on: ubuntu-latest
     permissions:
       contents: write
