@@ -54,7 +54,7 @@ jobs:
         run: |
           missing=0
           if [ -z "$REBUILD_TOKEN" ]; then
-            echo "::error::Dependabot secret DEPENDABOT_REBUILD_TOKEN is missing — required to push the rebuilt dist/ back to the PR. Create a fine-grained PAT scoped to this repo (Contents: read/write, Pull requests: read/write) and store it as DEPENDABOT_REBUILD_TOKEN under Settings → Secrets and variables → Dependabot."
+            echo "::error::Dependabot secret DEPENDABOT_REBUILD_TOKEN is missing — required to push the rebuilt dist/ back to the PR. Create a fine-grained PAT scoped to this repo (Contents: read/write) and store it as DEPENDABOT_REBUILD_TOKEN under Settings → Secrets and variables → Dependabot."
             missing=1
           fi
           if [ -z "$GPG_PRIVATE_KEY" ]; then
