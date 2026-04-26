@@ -4,7 +4,12 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.x | Yes |
+| 2.x | Yes |
+| 1.x | No (see [CHANGELOG](../CHANGELOG.md) for migration to 2.x) |
+
+## Data destinations
+
+PR diffs and metadata leave the runner only via two destinations: **GitHub** (PR context, posting the review, artifact storage) and **OpenAI** (via the SHA-pinned [`openai/codex-action`](https://github.com/openai/codex-action) invoked from `review/action.yaml`). This repository operates no maintainer-owned backend, proxy, analytics service, or telemetry pipeline that receives diffs. See the [Trust model](../README.md#trust-model) section in the README for the full statement.
 
 ## Reporting a Vulnerability
 
@@ -18,6 +23,12 @@ We will acknowledge receipt within 48 hours and aim to release a fix within 7 da
 
 ## Security Considerations
 
-This action processes untrusted input (PR diffs and metadata). It mitigates prompt injection via backtick neutralisation, dynamic fencing, and untrusted-data labelling. The two-action architecture isolates read-only review from write-access publishing.
+This action processes untrusted input (PR diffs and metadata). It mitigates prompt injection via backtick neutralisation, dynamic fencing, and untrusted-data labelling.
+
+The three-job architecture splits responsibilities by permission scope:
+
+- `prepare` (`contents: read`) — builds the PR diff, splits it into chunks, and assembles prompts. No write access; no API key.
+- `review` (`contents: read`) — invokes `openai/codex-action` per chunk in parallel. Receives the OpenAI API key but has no write access to the repository.
+- `publish` (`contents: read`, `pull-requests: write`) — merges chunk reviews and posts the PR review with inline comments. Never sees the OpenAI API key.
 
 If you believe any of these defences can be bypassed, please report it using the process above.
