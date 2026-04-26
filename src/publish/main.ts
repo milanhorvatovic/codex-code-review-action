@@ -72,6 +72,7 @@ async function run(): Promise<void> {
 
   core.startGroup("Discovering and merging chunk reviews");
   let reviewOutput: ReviewOutput;
+  let missingIndices: number[] = [];
   try {
     const chunkFiles = discoverChunkFiles();
 
@@ -99,7 +100,6 @@ async function run(): Promise<void> {
     }
 
     if (inputs.expectedChunks !== null) {
-      const missingIndices: number[] = [];
       for (let i = 0; i < inputs.expectedChunks; i++) {
         if (!mergedIndices.has(i)) {
           missingIndices.push(i);
@@ -109,7 +109,7 @@ async function run(): Promise<void> {
       if (missingIndices.length > 0) {
         const parts = [`Expected ${inputs.expectedChunks} chunk(s) but merged ${chunkResults.length}.`];
         parts.push(`Missing chunk(s): ${missingIndices.join(", ")}.`);
-        parts.push("Proceeding with partial review.");
+        parts.push("Publishing partial review with incomplete banner.");
         core.warning(parts.join(" "));
       }
     }
@@ -156,9 +156,12 @@ async function run(): Promise<void> {
   try {
     published = await publishReview({
       diffText,
+      expectedChunks: inputs.expectedChunks,
+      failOnMissingChunks: inputs.failOnMissingChunks,
       githubToken: inputs.githubToken,
       maxComments: inputs.maxComments,
       minConfidence: inputs.minConfidence,
+      missingChunks: missingIndices,
       model,
       reviewEffort: effort,
       reviewOutput,
@@ -198,6 +201,14 @@ async function run(): Promise<void> {
     core.setFailed(publishError);
   } else if (!published) {
     core.setFailed("Failed to publish review. See warnings above for details.");
+  } else if (
+    missingIndices.length > 0 &&
+    inputs.failOnMissingChunks
+  ) {
+    core.setFailed(
+      `Published a partial review. Missing chunk(s): ${missingIndices.join(", ")}. ` +
+      `Failing because fail-on-missing-chunks is enabled.`,
+    );
   }
 }
 
