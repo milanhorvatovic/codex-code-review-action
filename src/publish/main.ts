@@ -72,7 +72,7 @@ async function run(): Promise<void> {
 
   core.startGroup("Discovering and merging chunk reviews");
   let reviewOutput: ReviewOutput;
-  let missingIndices: number[] = [];
+  const missingIndices: number[] = [];
   try {
     const chunkFiles = discoverChunkFiles();
 
