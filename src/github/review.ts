@@ -268,8 +268,8 @@ function buildIncompleteBanner(
   if (missing.length === 0 || expected === null) return "";
   const level = failOnMissingChunks ? "CAUTION" : "WARNING";
   return (
-    `> [!${level}]\n> **Incomplete review**\n\n` +
-    `${missing.length} of ${expected} chunks were missing (indices: ${missing.join(", ")}). ` +
+    `> [!${level}]\n> **Incomplete review**\n>\n` +
+    `> ${missing.length} of ${expected} chunks were missing (indices: ${missing.join(", ")}). ` +
     `The findings below represent only the parts that were successfully reviewed. ` +
     `Check the review job logs for the missing chunks.`
   );

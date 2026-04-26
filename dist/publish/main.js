@@ -172,8 +172,8 @@ ${t.body}
 
 ${e}${r}${n}`;return EYe(i)}function PL(t,e,r){return t.length===0||e===null?"":`> [!${r?"CAUTION":"WARNING"}]
 > **Incomplete review**
-
-${t.length} of ${e} chunks were missing (indices: ${t.join(", ")}). The findings below represent only the parts that were successfully reviewed. Check the review job logs for the missing chunks.`}function fYe(t){let e=["## Pull request overview"],r=PL(t.missingChunks,t.expectedChunks,t.failOnMissingChunks);if(r&&e.push(r),t.summaryText){let c=t.summaryText.length>Aie?`${t.summaryText.slice(0,Aie)}
+>
+> ${t.length} of ${e} chunks were missing (indices: ${t.join(", ")}). The findings below represent only the parts that were successfully reviewed. Check the review job logs for the missing chunks.`}function fYe(t){let e=["## Pull request overview"],r=PL(t.missingChunks,t.expectedChunks,t.failOnMissingChunks);if(r&&e.push(r),t.summaryText){let c=t.summaryText.length>Aie?`${t.summaryText.slice(0,Aie)}
 
 ...(summary truncated)`:t.summaryText;e.push(c)}let n=yie(t.overallCorrectness,t.overallConfidenceScore);if(n&&e.push(n),t.changes.length>0){let l=t.changes.slice(0,vL).map(u=>`- ${u}`);t.changes.length>vL&&l.push(`- ...and ${t.changes.length-vL} more change(s)`),e.push(`**Changes:**
 ${l.join(`
