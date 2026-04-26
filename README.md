@@ -5,6 +5,22 @@
 
 AI-powered code review GitHub Action using [OpenAI Codex](https://github.com/openai/codex-action). Three-job design with security isolation: read-only prepare job (diff chunking, prompt assembly), read-only review job (parallel chunk reviews via `openai/codex-action`), and write-access publish job (chunk merging, inline PR comments, per-file summaries, verdict). Fully configurable prompts, models, confidence thresholds, and user allowlists.
 
+## Trust model
+
+PR diffs, title, body, and metadata leave your runner only via two destinations:
+
+- **GitHub** — for fetching the PR base commit, posting the review, and storing inter-job artifacts. This is expected behaviour for any GitHub Action.
+- **OpenAI** — via [`openai/codex-action`](https://github.com/openai/codex-action), which sends the prompt (including the diff) to OpenAI's API to generate the review.
+
+This repository does **not** operate any maintainer-owned backend, proxy, analytics service, or telemetry pipeline that receives diffs. There is no data destination beyond GitHub and OpenAI. The action does not phone home, and it does not collect usage data beyond what `openai/codex-action` itself does.
+
+Two trust questions are commonly conflated; they have different answers:
+
+- *"Does OpenAI see the diff?"* — **Yes.** The review job invokes `openai/codex-action`, which calls OpenAI's API with the prompt and the diff. This is the explicit purpose of the action.
+- *"Does the action maintainer see the diff?"* — **No.** No maintainer-operated destination exists. The action's source is auditable in this repository, and `openai/codex-action` is SHA-pinned in [`review/action.yaml`](review/action.yaml) (currently `@086169432f1d2ab2f4057540b1754d550f6a1189`, v1.4) so the referenced commit is immutable unless this repo bumps the SHA. (Runtime behaviour of OpenAI's API and model selection are outside this guarantee — see OpenAI's data-handling terms.)
+
+This action reduces risk when wired safely (read-only `prepare` and `review`, write access scoped to `publish`), but it does not make sending diffs to OpenAI risk-free. Evaluate OpenAI's data-handling terms separately for your organisation.
+
 ## Minimal quick start
 
 Create `.github/workflows/codex-review.yaml` in your repository:
@@ -82,6 +98,16 @@ jobs:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
 ```
+
+## Security guidance
+
+The subsections below describe how to wire this action into a workflow safely.
+
+### Do not use `pull_request_target`
+
+> Always use `pull_request` as the trigger for this action. `pull_request_target` runs the workflow YAML from the base branch, but it executes in the base-repository context with access to repository secrets and broader token permissions. When a workflow handles untrusted pull request content, that combination creates a straightforward secret-exfiltration path for a malicious fork PR.
+>
+> The risk is not that a fork PR can edit the workflow file and have that modified YAML execute under `pull_request_target` — it cannot. The risk is that the trusted base-branch workflow may still execute attacker-controlled code from the PR. For example, if the workflow checks out `${{ github.event.pull_request.head.sha }}` and then runs a repository script such as `./scripts/review.sh`, a fork PR can modify that script to exfiltrate `OPENAI_API_KEY`. With `pull_request_target`, that attacker-controlled script runs with secrets in scope. With `pull_request`, repository secrets are not exposed to the fork PR workflow, so the same script has nothing useful to steal.
 
 ## Architecture
 
