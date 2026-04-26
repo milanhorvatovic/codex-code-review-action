@@ -138,7 +138,7 @@ The same pattern applies to the `review` and `publish` actions:
 - uses: milanhorvatovic/codex-ai-code-review-action/publish@<full-sha> # v2.0.0
 ```
 
-Inside this repository, `review/action.yaml` already SHA-pins `openai/codex-action`, so users who consume this action transitively inherit that pinning for the Codex step itself.
+Inside this repository, `review/action.yaml` SHA-pins `openai/codex-action`. That transitive pin is only frozen for you when you pin this action itself to a full SHA — at the SHA you chose, `review/action.yaml` is fixed and the `openai/codex-action` reference cannot move. Pinning to `@v2` does not carry that guarantee: a future `v2` release can update the transitive SHA.
 
 ## Architecture
 
