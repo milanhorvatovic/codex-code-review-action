@@ -5,7 +5,7 @@
 
 AI-powered code review GitHub Action using [OpenAI Codex](https://github.com/openai/codex-action). Three-job design with security isolation: read-only prepare job (diff chunking, prompt assembly), read-only review job (parallel chunk reviews via `openai/codex-action`), and write-access publish job (chunk merging, inline PR comments, per-file summaries, verdict). Fully configurable prompts, models, confidence thresholds, and user allowlists.
 
-## Quick start
+## Minimal quick start
 
 Create `.github/workflows/codex-review.yaml` in your repository:
 
@@ -179,7 +179,7 @@ See [`defaults/review-reference.md`](defaults/review-reference.md) for the struc
 ## Setup
 
 1. Add `OPENAI_API_KEY` as a repository secret (Settings > Secrets and variables > Actions)
-2. Create the workflow file as shown in [Quick start](#quick-start)
+2. Create the workflow file as shown in [Minimal quick start](#minimal-quick-start)
 3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules
 4. Open a pull request — the review appears automatically
 
