@@ -113,14 +113,18 @@ The subsections below describe how to wire this action into a workflow safely.
 
 GitHub recommends pinning third-party actions to a full commit SHA for the strongest supply-chain protection. See GitHub's [security hardening for GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#using-third-party-actions) for the canonical guidance.
 
+Pick one of the two forms below — they are alternatives, not steps to combine.
+
+Convenient — follows the `v2` tag. Trusts future releases from the maintainer account:
+
 ```yaml
-# Convenient — follows the v2 tag. Trusts future releases from the maintainer account.
 - id: prepare
   uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
+```
 
-# Security-conscious — immutable. Immune to tag movement or account compromise.
-# Replace <full-sha> with the current release commit SHA.
-# You can resolve it with: gh release view v2.0.0 --json tagName,targetCommitish
+Security-conscious — immutable. Immune to tag movement or account compromise. Replace `<full-sha>` with the current release commit SHA; resolve it with `gh api repos/milanhorvatovic/codex-ai-code-review-action/commits/v2.0.0 --jq '.sha'`:
+
+```yaml
 - id: prepare
   uses: milanhorvatovic/codex-ai-code-review-action/prepare@<full-sha> # v2.0.0
 ```
