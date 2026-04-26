@@ -109,6 +109,33 @@ The subsections below describe how to wire this action into a workflow safely.
 >
 > The risk is not that a fork PR can edit the workflow file and have that modified YAML execute under `pull_request_target` — it cannot. The risk is that the trusted base-branch workflow may still execute attacker-controlled code from the PR. For example, if the workflow checks out `${{ github.event.pull_request.head.sha }}` and then runs a repository script such as `./scripts/review.sh`, a fork PR can modify that script to exfiltrate `OPENAI_API_KEY`. With `pull_request_target`, that attacker-controlled script runs with secrets in scope. With `pull_request`, repository secrets are not exposed to the fork PR workflow, so the same script has nothing useful to steal.
 
+### Pinning the action
+
+GitHub recommends pinning third-party actions to a full commit SHA for the strongest supply-chain protection. See GitHub's [security hardening for GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#using-third-party-actions) for the canonical guidance.
+
+```yaml
+# Convenient — follows the v2 tag. Trusts future releases from the maintainer account.
+- id: prepare
+  uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
+
+# Security-conscious — immutable. Immune to tag movement or account compromise.
+# Replace <full-sha> with the current release commit SHA.
+# You can resolve it with: gh release view v2.0.0 --json tagName,targetCommitish
+- id: prepare
+  uses: milanhorvatovic/codex-ai-code-review-action/prepare@<full-sha> # v2.0.0
+```
+
+Version tags are mutable references controlled by the maintainer account, while SHA pinning removes that trust dependency.
+
+The same pattern applies to the `review` and `publish` actions:
+
+```yaml
+- uses: milanhorvatovic/codex-ai-code-review-action/review@<full-sha> # v2.0.0
+- uses: milanhorvatovic/codex-ai-code-review-action/publish@<full-sha> # v2.0.0
+```
+
+Inside this repository, `review/action.yaml` already SHA-pins `openai/codex-action`, so users who consume this action transitively inherit that pinning for the Codex step itself.
+
 ## Architecture
 
 The workflow is split into three jobs for security isolation:
@@ -208,35 +235,6 @@ See [`defaults/review-reference.md`](defaults/review-reference.md) for the struc
 2. Create the workflow file as shown in [Minimal quick start](#minimal-quick-start)
 3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules
 4. Open a pull request — the review appears automatically
-
-## Security guidance
-
-### Pinning the action
-
-GitHub recommends pinning third-party actions to a full commit SHA for the strongest supply-chain protection. See GitHub's [security hardening for GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#using-third-party-actions) for the canonical guidance.
-
-```yaml
-# Convenient — follows the v2 tag. Trusts future releases from the maintainer account.
-- id: prepare
-  uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
-
-# Security-conscious — immutable. Immune to tag movement or account compromise.
-# Replace <full-sha> with the current release commit SHA.
-# You can resolve it with: gh release view v2.0.0 --json tagName,targetCommitish
-- id: prepare
-  uses: milanhorvatovic/codex-ai-code-review-action/prepare@<full-sha> # v2.0.0
-```
-
-Version tags are mutable references controlled by the maintainer account, while SHA pinning removes that trust dependency.
-
-The same pattern applies to the `review` and `publish` actions:
-
-```yaml
-- uses: milanhorvatovic/codex-ai-code-review-action/review@<full-sha> # v2.0.0
-- uses: milanhorvatovic/codex-ai-code-review-action/publish@<full-sha> # v2.0.0
-```
-
-Inside this repository, `review/action.yaml` already SHA-pins `openai/codex-action`, so users who consume this action transitively inherit that pinning for the Codex step itself.
 
 ## Development
 
