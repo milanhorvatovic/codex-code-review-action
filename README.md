@@ -17,7 +17,7 @@ This repository does **not** operate any maintainer-owned backend, proxy, analyt
 Two trust questions are commonly conflated; they have different answers:
 
 - *"Does OpenAI see the diff?"* — **Yes.** The review job invokes `openai/codex-action`, which calls OpenAI's API with the prompt and the diff. This is the explicit purpose of the action.
-- *"Does the action maintainer see the diff?"* — **No.** No maintainer-operated destination exists. The action's source is auditable in this repository, and `openai/codex-action` is SHA-pinned in [`review/action.yaml`](review/action.yaml) (currently `@086169432f1d2ab2f4057540b1754d550f6a1189`, v1.4) so its behaviour cannot change under you without a visible bump in this repo.
+- *"Does the action maintainer see the diff?"* — **No.** No maintainer-operated destination exists. The action's source is auditable in this repository, and `openai/codex-action` is SHA-pinned in [`review/action.yaml`](review/action.yaml) (currently `@086169432f1d2ab2f4057540b1754d550f6a1189`, v1.4) so the referenced commit is immutable unless this repo bumps the SHA. (Runtime behaviour of OpenAI's API and model selection are outside this guarantee — see OpenAI's data-handling terms.)
 
 This action reduces risk when wired safely (read-only `prepare` and `review`, write access scoped to `publish`), but it does not make sending diffs to OpenAI risk-free. Evaluate OpenAI's data-handling terms separately for your organisation.
 

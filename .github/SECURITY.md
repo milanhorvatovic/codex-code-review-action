@@ -27,8 +27,8 @@ This action processes untrusted input (PR diffs and metadata). It mitigates prom
 
 The three-job architecture splits responsibilities by permission scope:
 
-- `prepare` (`contents: read`) — builds the PR diff, splits it into chunks, and assembles prompts. No write access; no API key.
-- `review` (`contents: read`) — invokes `openai/codex-action` per chunk in parallel. Receives the OpenAI API key but has no write access to the repository.
-- `publish` (`contents: read`, `pull-requests: write`) — merges chunk reviews and posts the PR review with inline comments. Never sees the OpenAI API key.
+- `prepare` (`contents: read`) — builds the PR diff, splits it into chunks, and assembles prompts. No write access; does not require or receive the OpenAI API key.
+- `review` (`contents: read`) — invokes `openai/codex-action` per chunk in parallel. This is the only job that requires the OpenAI API key, and it has no write access to the repository.
+- `publish` (`contents: read`, `pull-requests: write`) — merges chunk reviews and posts the PR review with inline comments. Does not require or receive the OpenAI API key.
 
 If you believe any of these defences can be bypassed, please report it using the process above.
