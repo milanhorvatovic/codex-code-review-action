@@ -55,6 +55,8 @@ export function getPublishInputs(): PublishInputs {
     expectedChunks = parsed;
   }
 
+  const failOnMissingChunks = core.getBooleanInput("fail-on-missing-chunks");
+
   const retainFindings = core.getBooleanInput("retain-findings");
   let retainFindingsDays = RETAIN_FINDINGS_DAYS_DEFAULT;
   const retainDaysInput = core.getInput("retain-findings-days").trim();
@@ -71,6 +73,7 @@ export function getPublishInputs(): PublishInputs {
 
   return {
     expectedChunks,
+    failOnMissingChunks,
     githubToken,
     maxComments,
     minConfidence,
