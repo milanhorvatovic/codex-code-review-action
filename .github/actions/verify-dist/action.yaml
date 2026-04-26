@@ -17,4 +17,9 @@ runs:
     - name: Check dist is up-to-date
       shell: bash
       run: |
-        git diff --exit-code dist/ || (echo "::error::dist/ is out of date. Run 'npm run build' and commit the result." && exit 1)
+        status="$(git status --porcelain -- dist/)"
+        if [ -n "$status" ]; then
+          echo "::error::dist/ is out of date. Run 'npm run build' and commit the result."
+          echo "$status"
+          exit 1
+        fi
