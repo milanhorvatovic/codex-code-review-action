@@ -70,6 +70,10 @@ describe("getPrepareInputs", () => {
 });
 
 describe("getPublishInputs", () => {
+  function mockBooleans(values: Record<string, boolean>): void {
+    mockGetBooleanInput.mockImplementation((name: string) => values[name] ?? false);
+  }
+
   it("parses all inputs correctly", () => {
     mockGetInput.mockImplementation((name: string) => {
       const inputs: Record<string, string> = {
@@ -83,11 +87,12 @@ describe("getPublishInputs", () => {
       };
       return inputs[name] ?? "";
     });
-    mockGetBooleanInput.mockReturnValue(true);
+    mockBooleans({ "fail-on-missing-chunks": false, "retain-findings": true });
 
     const result = getPublishInputs();
 
     expect(result.expectedChunks).toBe(3);
+    expect(result.failOnMissingChunks).toBe(false);
     expect(result.githubToken).toBe("ghp-test");
     expect(result.maxComments).toBe(10);
     expect(result.minConfidence).toBe(0.5);
@@ -101,7 +106,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "ghp-secret" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     getPublishInputs();
 
@@ -112,7 +117,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "min-confidence" ? "2.5" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     const result = getPublishInputs();
     expect(result.minConfidence).toBe(1);
@@ -122,7 +127,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "min-confidence" ? "invalid" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     const result = getPublishInputs();
     expect(result.minConfidence).toBe(0);
@@ -132,7 +137,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     const result = getPublishInputs();
     expect(result.maxComments).toBe(Infinity);
@@ -142,7 +147,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "max-comments" ? "0" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     const result = getPublishInputs();
     expect(result.maxComments).toBe(0);
@@ -152,7 +157,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "max-comments" ? "-1" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     expect(() => getPublishInputs()).toThrow("non-negative integer");
   });
@@ -161,7 +166,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "max-comments" ? "abc" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     expect(() => getPublishInputs()).toThrow("non-negative integer");
   });
@@ -170,7 +175,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     const result = getPublishInputs();
     expect(result.expectedChunks).toBeNull();
@@ -180,7 +185,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "expected-chunks" ? "5" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     const result = getPublishInputs();
     expect(result.expectedChunks).toBe(5);
@@ -190,7 +195,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "expected-chunks" ? "0" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     const result = getPublishInputs();
     expect(result.expectedChunks).toBe(0);
@@ -200,16 +205,46 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "expected-chunks" ? "-1" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     expect(() => getPublishInputs()).toThrow("non-negative integer");
+  });
+
+  it("parses fail-on-missing-chunks as true", () => {
+    mockGetInput.mockImplementation((name: string) =>
+      name === "github-token" ? "token" : "",
+    );
+    mockBooleans({ "fail-on-missing-chunks": true });
+
+    const result = getPublishInputs();
+    expect(result.failOnMissingChunks).toBe(true);
+  });
+
+  it("parses fail-on-missing-chunks as false", () => {
+    mockGetInput.mockImplementation((name: string) =>
+      name === "github-token" ? "token" : "",
+    );
+    mockBooleans({ "fail-on-missing-chunks": false });
+
+    const result = getPublishInputs();
+    expect(result.failOnMissingChunks).toBe(false);
+  });
+
+  it("defaults fail-on-missing-chunks to false when omitted (action.yaml default)", () => {
+    mockGetInput.mockImplementation((name: string) =>
+      name === "github-token" ? "token" : "",
+    );
+    mockBooleans({});
+
+    const result = getPublishInputs();
+    expect(result.failOnMissingChunks).toBe(false);
   });
 
   it("throws for non-integer retain-findings-days when retain-findings is enabled", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "retain-findings-days" ? "invalid" : "",
     );
-    mockGetBooleanInput.mockReturnValue(true);
+    mockBooleans({ "retain-findings": true });
 
     expect(() => getPublishInputs()).toThrow("must be a positive integer");
   });
@@ -218,7 +253,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "retain-findings-days" ? "365" : "",
     );
-    mockGetBooleanInput.mockReturnValue(true);
+    mockBooleans({ "retain-findings": true });
 
     const result = getPublishInputs();
     expect(result.retainFindingsDays).toBe(90);
@@ -231,7 +266,7 @@ describe("getPublishInputs", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : name === "retain-findings-days" ? "invalid" : "",
     );
-    mockGetBooleanInput.mockReturnValue(false);
+    mockBooleans({});
 
     const result = getPublishInputs();
     expect(result.retainFindingsDays).toBe(90);

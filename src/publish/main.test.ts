@@ -66,6 +66,7 @@ vi.mock("../core/merge.js", () => ({
 vi.mock("../config/inputs.js", () => ({
   getPublishInputs: () => ({
     expectedChunks: null,
+    failOnMissingChunks: false,
     githubToken: "token",
     maxComments: Infinity,
     minConfidence: 0,
@@ -152,6 +153,7 @@ describe("publish/main", () => {
     vi.doMock("../config/inputs.js", () => ({
       getPublishInputs: () => ({
         expectedChunks: 3,
+        failOnMissingChunks: false,
         githubToken: "token",
         maxComments: Infinity,
         minConfidence: 0,
@@ -258,6 +260,7 @@ describe("publish/main", () => {
     vi.doMock("../config/inputs.js", () => ({
       getPublishInputs: () => ({
         expectedChunks: null,
+        failOnMissingChunks: false,
         githubToken: "token",
         maxComments: Infinity,
         minConfidence: 0,
@@ -292,6 +295,7 @@ describe("publish/main", () => {
     vi.doMock("../config/inputs.js", () => ({
       getPublishInputs: () => ({
         expectedChunks: null,
+        failOnMissingChunks: false,
         githubToken: "token",
         maxComments: Infinity,
         minConfidence: 0,
@@ -335,6 +339,168 @@ describe("publish/main", () => {
 
     expect(mockInfo).toHaveBeenCalledWith(
       expect.stringContaining("Parsed chunk 0"),
+    );
+  });
+
+  function mockMissingChunksInputs(failOnMissingChunks: boolean, expectedChunks: number | null): void {
+    vi.resetModules();
+    vi.doMock("../config/inputs.js", () => ({
+      getPublishInputs: () => ({
+        expectedChunks,
+        failOnMissingChunks,
+        githubToken: "token",
+        maxComments: Infinity,
+        minConfidence: 0,
+        model: "",
+        retainFindings: false,
+        retainFindingsDays: 90,
+        reviewEffort: "",
+      }),
+    }));
+  }
+
+  it("(e) missing chunks + flag false → warning, missingChunks threaded, no setFailed", async () => {
+    mockMissingChunksInputs(false, 3);
+    mockExistsSync.mockImplementation((p: string) =>
+      p === ".codex" || p === ".codex/pr.diff",
+    );
+    mockReaddirSync.mockReturnValue(["chunk-0-output.json"]);
+    mockReadFileSync.mockReturnValue(validReview);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockPublishReview).toHaveBeenCalled();
+    });
+
+    expect(mockWarning).toHaveBeenCalledWith(
+      expect.stringContaining("Missing chunk(s): 1, 2"),
+    );
+    const params = mockPublishReview.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.missingChunks).toEqual([1, 2]);
+    expect(params.expectedChunks).toBe(3);
+    expect(params.failOnMissingChunks).toBe(false);
+    expect(mockSetFailed).not.toHaveBeenCalled();
+  });
+
+  it("(f) missing chunks + flag true → warning, missingChunks threaded, setFailed after publish", async () => {
+    mockMissingChunksInputs(true, 3);
+    mockExistsSync.mockImplementation((p: string) =>
+      p === ".codex" || p === ".codex/pr.diff",
+    );
+    mockReaddirSync.mockReturnValue(["chunk-0-output.json"]);
+    mockReadFileSync.mockReturnValue(validReview);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockSetFailed).toHaveBeenCalled();
+    });
+
+    expect(mockWarning).toHaveBeenCalledWith(
+      expect.stringContaining("Missing chunk(s): 1, 2"),
+    );
+    const params = mockPublishReview.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.missingChunks).toEqual([1, 2]);
+    expect(params.failOnMissingChunks).toBe(true);
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      expect.stringContaining("Published a partial review. Missing chunk(s): 1, 2"),
+    );
+  });
+
+  it("(g) no missing chunks + flag true → normal publish, no failure", async () => {
+    mockMissingChunksInputs(true, 1);
+    mockExistsSync.mockImplementation((p: string) =>
+      p === ".codex" || p === ".codex/pr.diff",
+    );
+    mockReaddirSync.mockReturnValue(["chunk-0-output.json"]);
+    mockReadFileSync.mockReturnValue(validReview);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockPublishReview).toHaveBeenCalled();
+    });
+
+    const params = mockPublishReview.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.missingChunks).toEqual([]);
+    expect(mockSetFailed).not.toHaveBeenCalled();
+  });
+
+  it("(h) expectedChunks null + flag true → no missing-chunks check runs", async () => {
+    mockMissingChunksInputs(true, null);
+    mockExistsSync.mockImplementation((p: string) =>
+      p === ".codex" || p === ".codex/pr.diff",
+    );
+    mockReaddirSync.mockReturnValue(["chunk-0-output.json"]);
+    mockReadFileSync.mockReturnValue(validReview);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockPublishReview).toHaveBeenCalled();
+    });
+
+    const params = mockPublishReview.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.missingChunks).toEqual([]);
+    expect(params.expectedChunks).toBeNull();
+    expect(mockSetFailed).not.toHaveBeenCalled();
+    expect(mockWarning).not.toHaveBeenCalledWith(
+      expect.stringContaining("Missing chunk(s)"),
+    );
+  });
+
+  it("(i) expectedChunks 0 + flag true → early return fires first, no publish", async () => {
+    mockMissingChunksInputs(true, 0);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockSetOutput).toHaveBeenCalledWith("published", "false");
+    });
+
+    expect(mockPublishReview).not.toHaveBeenCalled();
+    expect(mockSetFailed).not.toHaveBeenCalled();
+  });
+
+  it("(j) publishReview throws + chunks missing + flag true → publish-error setFailed wins", async () => {
+    mockMissingChunksInputs(true, 3);
+    mockPublishReview.mockRejectedValue(new Error("API down"));
+    mockExistsSync.mockImplementation((p: string) =>
+      p === ".codex" || p === ".codex/pr.diff",
+    );
+    mockReaddirSync.mockReturnValue(["chunk-0-output.json"]);
+    mockReadFileSync.mockReturnValue(validReview);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockSetFailed).toHaveBeenCalled();
+    });
+
+    expect(mockSetFailed).toHaveBeenCalledTimes(1);
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to publish review: API down"),
+    );
+    expect(mockSetFailed).not.toHaveBeenCalledWith(
+      expect.stringContaining("Published a partial review"),
+    );
+  });
+
+  it("(k) invalid-but-present chunk surfaces in missingIndices, banner+setFailed when flag true", async () => {
+    mockMissingChunksInputs(true, 2);
+    mockExistsSync.mockImplementation((p: string) =>
+      p === ".codex" || p === ".codex/pr.diff",
+    );
+    mockReaddirSync.mockReturnValue(["chunk-0-output.json", "chunk-1-output.json"]);
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (typeof p === "string" && p.includes("chunk-1")) return "not json";
+      return validReview;
+    });
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockSetFailed).toHaveBeenCalled();
+    });
+
+    const params = mockPublishReview.mock.calls[0][0] as Record<string, unknown>;
+    expect(params.missingChunks).toEqual([1]);
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      expect.stringContaining("Published a partial review. Missing chunk(s): 1"),
     );
   });
 });
