@@ -1,0 +1,7 @@
+# Require code owner approval on every path.
+# Works in combination with the "Require review from Code Owners"
+# rule on the default branch. While this repo has a single maintainer
+# all changes must go through them; once co-maintainers are added,
+# narrow this to trust-boundary paths (workflows, action.yaml, dist/).
+
+* @milanhorvatovic
