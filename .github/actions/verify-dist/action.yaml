@@ -1,0 +1,20 @@
+name: Verify dist is up to date
+description: Runs the bundle build and asserts that the committed dist/ matches source.
+
+runs:
+  using: composite
+  steps:
+    - name: Build
+      shell: bash
+      run: npm run build
+
+    - name: Verify dist files exist
+      shell: bash
+      run: |
+        test -f dist/prepare/main.js || (echo "::error::dist/prepare/main.js not found" && exit 1)
+        test -f dist/publish/main.js || (echo "::error::dist/publish/main.js not found" && exit 1)
+
+    - name: Check dist is up-to-date
+      shell: bash
+      run: |
+        git diff --exit-code dist/ || (echo "::error::dist/ is out of date. Run 'npm run build' and commit the result." && exit 1)
