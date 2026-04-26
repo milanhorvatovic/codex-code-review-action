@@ -26,9 +26,12 @@ interface ReviewComment {
 
 export interface PublishParams {
   diffText: string;
+  expectedChunks: number | null;
+  failOnMissingChunks: boolean;
   githubToken: string;
   maxComments: number;
   minConfidence: number;
+  missingChunks: number[];
   model: string;
   reviewEffort: string;
   reviewOutput: ReviewOutput;
@@ -228,8 +231,11 @@ export function computeSignature(finding: NormalizedFinding): string {
 interface ReviewBodyParams {
   changes: string[];
   commentCount: number;
+  expectedChunks: number | null;
+  failOnMissingChunks: boolean;
   files: ReviewOutput["files"];
   isFirstReview: boolean;
+  missingChunks: number[];
   model: string;
   overallConfidenceScore: number;
   overallCorrectness: string;
@@ -254,8 +260,30 @@ export function buildReviewBody(params: ReviewBodyParams): string {
   return capReviewBody(full);
 }
 
+function buildIncompleteBanner(
+  missing: number[],
+  expected: number | null,
+  failOnMissingChunks: boolean,
+): string {
+  if (missing.length === 0 || expected === null) return "";
+  const level = failOnMissingChunks ? "CAUTION" : "WARNING";
+  return (
+    `> [!${level}]\n> **Incomplete review**\n\n` +
+    `${missing.length} of ${expected} chunks were missing (indices: ${missing.join(", ")}). ` +
+    `The findings below represent only the parts that were successfully reviewed. ` +
+    `Check the review job logs for the missing chunks.`
+  );
+}
+
 function buildFirstReviewBody(params: ReviewBodyParams): string {
   const sections = ["## Pull request overview"];
+
+  const banner = buildIncompleteBanner(
+    params.missingChunks,
+    params.expectedChunks,
+    params.failOnMissingChunks,
+  );
+  if (banner) sections.push(banner);
 
   if (params.summaryText) {
     const summary =
@@ -296,7 +324,14 @@ function buildFirstReviewBody(params: ReviewBodyParams): string {
 
 function buildSubsequentReviewBody(params: ReviewBodyParams): string {
   const reviewedLine = buildReviewedLine(params.commentCount, params.totalChangedFiles);
-  const sections = ["## Pull request overview", reviewedLine];
+  const sections = ["## Pull request overview"];
+  const banner = buildIncompleteBanner(
+    params.missingChunks,
+    params.expectedChunks,
+    params.failOnMissingChunks,
+  );
+  if (banner) sections.push(banner);
+  sections.push(reviewedLine);
   const verdict = buildVerdictSection(
     params.overallCorrectness,
     params.overallConfidenceScore,
@@ -523,8 +558,11 @@ export async function publishReview(params: PublishParams): Promise<boolean> {
   const bodyParams: ReviewBodyParams = {
     changes,
     commentCount: reviewComments.length,
+    expectedChunks: params.expectedChunks,
+    failOnMissingChunks: params.failOnMissingChunks,
     files,
     isFirstReview,
+    missingChunks: params.missingChunks,
     model,
     overallConfidenceScore,
     overallCorrectness,
@@ -539,7 +577,12 @@ export async function publishReview(params: PublishParams): Promise<boolean> {
 
   let reviewBody: string;
   if (forceRawFallback) {
-    reviewBody = buildFallbackBody(JSON.stringify(output, null, 2));
+    reviewBody = buildFallbackBody(
+      JSON.stringify(output, null, 2),
+      params.missingChunks,
+      params.expectedChunks,
+      params.failOnMissingChunks,
+    );
   } else {
     reviewBody = buildReviewBody(bodyParams);
   }
@@ -564,7 +607,12 @@ export async function publishReview(params: PublishParams): Promise<boolean> {
       try {
         bodyParams.commentCount = 0;
         const fallbackBody = forceRawFallback
-          ? buildFallbackBody(JSON.stringify(output, null, 2))
+          ? buildFallbackBody(
+              JSON.stringify(output, null, 2),
+              params.missingChunks,
+              params.expectedChunks,
+              params.failOnMissingChunks,
+            )
           : buildReviewBody(bodyParams);
 
         await octokit.rest.pulls.createReview({
@@ -588,15 +636,22 @@ export async function publishReview(params: PublishParams): Promise<boolean> {
   return false;
 }
 
-function buildFallbackBody(rawReview: string): string {
+function buildFallbackBody(
+  rawReview: string,
+  missingChunks: number[],
+  expectedChunks: number | null,
+  failOnMissingChunks: boolean,
+): string {
+  const banner = buildIncompleteBanner(missingChunks, expectedChunks, failOnMissingChunks);
+  const prefix = banner ? `${banner}\n\n` : "";
   const raw = rawReview.trim();
   if (!raw) {
-    return `${REVIEW_MARKER}\n\n## Pull request overview\n\nCodex returned an empty response.`;
+    return `${REVIEW_MARKER}\n\n## Pull request overview\n\n${prefix}Codex returned an empty response.`;
   }
   const limited =
     raw.length > MAX_FALLBACK_CHARS
       ? `${raw.slice(0, MAX_FALLBACK_CHARS)}\n...(truncated)`
       : raw;
   const fence = buildSafeFence(limited);
-  return `${REVIEW_MARKER}\n\n## Pull request overview\n\nCould not parse structured Codex output. Raw response:\n\n${fence}\n${limited}\n${fence}`;
+  return `${REVIEW_MARKER}\n\n## Pull request overview\n\n${prefix}Could not parse structured Codex output. Raw response:\n\n${fence}\n${limited}\n${fence}`;
 }
