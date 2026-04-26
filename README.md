@@ -126,7 +126,7 @@ Security-conscious — immutable. Immune to tag movement or account compromise. 
 
 ```yaml
 - id: prepare
-  uses: milanhorvatovic/codex-ai-code-review-action/prepare@<full-sha> # <tag>
+  uses: milanhorvatovic/codex-ai-code-review-action/prepare@<full-sha> # v2.0.0
 ```
 
 Version tags are mutable references controlled by the maintainer account, while SHA pinning removes that trust dependency.
@@ -134,8 +134,8 @@ Version tags are mutable references controlled by the maintainer account, while 
 The same pattern applies to the `review` and `publish` actions. Pin all three sub-actions to the **same** `<full-sha>` from a single release — `prepare`, `review`, and `publish` share artifact layout and schema, and mixing SHAs from different releases can break the workflow:
 
 ```yaml
-- uses: milanhorvatovic/codex-ai-code-review-action/review@<full-sha> # <tag>
-- uses: milanhorvatovic/codex-ai-code-review-action/publish@<full-sha> # <tag>
+- uses: milanhorvatovic/codex-ai-code-review-action/review@<full-sha> # v2.0.0
+- uses: milanhorvatovic/codex-ai-code-review-action/publish@<full-sha> # v2.0.0
 ```
 
 Inside this repository, `review/action.yaml` SHA-pins `openai/codex-action`. That transitive pin is only frozen for you when you pin this action itself to a full SHA — at the SHA you chose, `review/action.yaml` is fixed and the `openai/codex-action` reference cannot move. Pinning to `@v2` does not carry that guarantee: a future `v2` release can update the transitive SHA.
