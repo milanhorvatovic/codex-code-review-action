@@ -5,6 +5,22 @@
 
 AI-powered code review GitHub Action using [OpenAI Codex](https://github.com/openai/codex-action). Three-job design with security isolation: read-only prepare job (diff chunking, prompt assembly), read-only review job (parallel chunk reviews via `openai/codex-action`), and write-access publish job (chunk merging, inline PR comments, per-file summaries, verdict). Fully configurable prompts, models, confidence thresholds, and user allowlists.
 
+## Trust model
+
+PR diffs, title, body, and metadata leave your runner only via two destinations:
+
+- **GitHub** — for fetching the PR base commit, posting the review, and storing inter-job artifacts. This is expected behaviour for any GitHub Action.
+- **OpenAI** — via [`openai/codex-action`](https://github.com/openai/codex-action), which sends the prompt (including the diff) to OpenAI's API to generate the review.
+
+This repository does **not** operate any maintainer-owned backend, proxy, analytics service, or telemetry pipeline that receives diffs. There is no data destination beyond GitHub and OpenAI. The action does not phone home, and it does not collect usage data beyond what `openai/codex-action` itself does.
+
+Two trust questions are commonly conflated; they have different answers:
+
+- *"Does OpenAI see the diff?"* — **Yes.** The review job invokes `openai/codex-action`, which calls OpenAI's API with the prompt and the diff. This is the explicit purpose of the action.
+- *"Does the action maintainer see the diff?"* — **No.** No maintainer-operated destination exists. The action's source is auditable in this repository, and `openai/codex-action` is SHA-pinned in [`review/action.yaml`](review/action.yaml) (currently `@086169432f1d2ab2f4057540b1754d550f6a1189`, v1.4) so the referenced commit is immutable unless this repo bumps the SHA. (Runtime behaviour of OpenAI's API and model selection are outside this guarantee — see OpenAI's data-handling terms.)
+
+This action reduces risk when wired safely (read-only `prepare` and `review`, write access scoped to `publish`), but it does not make sending diffs to OpenAI risk-free. Evaluate OpenAI's data-handling terms separately for your organisation.
+
 ## Minimal quick start
 
 Create `.github/workflows/codex-review.yaml` in your repository:
@@ -85,6 +101,165 @@ jobs:
 
 > **Note:** This is a minimal functional example, not a hardened production workflow. Before using it for a team or private repository, review the [Trust model](#trust-model) and [Security guidance](#security-guidance) sections, and consider the [Production workflow example](#production-workflow-example).
 
+## Security guidance
+
+The subsections below describe how to wire this action into a workflow safely.
+
+### Do not use `pull_request_target`
+
+> Always use `pull_request` as the trigger for this action. `pull_request_target` runs the workflow YAML from the base branch, but it executes in the base-repository context with access to repository secrets and broader token permissions. When a workflow handles untrusted pull request content, that combination creates a straightforward secret-exfiltration path for a malicious fork PR.
+>
+> The risk is not that a fork PR can edit the workflow file and have that modified YAML execute under `pull_request_target` — it cannot. The risk is that the trusted base-branch workflow may still execute attacker-controlled code from the PR. For example, if the workflow checks out `${{ github.event.pull_request.head.sha }}` and then runs a repository script such as `./scripts/review.sh`, a fork PR can modify that script to exfiltrate `OPENAI_API_KEY`. With `pull_request_target`, that attacker-controlled script runs with secrets in scope. With `pull_request`, repository secrets are not exposed to the fork PR workflow, so the same script has nothing useful to steal.
+
+### Pinning the action
+
+GitHub recommends pinning third-party actions to a full commit SHA for the strongest supply-chain protection. See GitHub's [security hardening for GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#using-third-party-actions) for the canonical guidance.
+
+Pick one of the two forms below — they are alternatives, not steps to combine.
+
+Convenient — follows the `v2` tag. Trusts future releases from the maintainer account:
+
+```yaml
+- id: prepare
+  uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
+```
+
+Security-conscious — immutable. Immune to tag movement or account compromise. Replace `<tag>` with the release tag you want to pin (e.g., `v2.0.0`) and `<full-sha>` with its commit SHA; resolve the SHA with `gh api repos/milanhorvatovic/codex-ai-code-review-action/commits/<tag> --jq '.sha'`:
+
+```yaml
+- id: prepare
+  uses: milanhorvatovic/codex-ai-code-review-action/prepare@<full-sha> # v2.0.0
+```
+
+Version tags are mutable references controlled by the maintainer account, while SHA pinning removes that trust dependency.
+
+The same pattern applies to the `review` and `publish` actions. Pin all three sub-actions to the **same** `<full-sha>` from a single release — `prepare`, `review`, and `publish` share artifact layout and schema, and mixing SHAs from different releases can break the workflow:
+
+```yaml
+- uses: milanhorvatovic/codex-ai-code-review-action/review@<full-sha> # v2.0.0
+- uses: milanhorvatovic/codex-ai-code-review-action/publish@<full-sha> # v2.0.0
+```
+
+Inside this repository, `review/action.yaml` SHA-pins `openai/codex-action`. That transitive pin is only frozen for you when you pin this action itself to a full SHA — at the SHA you chose, `review/action.yaml` is fixed and the `openai/codex-action` reference cannot move. Pinning to `@v2` does not carry that guarantee: a future `v2` release can update the transitive SHA.
+
+## Production workflow example
+
+The Minimal quick start prioritises legibility. Use this section instead when adopting the action in a private repository, an enterprise org, or any setting where you want fewer assumptions about who can trigger reviews and tighter blast-radius controls. The example below preserves every guardrail from the Minimal quick start and adds runner pinning, an environment-scoped API key, a PR-author allowlist (gated on `pull_request.user.login`, not `github.actor`, so a maintainer re-run does not bypass it), immutable SHAs for this action's three sub-actions, per-job timeouts, and a same-repo trigger restriction.
+
+### One-time repo setup
+
+The example references a GitHub Environment named `codex-review` that scopes the OpenAI API key. Configure it once before adopting the workflow:
+
+1. Navigate to **Settings → Environments → New environment** and create one named `codex-review` (the workflow references this string verbatim — lowercase, hyphen).
+2. Inside that environment, add `OPENAI_API_KEY` as an **environment secret**, not a repository secret. If a repo-scoped copy already exists, remove it after confirming the environment-scoped copy works — that way a future workflow without `environment: codex-review` cannot read the key.
+3. Leave **Required reviewers** empty. The `review` job uses a matrix strategy, so a required reviewer would prompt once per chunk and block every PR. The environment exists only to scope the secret; PR-level gating is handled by the `allow-users` allowlist below.
+4. Leave **Deployment branches** at the default (all branches) unless you want to restrict reviews to PRs targeting specific branches.
+
+If step 1 is missed, the `review` job fails at schedule time with `The job was not started because it requires environment 'codex-review' which does not exist.` If `OPENAI_API_KEY` is not defined anywhere, `${{ secrets.OPENAI_API_KEY }}` resolves to an empty string and `openai/codex-action` fails authentication. If the secret exists only at repository scope, the workflow still runs because repository secrets remain visible to jobs that declare an `environment:` — the workflow appears healthy but the environment-scoping guardrail is not enforced until the repo-scoped copy is removed.
+
+### Workflow
+
+Create `.github/workflows/codex-review.yaml`:
+
+```yaml
+name: Codex code review (hardened)
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    # Skip drafts; refuse fork PRs so secrets and broader permissions never see fork-controlled code.
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04 # pinned image; bump as GitHub retires older runner versions
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    outputs:
+      skipped: ${{ steps.prepare.outputs.skipped }}
+      has-changes: ${{ steps.prepare.outputs.has-changes }}
+      chunk-count: ${{ steps.prepare.outputs.chunk-count }}
+      chunk-matrix: ${{ steps.prepare.outputs.chunk-matrix }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # all jobs check out the same SHA the workflow was triggered on
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: prepare
+        # SHA corresponds to tag v2.0.0 — update when adopting a new release.
+        uses: milanhorvatovic/codex-ai-code-review-action/prepare@af72a5bd7330432cee97137b04d04edebde80149 # v2.0.0
+        with:
+          allow-users: alice,bob,charlie # replace with real GitHub usernames; an empty value allows everyone
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
+        with:
+          name: codex-prepare
+          path: .codex/
+          include-hidden-files: true # .codex/ is dot-prefixed; without this the upload silently skips it
+          retention-days: 1 # ephemeral hand-off; default 90 days burns storage and lengthens diff retention
+
+  review:
+    needs: prepare
+    if: needs.prepare.outputs.skipped != 'true' && needs.prepare.outputs.has-changes == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    environment: codex-review # scopes OPENAI_API_KEY; do not add required reviewers (matrix would trigger one prompt per chunk)
+    permissions:
+      contents: read
+    timeout-minutes: 30 # applies per matrix leg, not total — bound on a single chunk's Codex run, not a budget across all chunks
+    strategy:
+      fail-fast: false # one failing chunk must not cancel the others; partial output is recoverable
+      matrix: ${{ fromJson(needs.prepare.outputs.chunk-matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: milanhorvatovic/codex-ai-code-review-action/review@af72a5bd7330432cee97137b04d04edebde80149 # v2.0.0
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          chunk: ${{ matrix.chunk }}
+
+  publish:
+    needs: [prepare, review]
+    # always() keeps publish running when a review matrix leg fails so partial output still posts.
+    if: always() && needs.prepare.outputs.skipped != 'true' && needs.prepare.outputs.has-changes == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: .codex/
+          merge-multiple: true
+
+      - uses: milanhorvatovic/codex-ai-code-review-action/publish@af72a5bd7330432cee97137b04d04edebde80149 # v2.0.0
+        with:
+          github-token: ${{ github.token }}
+          expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
+          retain-findings: false # explicit for auditors; matches the action default
+          # fail-on-missing-chunks: "true" # available in the next tagged release; uncomment after bumping the SHAs above
+```
+
+When you adopt a release that contains [issue #44](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/44), bump the three `codex-ai-code-review-action` SHAs to that release and uncomment `fail-on-missing-chunks: "true"` to make the publish step fail closed when any chunk is missing.
+
 ## Architecture
 
 The workflow is split into three jobs for security isolation:
@@ -146,7 +321,8 @@ The review action wraps [`openai/codex-action`](https://github.com/openai/codex-
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `github-token` | Yes | — | Token for posting reviews (`pull-requests: write`) |
-| `expected-chunks` | No | — | Expected chunk count. Warns on mismatch but still publishes partial review. |
+| `expected-chunks` | No | — | Expected chunk count. On mismatch, the publish step logs a warning, renders an "Incomplete review" banner in the published review body (v2.1.0+), and (when `fail-on-missing-chunks: true`, also v2.1.0+) fails the step after publishing. |
+| `fail-on-missing-chunks` | No | `false` | _Since v2.1.0._ After publishing, fail the publish step when any expected chunks are missing from the review artifacts. Partial reviews are always published with an "Incomplete review" banner regardless of this setting; the banner uses the `WARNING` admonition by default and `CAUTION` when this input is `true`. "Missing" here means the chunk artifact is absent **or** present but failed schema validation. No-op when `expected-chunks` is unset or `0`. Setting this input on `@v2.0.0` (or any earlier SHA) typically produces an `Unexpected input(s)` warning and the input is ignored rather than failing the workflow; pin the action to `@v2.1.0` or later before enabling it. |
 | `model` | No | — | Model name for review footer (overridden by the model field in review output) |
 | `review-effort` | No | — | Effort label for review footer |
 | `min-confidence` | No | `0` | Minimum confidence threshold (0.0-1.0) |

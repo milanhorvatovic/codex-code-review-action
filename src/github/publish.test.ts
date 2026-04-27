@@ -76,6 +76,12 @@ const diffWithAddedLine = [
   " line11",
 ].join("\n");
 
+const chunkDefaults = {
+  expectedChunks: null as number | null,
+  failOnMissingChunks: false,
+  missingChunks: [] as number[],
+};
+
 beforeEach(() => {
   mockCreateReview.mockReset();
   mockPaginate.mockReset();
@@ -87,6 +93,7 @@ describe("publishReview", () => {
     mockCreateReview.mockResolvedValueOnce({});
 
     const result = await publishReview({
+      ...chunkDefaults,
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -105,6 +112,7 @@ describe("publishReview", () => {
     mockCreateReview.mockResolvedValueOnce({});
 
     await publishReview({
+      ...chunkDefaults,
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -124,6 +132,7 @@ describe("publishReview", () => {
     mockCreateReview.mockResolvedValueOnce({});
 
     await publishReview({
+      ...chunkDefaults,
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -144,6 +153,7 @@ describe("publishReview", () => {
       .mockResolvedValueOnce({});
 
     const result = await publishReview({
+      ...chunkDefaults,
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -174,6 +184,7 @@ describe("publishReview", () => {
     }));
 
     await publishReview({
+      ...chunkDefaults,
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: 2,
@@ -193,6 +204,7 @@ describe("publishReview", () => {
     mockCreateReview.mockResolvedValueOnce({});
 
     await publishReview({
+      ...chunkDefaults,
       diffText: "",
       githubToken: "token",
       maxComments: Infinity,
@@ -218,6 +230,7 @@ describe("publishReview", () => {
       .mockResolvedValue([]);
 
     await publishReview({
+      ...chunkDefaults,
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -243,6 +256,7 @@ describe("publishReview", () => {
       ]);
 
     await publishReview({
+      ...chunkDefaults,
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -262,6 +276,7 @@ describe("publishReview", () => {
       .mockRejectedValueOnce(new Error("second fail"));
 
     const result = await publishReview({
+      ...chunkDefaults,
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,
@@ -276,10 +291,121 @@ describe("publishReview", () => {
     expect(result).toBe(false);
   });
 
+  it("(p-warn) fallback unparseable-response branch + missing chunks renders WARNING banner before raw block", async () => {
+    mockCreateReview.mockResolvedValueOnce({});
+
+    const invalidFinding = {
+      body: "x",
+      confidence_score: 0.9,
+      line: 0,
+      path: "",
+      priority: 1,
+      reasoning: "",
+      start_line: null,
+      suggestion: null,
+      title: "",
+    };
+
+    await publishReview({
+      ...chunkDefaults,
+      diffText: diffWithAddedLine,
+      expectedChunks: 3,
+      failOnMissingChunks: false,
+      githubToken: "token",
+      maxComments: Infinity,
+      minConfidence: 0,
+      missingChunks: [2],
+      model: "",
+      reviewEffort: "",
+      reviewOutput: { ...validReviewOutput, findings: [invalidFinding] },
+      runUrl: "https://example.com/run/1",
+    });
+
+    const call = mockCreateReview.mock.calls[0][0] as Record<string, unknown>;
+    const body = call.body as string;
+    expect(body).toContain("> [!WARNING]\n> **Incomplete review**");
+    const bannerIdx = body.indexOf("[!WARNING]");
+    const couldNotParseIdx = body.indexOf("Could not parse structured Codex output");
+    expect(bannerIdx).toBeGreaterThan(-1);
+    expect(couldNotParseIdx).toBeGreaterThan(bannerIdx);
+  });
+
+  it("(p-caution) fallback unparseable-response branch + missing chunks + flag true renders CAUTION banner", async () => {
+    mockCreateReview.mockResolvedValueOnce({});
+
+    const invalidFinding = {
+      body: "x",
+      confidence_score: 0.9,
+      line: 0,
+      path: "",
+      priority: 1,
+      reasoning: "",
+      start_line: null,
+      suggestion: null,
+      title: "",
+    };
+
+    await publishReview({
+      ...chunkDefaults,
+      diffText: diffWithAddedLine,
+      expectedChunks: 3,
+      failOnMissingChunks: true,
+      githubToken: "token",
+      maxComments: Infinity,
+      minConfidence: 0,
+      missingChunks: [2],
+      model: "",
+      reviewEffort: "",
+      reviewOutput: { ...validReviewOutput, findings: [invalidFinding] },
+      runUrl: "https://example.com/run/1",
+    });
+
+    const call = mockCreateReview.mock.calls[0][0] as Record<string, unknown>;
+    const body = call.body as string;
+    expect(body).toContain("> [!CAUTION]\n> **Incomplete review**");
+    expect(body).not.toContain("[!WARNING]");
+  });
+
+  it("(q) fallback path with no missing chunks renders no banner (regression guard)", async () => {
+    mockCreateReview.mockResolvedValueOnce({});
+
+    const invalidFinding = {
+      body: "x",
+      confidence_score: 0.9,
+      line: 0,
+      path: "",
+      priority: 1,
+      reasoning: "",
+      start_line: null,
+      suggestion: null,
+      title: "",
+    };
+
+    await publishReview({
+      ...chunkDefaults,
+      diffText: diffWithAddedLine,
+      githubToken: "token",
+      maxComments: Infinity,
+      minConfidence: 0,
+      model: "",
+      reviewEffort: "",
+      reviewOutput: { ...validReviewOutput, findings: [invalidFinding] },
+      runUrl: "https://example.com/run/1",
+    });
+
+    const call = mockCreateReview.mock.calls[0][0] as Record<string, unknown>;
+    const body = call.body as string;
+    expect(body).toContain("Could not parse structured Codex output");
+    expect(body).not.toContain("Incomplete review");
+    expect(body).not.toContain("[!WARNING]");
+    expect(body).not.toContain("[!CAUTION]");
+  });
+
   it("publishes with correct verdict", async () => {
     mockCreateReview.mockResolvedValueOnce({});
 
     await publishReview({
+      ...chunkDefaults,
       diffText: diffWithAddedLine,
       githubToken: "token",
       maxComments: Infinity,

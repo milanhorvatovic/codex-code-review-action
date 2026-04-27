@@ -49,6 +49,7 @@ export interface PrepareInputs {
 
 export interface PublishInputs {
   expectedChunks: number | null;
+  failOnMissingChunks: boolean;
   githubToken: string;
   maxComments: number;
   minConfidence: number;

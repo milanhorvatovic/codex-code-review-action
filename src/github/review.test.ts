@@ -273,8 +273,11 @@ describe("buildReviewBody", () => {
   const baseParams = {
     changes: ["Added feature X"],
     commentCount: 3,
+    expectedChunks: null as number | null,
+    failOnMissingChunks: false,
     files: [{ description: "Main entry", path: "src/main.ts" }] as ReviewOutput["files"],
     isFirstReview: true,
+    missingChunks: [] as number[],
     model: "test-model",
     overallConfidenceScore: 0.9,
     overallCorrectness: "patch is correct",
@@ -387,6 +390,99 @@ describe("buildReviewBody", () => {
   it("renders linked footer when runUrl is provided", () => {
     const body = buildReviewBody({ ...baseParams, runUrl: "https://example.com/run/1" });
     expect(body).toContain("[Codex Review](https://example.com/run/1)");
+  });
+
+  it("(l-warn) first review with missing chunks renders WARNING banner under overview", () => {
+    const body = buildReviewBody({
+      ...baseParams,
+      expectedChunks: 4,
+      failOnMissingChunks: false,
+      missingChunks: [2, 3],
+    });
+    expect(body).toContain("> [!WARNING]\n> **Incomplete review**");
+    expect(body).toContain("2 of 4 chunks were missing (indices: 2, 3)");
+    const overviewIdx = body.indexOf("## Pull request overview");
+    const bannerIdx = body.indexOf("[!WARNING]");
+    const summaryIdx = body.indexOf("This PR adds a new feature");
+    expect(overviewIdx).toBeGreaterThan(-1);
+    expect(bannerIdx).toBeGreaterThan(overviewIdx);
+    expect(summaryIdx).toBeGreaterThan(bannerIdx);
+  });
+
+  it("(l-caution) first review with missing chunks + flag true renders CAUTION banner", () => {
+    const body = buildReviewBody({
+      ...baseParams,
+      expectedChunks: 4,
+      failOnMissingChunks: true,
+      missingChunks: [2, 3],
+    });
+    expect(body).toContain("> [!CAUTION]\n> **Incomplete review**");
+    expect(body).not.toContain("[!WARNING]");
+  });
+
+  it("(m) first review with no missing chunks renders no banner", () => {
+    const body = buildReviewBody({
+      ...baseParams,
+      expectedChunks: 4,
+      missingChunks: [],
+    });
+    expect(body).not.toContain("Incomplete review");
+    expect(body).not.toContain("[!WARNING]");
+    expect(body).not.toContain("[!CAUTION]");
+  });
+
+  it("(n-warn) subsequent review banner sits between overview and reviewed-count line", () => {
+    const body = buildReviewBody({
+      ...baseParams,
+      expectedChunks: 2,
+      failOnMissingChunks: false,
+      isFirstReview: false,
+      missingChunks: [1],
+    });
+    const overviewIdx = body.indexOf("## Pull request overview");
+    const bannerIdx = body.indexOf("[!WARNING]");
+    const reviewedIdx = body.indexOf("Codex reviewed");
+    expect(overviewIdx).toBeGreaterThan(-1);
+    expect(bannerIdx).toBeGreaterThan(overviewIdx);
+    expect(reviewedIdx).toBeGreaterThan(bannerIdx);
+  });
+
+  it("(n-caution) subsequent review banner uses CAUTION when flag true", () => {
+    const body = buildReviewBody({
+      ...baseParams,
+      expectedChunks: 2,
+      failOnMissingChunks: true,
+      isFirstReview: false,
+      missingChunks: [1],
+    });
+    expect(body).toContain("> [!CAUTION]\n> **Incomplete review**");
+  });
+
+  it("(o) subsequent review with no missing chunks renders no banner (regression guard)", () => {
+    const body = buildReviewBody({
+      ...baseParams,
+      isFirstReview: false,
+      missingChunks: [],
+    });
+    expect(body).not.toContain("Incomplete review");
+    expect(body).not.toContain("[!WARNING]");
+    expect(body).not.toContain("[!CAUTION]");
+  });
+
+  it("(r) banner edge cases: expectedChunks null and missing.length 0 render no banner", () => {
+    const bodyNullExpected = buildReviewBody({
+      ...baseParams,
+      expectedChunks: null,
+      missingChunks: [1, 2],
+    });
+    expect(bodyNullExpected).not.toContain("Incomplete review");
+
+    const bodyEmptyMissing = buildReviewBody({
+      ...baseParams,
+      expectedChunks: 5,
+      missingChunks: [],
+    });
+    expect(bodyEmptyMissing).not.toContain("Incomplete review");
   });
 });
 
