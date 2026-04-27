@@ -354,6 +354,191 @@ To customize, create `.github/codex/review-reference.md` in your repository and 
 
 See [`defaults/review-reference.md`](defaults/review-reference.md) for the structure and examples.
 
+## Adopting in enterprise environments
+
+Some organisations have policies that prohibit running non-vendor public actions in sensitive repositories — even when those actions are SHA-pinned. The fork-and-wrap pattern documented below is a first-class adoption path for those environments, not a workaround.
+
+The pattern uses two distinct internal repositories:
+
+- **`<org>/codex-ai-code-review-action-fork`** — the forked action itself (this repository, mirrored into the org). Consumers never reference this directly.
+- **`<org>/codex-review-internal`** — an org-owned repository that hosts a reusable workflow wrapping the fork. Product repos call this reusable workflow via `workflow_call`.
+
+Naming the repos separately makes the layering visible: the fork carries the action source, while the wrapper repo carries the org's trigger, secret, and environment policy. Use whichever names match your org convention — the key is that they are two different repositories.
+
+### 1. Fork or mirror this repository
+
+Two acceptable options; pick based on how you want upstream updates to flow.
+
+- **True fork** (via GitHub's fork button or `gh repo fork`) preserves the upstream-tracking relationship. GitHub surfaces "N commits behind" and your fork can open PRs back to the public repo. Use when your security team wants upstream visibility baked in.
+- **Detached mirror** (`git clone --mirror <upstream> && git push --mirror <org-repo>`) creates a fully detached copy with no upstream link. Use when policy requires the internal repository to have no visible dependency on the public one. The cost is manual upstream tracking — periodic `git remote add upstream` plus `git fetch` on a maintainer clone.
+
+Document the choice inline in the fork's `README.md` so future maintainers know which model is in play.
+
+### 2. Pin all action references inside the fork
+
+Pin every `uses:` reference in the fork to an immutable SHA, including the transitive pin of `openai/codex-action` in [`review/action.yaml`](review/action.yaml) (currently `@086169432f1d2ab2f4057540b1754d550f6a1189 # v1.4`). Update the transitive pin on the org's own schedule, not OpenAI's — each bump is a trust-boundary change and should go through whatever internal review the org applies to other vendor dependencies.
+
+### 3. Create an org-owned reusable workflow
+
+Build a reusable workflow inside `<org>/codex-review-internal` that wraps the forked sub-actions. Product repos call this workflow; they do not reference the fork directly. The wrapper repo is where centralised trigger, secret, and environment policy lives.
+
+### 4. Restrict product repos to the internal version
+
+Configure org-level policy so that product repos can only invoke `<org>/codex-review-internal/.github/workflows/...` and not the public `<owner>/codex-ai-code-review-action/...` references. GitHub allows actions to be shared across repositories within the same organisation without Marketplace publication via **Settings → Actions → Allow actions from repositories within the organization**.
+
+### 5. Pull upstream updates deliberately
+
+Watch the upstream `CHANGELOG.md` and review each release internally before adopting. Treat each fork-side SHA bump (and each transitive `openai/codex-action` bump) the same way the org treats other vendor dependency upgrades.
+
+### Example consumer workflow
+
+The product repo's workflow looks like this:
+
+```yaml
+# .github/workflows/code-review.yaml in a product repo
+name: Code review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+jobs:
+  review:
+    uses: <org>/codex-review-internal/.github/workflows/codex-review.yaml@<full-sha>
+    permissions:
+      contents: read
+      pull-requests: write
+    secrets:
+      openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+```
+
+A reusable workflow can _narrow_ but not _widen_ the caller's `GITHUB_TOKEN` scope. The `permissions:` block above is mandatory: omitting it makes the wrapper inherit the consumer repo's default `GITHUB_TOKEN` scope, which in many orgs is `contents: read` only — the wrapper's publish job then fails with `Resource not accessible by integration` even though the wrapper itself declares `pull-requests: write` at job level.
+
+### Example wrapper workflow
+
+The wrapper inside `<org>/codex-review-internal/.github/workflows/codex-review.yaml` mirrors the [Production workflow example](#production-workflow-example) with three substitutions: the `uses:` references point at the fork, `OPENAI_API_KEY` flows in via `workflow_call.secrets`, and the trigger is `workflow_call` instead of `pull_request`.
+
+```yaml
+name: Codex review (org-wrapped)
+
+on:
+  workflow_call:
+    secrets:
+      openai-api-key:
+        required: true
+
+jobs:
+  prepare:
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      skipped: ${{ steps.prepare.outputs.skipped }}
+      has-changes: ${{ steps.prepare.outputs.has-changes }}
+      chunk-count: ${{ steps.prepare.outputs.chunk-count }}
+      chunk-matrix: ${{ steps.prepare.outputs.chunk-matrix }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - id: prepare
+        uses: <org>/codex-ai-code-review-action-fork/prepare@<full-sha> # v2.0.0
+        with:
+          allow-users: alice,bob,charlie
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
+        with:
+          name: codex-prepare
+          path: .codex/
+          include-hidden-files: true
+          retention-days: 1
+
+  review:
+    needs: prepare
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && needs.prepare.outputs.skipped != 'true'
+      && needs.prepare.outputs.has-changes == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: codex-review
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.chunk-matrix) }}
+    steps:
+      - uses: <org>/codex-ai-code-review-action-fork/review@<full-sha> # v2.0.0
+        with:
+          chunk: ${{ matrix.chunk }}
+          openai-api-key: ${{ secrets.openai-api-key }}
+
+  publish:
+    needs: [prepare, review]
+    if: >-
+      always()
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && needs.prepare.outputs.skipped != 'true'
+      && needs.prepare.outputs.has-changes == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: .codex/
+          merge-multiple: true
+      - uses: <org>/codex-ai-code-review-action-fork/publish@<full-sha> # v2.0.0
+        with:
+          expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
+          retain-findings: "false"
+          # fail-on-missing-chunks: "true"
+```
+
+#### Differences from the Production workflow example
+
+1. **Secret naming.** The `review` job reads `${{ secrets.openai-api-key }}` (lowercase, scoped to this `workflow_call`), not `${{ secrets.OPENAI_API_KEY }}`. `workflow_call` secret names are defined by the reusable workflow, not inherited from the caller's secret scope.
+2. **Trigger.** `on: workflow_call` instead of `on: pull_request`. The product repo's workflow owns the `pull_request` trigger; this wrapper only accepts `workflow_call` invocations.
+3. **No explicit `checkout` in `review` or `publish`.** The `review` composite action downloads the prepare artifact internally, and the `publish` job only needs the artifact contents, not the repo tree.
+4. **`environment: codex-review` resolves against the wrapper repo, not the consumer repo.** When a called workflow declares `environment:`, GitHub looks it up in the **repo that hosts the called workflow** (`<org>/codex-review-internal`).
+5. **`fail-on-missing-chunks` is left commented out.** Uncomment it after bumping the three sub-action SHAs to a release that includes this input.
+
+#### Environment setup deltas
+
+The general environment setup steps are documented in [One-time repo setup](#one-time-repo-setup). The following deltas apply to the wrapper-repo location:
+
+- Create the `codex-review` environment on **`<org>/codex-review-internal`**, not on each product repo. The same matrix-leg caveat from the linked subsection applies — leave **Required reviewers** empty, since a required reviewer would prompt once per chunk.
+- **Do not bind `OPENAI_API_KEY` as an environment secret on the wrapper repo.** The secret does not flow through the environment in this design — it is passed by the caller via `workflow_call.secrets.openai-api-key` and referenced inside the `review` job as `${{ secrets.openai-api-key }}`. Binding it to the environment would be dead weight and would expose the wrapper-repo's maintainers to an unnecessary credential surface.
+- The `environment:` line therefore exists only as a _policy hook_ — deployment protection rules, audit trail, tag-gated deployments. **Drop the `environment: codex-review` line entirely** if the org does not use GitHub's deployment-protection features; the wrapper keeps working because all real secret-scoping happens via `workflow_call.secrets`.
+- Failure mode if `environment:` is kept but the env is not created on the wrapper repo: every consumer call fails with `The job was not started because it requires environment 'codex-review' which does not exist.` The diagnostic reads as if the caller is at fault, but the environment must be created on the wrapper repo — adding it to the product repo will not fix the failure.
+
+#### Output and input names are load-bearing
+
+The wrapper threads four `prepare` outputs (`skipped`, `has-changes`, `chunk-count`, `chunk-matrix`) into the `review` and `publish` jobs, and passes `matrix.chunk` to the `review` action as a plain chunk index. These names are defined by [`prepare/action.yaml`](prepare/action.yaml) and [`review/action.yaml`](review/action.yaml). Renaming any of them in the wrapper silently breaks the workflow.
+
+#### Extending the wrapper's input surface
+
+The example above only exposes the OpenAI API key via `workflow_call.secrets`. If product repos need to tune `allow-users`, `review-reference-file`, `max-chunk-bytes`, `min-confidence`, or other per-repo knobs, add them to `on.workflow_call.inputs:` in the wrapper and thread them down into the matching `with:` blocks. Keep the input surface minimal — every input exposed becomes a policy decision the wrapper has to enforce.
+
+### Enterprise adoption checklist
+
+A security team can run through this list before approving adoption:
+
+- Forked or mirrored to an org-owned repo
+- All action references in the fork pinned to immutable SHAs
+- Transitive `openai/codex-action` pin reviewed and (if desired) re-pinned
+- Org-owned reusable workflow exists and wraps the fork
+- Product repos call only the reusable workflow
+- Centralised trigger, secret, and environment policy documented
+- Upstream-update process defined (who reviews, how often, what triggers re-review)
+- Rollback plan documented (how to revert to the previous SHA)
+
 ## Setup
 
 1. Add `OPENAI_API_KEY` as a repository secret (Settings > Secrets and variables > Actions)
