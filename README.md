@@ -409,7 +409,7 @@ jobs:
       contents: read
       pull-requests: write
     secrets:
-      openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+      openai-api-key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
 A reusable workflow can _narrow_ but not _widen_ the caller's `GITHUB_TOKEN` scope. The `permissions:` block above is mandatory: omitting it makes the wrapper inherit the consumer repo's default `GITHUB_TOKEN` scope, which in many orgs is `contents: read` only — the wrapper's publish job then fails with `Resource not accessible by integration` even though the wrapper itself declares `pull-requests: write` at job level.
@@ -424,7 +424,7 @@ name: Codex review (org-wrapped)
 on:
   workflow_call:
     secrets:
-      openai_api_key:
+      openai-api-key:
         required: true
 
 jobs:
@@ -475,7 +475,7 @@ jobs:
       - uses: <org>/codex-ai-code-review-action-fork/review@<full-sha> # v2.0.0
         with:
           chunk: ${{ matrix.chunk }}
-          openai-api-key: ${{ secrets.openai_api_key }}
+          openai-api-key: ${{ secrets.openai-api-key }}
 
   publish:
     needs: [prepare, review]
@@ -504,7 +504,7 @@ jobs:
 
 #### Differences from the Production workflow example
 
-1. **Secret naming.** The `review` job reads `${{ secrets.openai_api_key }}` (scoped to this `workflow_call`), not `${{ secrets.OPENAI_API_KEY }}`. `workflow_call` secret names are defined by the reusable workflow, not inherited from the caller's secret scope. The underscore form (rather than `openai-api-key`) is deliberate: hyphens are parsed as subtraction inside `${{ }}` expressions, so a hyphenated secret name only works via bracket notation (`secrets['openai-api-key']`).
+1. **Secret naming.** The `review` job reads `${{ secrets.openai-api-key }}` (lowercase, scoped to this `workflow_call`), not `${{ secrets.OPENAI_API_KEY }}`. `workflow_call` secret names are defined by the reusable workflow, not inherited from the caller's secret scope. Stored repo/org secrets are restricted to `[A-Za-z0-9_]`, but `workflow_call` pass-through names accept hyphens — the caller maps a stored `OPENAI_API_KEY` to the hyphenated `workflow_call` name in its `secrets:` block.
 2. **Trigger.** `on: workflow_call` instead of `on: pull_request`. The product repo's workflow owns the `pull_request` trigger; this wrapper only accepts `workflow_call` invocations.
 3. **No explicit `checkout` in `review` or `publish`.** The `review` composite action downloads the prepare artifact internally, and the `publish` job only needs the artifact contents, not the repo tree.
 4. **`environment: codex-review` resolves against the wrapper repo, not the consumer repo.** When a called workflow declares `environment:`, GitHub looks it up in the **repo that hosts the called workflow** (`<org>/codex-review-internal`).
@@ -515,7 +515,7 @@ jobs:
 The general environment setup steps are documented in [One-time repo setup](#one-time-repo-setup). The following deltas apply to the wrapper-repo location:
 
 - Create the `codex-review` environment on **`<org>/codex-review-internal`**, not on each product repo. The same matrix-leg caveat from the linked subsection applies — leave **Required reviewers** empty, since a required reviewer would prompt once per chunk.
-- **Do not bind `OPENAI_API_KEY` as an environment secret on the wrapper repo.** The secret does not flow through the environment in this design — it is passed by the caller via `workflow_call.secrets.openai_api_key` and referenced inside the `review` job as `${{ secrets.openai_api_key }}`. Binding it to the environment would be dead weight and would expose the wrapper-repo's maintainers to an unnecessary credential surface.
+- **Do not bind `OPENAI_API_KEY` as an environment secret on the wrapper repo.** The secret does not flow through the environment in this design — it is passed by the caller via `workflow_call.secrets.openai-api-key` and referenced inside the `review` job as `${{ secrets.openai-api-key }}`. Binding it to the environment would be dead weight and would expose the wrapper-repo's maintainers to an unnecessary credential surface.
 - The `environment:` line therefore exists only as a _policy hook_ — deployment protection rules, audit trail, tag-gated deployments. **Drop the `environment: codex-review` line entirely** if the org does not use GitHub's deployment-protection features; the wrapper keeps working because all real secret-scoping happens via `workflow_call.secrets`.
 - Failure mode if `environment:` is kept but the env is not created on the wrapper repo: every consumer call fails with `The job was not started because it requires environment 'codex-review' which does not exist.` The diagnostic reads as if the caller is at fault, but the environment must be created on the wrapper repo — adding it to the product repo will not fix the failure.
 
