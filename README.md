@@ -142,7 +142,7 @@ Inside this repository, `review/action.yaml` SHA-pins `openai/codex-action`. Tha
 
 ## Production workflow example
 
-The Minimal quick start prioritises legibility. Use this section instead when adopting the action in a private repository, an enterprise org, or any setting where you want fewer assumptions about who can trigger reviews and tighter blast-radius controls. The example below preserves every guardrail from the Minimal quick start and adds runner pinning, an environment-scoped API key, an actor allowlist, immutable SHAs for this action's three sub-actions, per-job timeouts, and a same-repo trigger restriction.
+The Minimal quick start prioritises legibility. Use this section instead when adopting the action in a private repository, an enterprise org, or any setting where you want fewer assumptions about who can trigger reviews and tighter blast-radius controls. The example below preserves every guardrail from the Minimal quick start and adds runner pinning, an environment-scoped API key, a PR-author allowlist (gated on `pull_request.user.login`, not `github.actor`, so a maintainer re-run does not bypass it), immutable SHAs for this action's three sub-actions, per-job timeouts, and a same-repo trigger restriction.
 
 ### One-time repo setup
 
@@ -153,7 +153,7 @@ The example references a GitHub Environment named `codex-review` that scopes the
 3. Leave **Required reviewers** empty. The `review` job uses a matrix strategy, so a required reviewer would prompt once per chunk and block every PR. The environment exists only to scope the secret; PR-level gating is handled by the `allow-users` allowlist below.
 4. Leave **Deployment branches** at the default (all branches) unless you want to restrict reviews to PRs targeting specific branches.
 
-If step 1 is missed, the `review` job fails at schedule time with `The job was not started because it requires environment 'codex-review' which does not exist.` If step 2 is missed and the secret only exists at repo scope, `${{ secrets.OPENAI_API_KEY }}` resolves to an empty string inside the `review` job and `openai/codex-action` fails authentication.
+If step 1 is missed, the `review` job fails at schedule time with `The job was not started because it requires environment 'codex-review' which does not exist.` If `OPENAI_API_KEY` is not defined anywhere, `${{ secrets.OPENAI_API_KEY }}` resolves to an empty string and `openai/codex-action` fails authentication. If the secret exists only at repository scope, the workflow still runs because repository secrets remain visible to jobs that declare an `environment:` — the workflow appears healthy but the environment-scoping guardrail is not enforced until the repo-scoped copy is removed.
 
 ### Workflow
 
