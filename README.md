@@ -140,6 +140,124 @@ The same pattern applies to the `review` and `publish` actions. Pin all three su
 
 Inside this repository, `review/action.yaml` SHA-pins `openai/codex-action`. That transitive pin is only frozen for you when you pin this action itself to a full SHA — at the SHA you chose, `review/action.yaml` is fixed and the `openai/codex-action` reference cannot move. Pinning to `@v2` does not carry that guarantee: a future `v2` release can update the transitive SHA.
 
+## Production workflow example
+
+The Minimal quick start prioritises legibility. Use this section instead when adopting the action in a private repository, an enterprise org, or any setting where you want fewer assumptions about who can trigger reviews and tighter blast-radius controls. The example below preserves every guardrail from the Minimal quick start and adds runner pinning, an environment-scoped API key, an actor allowlist, immutable SHAs for this action's three sub-actions, per-job timeouts, and a same-repo trigger restriction.
+
+### One-time repo setup
+
+The example references a GitHub Environment named `codex-review` that scopes the OpenAI API key. Configure it once before adopting the workflow:
+
+1. Navigate to **Settings → Environments → New environment** and create one named `codex-review` (the workflow references this string verbatim — lowercase, hyphen).
+2. Inside that environment, add `OPENAI_API_KEY` as an **environment secret**, not a repository secret. If a repo-scoped copy already exists, remove it after confirming the environment-scoped copy works — that way a future workflow without `environment: codex-review` cannot read the key.
+3. Leave **Required reviewers** empty. The `review` job uses a matrix strategy, so a required reviewer would prompt once per chunk and block every PR. The environment exists only to scope the secret; PR-level gating is handled by the `allow-users` allowlist below.
+4. Leave **Deployment branches** at the default (all branches) unless you want to restrict reviews to PRs targeting specific branches.
+
+If step 1 is missed, the `review` job fails at schedule time with `The job was not started because it requires environment 'codex-review' which does not exist.` If step 2 is missed and the secret only exists at repo scope, `${{ secrets.OPENAI_API_KEY }}` resolves to an empty string inside the `review` job and `openai/codex-action` fails authentication.
+
+### Workflow
+
+Create `.github/workflows/codex-review.yaml`:
+
+```yaml
+name: Codex code review (hardened)
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    # Skip drafts; refuse fork PRs so secrets and broader permissions never see fork-controlled code.
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04 # pinned image; bump as GitHub retires older runner versions
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    outputs:
+      skipped: ${{ steps.prepare.outputs.skipped }}
+      has-changes: ${{ steps.prepare.outputs.has-changes }}
+      chunk-count: ${{ steps.prepare.outputs.chunk-count }}
+      chunk-matrix: ${{ steps.prepare.outputs.chunk-matrix }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # all jobs check out the same SHA the workflow was triggered on
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: prepare
+        # SHA corresponds to tag v2.0.0 — update when adopting a new release.
+        uses: milanhorvatovic/codex-ai-code-review-action/prepare@af72a5bd7330432cee97137b04d04edebde80149 # v2.0.0
+        with:
+          allow-users: alice,bob,charlie # replace with real GitHub usernames; an empty value allows everyone
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
+        with:
+          name: codex-prepare
+          path: .codex/
+          include-hidden-files: true # .codex/ is dot-prefixed; without this the upload silently skips it
+          retention-days: 1 # ephemeral hand-off; default 90 days burns storage and lengthens diff retention
+
+  review:
+    needs: prepare
+    if: needs.prepare.outputs.skipped != 'true' && needs.prepare.outputs.has-changes == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    environment: codex-review # scopes OPENAI_API_KEY; do not add required reviewers (matrix would trigger one prompt per chunk)
+    permissions:
+      contents: read
+    timeout-minutes: 30 # applies per matrix leg, not total — bound on a single chunk's Codex run, not a budget across all chunks
+    strategy:
+      fail-fast: false # one failing chunk must not cancel the others; partial output is recoverable
+      matrix: ${{ fromJson(needs.prepare.outputs.chunk-matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: milanhorvatovic/codex-ai-code-review-action/review@af72a5bd7330432cee97137b04d04edebde80149 # v2.0.0
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          chunk: ${{ matrix.chunk }}
+
+  publish:
+    needs: [prepare, review]
+    # always() keeps publish running when a review matrix leg fails so partial output still posts.
+    if: always() && needs.prepare.outputs.skipped != 'true' && needs.prepare.outputs.has-changes == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: .codex/
+          merge-multiple: true
+
+      - uses: milanhorvatovic/codex-ai-code-review-action/publish@af72a5bd7330432cee97137b04d04edebde80149 # v2.0.0
+        with:
+          github-token: ${{ github.token }}
+          expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
+          retain-findings: false # explicit for auditors; matches the action default
+          # fail-on-missing-chunks: "true" # available in the next tagged release; uncomment after bumping the SHAs above
+```
+
+When you adopt a release that contains [issue #44](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/44), bump the three `codex-ai-code-review-action` SHAs to that release and uncomment `fail-on-missing-chunks: "true"` to make the publish step fail closed when any chunk is missing.
+
 ## Architecture
 
 The workflow is split into three jobs for security isolation:
