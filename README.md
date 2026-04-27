@@ -402,6 +402,10 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
 
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     uses: <org>/codex-review-internal/.github/workflows/codex-review.yaml@<full-sha>
@@ -412,11 +416,13 @@ jobs:
       openai-api-key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
+The `concurrency:` block is the consumer's responsibility, not the wrapper's: the consumer owns the `pull_request` trigger, so it owns the policy for cancelling in-flight runs when a new push lands. Omitting it lets repeated pushes overlap and race when uploading or downloading artifacts.
+
 A reusable workflow can _narrow_ but not _widen_ the caller's `GITHUB_TOKEN` scope. The `permissions:` block above is required whenever the consumer repo's (or its org's) default `GITHUB_TOKEN` permissions are read-only — i.e. anything narrower than `pull-requests: write`. Omitting it then makes the wrapper inherit the read-only default, and the publish job fails with `Resource not accessible by integration` even though the wrapper itself declares `pull-requests: write` at job level. Repos whose default `GITHUB_TOKEN` already includes `pull-requests: write` work without the explicit block, but spelling it out at the call site is recommended for defence-in-depth and to make the workflow portable across orgs with different defaults.
 
 ### Example wrapper workflow
 
-The wrapper inside `<org>/codex-review-internal/.github/workflows/codex-review.yaml` mirrors the [Production workflow example](#production-workflow-example) with three substitutions: the `uses:` references point at the fork, `OPENAI_API_KEY` flows in via `workflow_call.secrets`, and the trigger is `workflow_call` instead of `pull_request`.
+The wrapper inside `<org>/codex-review-internal/.github/workflows/codex-review.yaml` mirrors the [Production workflow example](#production-workflow-example) with four substitutions: the `uses:` references point at the fork, `OPENAI_API_KEY` flows in via `workflow_call.secrets`, the trigger is `workflow_call` instead of `pull_request`, and the `concurrency:` block moves to the consumer (since the consumer owns the trigger that races).
 
 ```yaml
 name: Codex review (org-wrapped)
@@ -506,9 +512,10 @@ jobs:
 
 1. **Secret naming.** The `review` job reads `${{ secrets.openai-api-key }}` (lowercase, scoped to this `workflow_call`), not `${{ secrets.OPENAI_API_KEY }}`. `workflow_call` secret names are defined by the reusable workflow, not inherited from the caller's secret scope. Stored repo/org secrets are restricted to `[A-Za-z0-9_]`, but `workflow_call` pass-through names accept hyphens — the caller maps a stored `OPENAI_API_KEY` to the hyphenated `workflow_call` name in its `secrets:` block.
 2. **Trigger.** `on: workflow_call` instead of `on: pull_request`. The product repo's workflow owns the `pull_request` trigger; this wrapper only accepts `workflow_call` invocations.
-3. **No explicit `checkout` in `review` or `publish`.** The `review` composite action downloads the prepare artifact internally, and the `publish` job only needs the artifact contents, not the repo tree.
-4. **`environment: codex-review` resolves against the wrapper repo, not the consumer repo.** When a called workflow declares `environment:`, GitHub looks it up in the **repo that hosts the called workflow** (`<org>/codex-review-internal`).
-5. **`fail-on-missing-chunks` is left commented out.** Uncomment it after bumping the three sub-action SHAs to a release that includes this input.
+3. **No `concurrency:` block in the wrapper.** Concurrency stays with the consumer because the consumer owns the trigger. Setting the same group on both layers is redundant and can cancel runs surprisingly.
+4. **No explicit `checkout` in `review` or `publish`.** The `review` composite action downloads the prepare artifact internally, and the `publish` job only needs the artifact contents, not the repo tree.
+5. **`environment: codex-review` resolves against the wrapper repo, not the consumer repo.** When a called workflow declares `environment:`, GitHub looks it up in the **repo that hosts the called workflow** (`<org>/codex-review-internal`).
+6. **`fail-on-missing-chunks` is left commented out.** Uncomment it after bumping the three sub-action SHAs to a release that includes this input.
 
 #### Environment setup deltas
 
