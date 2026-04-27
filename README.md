@@ -99,6 +99,8 @@ jobs:
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
 ```
 
+> **Note:** This is a minimal functional example, not a hardened production workflow. Before using it for a team or private repository, review the [Trust model](#trust-model) and [Security guidance](#security-guidance) sections, and consider the [Production workflow example](#production-workflow-example).
+
 ## Security guidance
 
 The subsections below describe how to wire this action into a workflow safely.
