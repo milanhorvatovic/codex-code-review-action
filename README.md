@@ -412,7 +412,7 @@ jobs:
       openai-api-key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-A reusable workflow can _narrow_ but not _widen_ the caller's `GITHUB_TOKEN` scope. The `permissions:` block above is mandatory: omitting it makes the wrapper inherit the consumer repo's default `GITHUB_TOKEN` scope, which in many orgs is `contents: read` only — the wrapper's publish job then fails with `Resource not accessible by integration` even though the wrapper itself declares `pull-requests: write` at job level.
+A reusable workflow can _narrow_ but not _widen_ the caller's `GITHUB_TOKEN` scope. The `permissions:` block above is required whenever the consumer repo's (or its org's) default `GITHUB_TOKEN` permissions are read-only — i.e. anything narrower than `pull-requests: write`. Omitting it then makes the wrapper inherit the read-only default, and the publish job fails with `Resource not accessible by integration` even though the wrapper itself declares `pull-requests: write` at job level. Repos whose default `GITHUB_TOKEN` already includes `pull-requests: write` work without the explicit block, but spelling it out at the call site is recommended for defence-in-depth and to make the workflow portable across orgs with different defaults.
 
 ### Example wrapper workflow
 
