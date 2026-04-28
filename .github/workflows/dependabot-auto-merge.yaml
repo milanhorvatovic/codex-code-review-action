@@ -125,16 +125,38 @@ jobs:
       #      is added to the repo.
       #   2. Label guard: skip auto-merge for any PR a maintainer has manually labeled
       #      `trust-boundary`, even if the dep is not yet on the exclude list.
-      # Removing either clause weakens the policy.
+      # The `if:` clauses below evaluate against the event payload captured at workflow start.
+      # That payload can be stale by the time this step runs (label applied during the run).
+      # The runtime checks inside `run:` close that TOCTOU race — see the comments there.
       - name: Auto-merge patch and minor updates
         if: >-
           steps.metadata.outputs.update-type != 'version-update:semver-major'
           && !contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')
           && !contains(github.event.pull_request.labels.*.name, 'trust-boundary')
-        run: gh pr merge --auto --squash "$PR_URL"
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           PR_URL: "${{ github.event.pull_request.html_url }}"
+        # Two runtime checks close the race the `if:` cannot:
+        #   - Pre-check: skip if the trust-boundary label is now present (applied between
+        #     workflow start and this step).
+        #   - Post-check: if the label is applied while we are enabling auto-merge, revert
+        #     the auto-merge state. The disable-auto-merge job below cannot help in that
+        #     window because it would fire before auto-merge was set, find nothing to
+        #     disable, and exit cleanly.
+        run: |
+          set -euo pipefail
+          has_trust_boundary() {
+            gh pr view "$PR_URL" --json labels --jq 'any(.labels[]; .name == "trust-boundary")'
+          }
+          if [ "$(has_trust_boundary)" = "true" ]; then
+            echo "trust-boundary label is now present (applied after workflow start); skipping auto-merge."
+            exit 0
+          fi
+          gh pr merge --auto --squash "$PR_URL"
+          if [ "$(has_trust_boundary)" = "true" ]; then
+            echo "trust-boundary label was applied while enabling auto-merge; reverting."
+            gh pr merge --disable-auto "$PR_URL"
+          fi
 
   # Reactive disable: if a maintainer applies the `trust-boundary` label after auto-merge has
   # already been enabled by the auto-merge job above, the label-guard `if:` on that step only
