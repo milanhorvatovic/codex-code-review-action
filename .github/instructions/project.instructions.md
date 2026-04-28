@@ -12,7 +12,7 @@ This is a TypeScript GitHub Action for AI-powered code review that delegates the
   - **Prepare** (read-only): diff fetch, chunking at file boundaries, prompt assembly, embedded reference materials
   - **Review** (read-only, matrix per chunk): composite wrapper around `openai/codex-action` that runs each chunk's prompt and uploads the structured output as an artifact
   - **Publish** (write-access): merges chunk outputs, posts the PR review with inline comments and per-file summaries, exposes `findings-count` and `verdict`
-- three JavaScript actions (`prepare`, `publish`) plus the composite `review` wrapper and the root composite `action.yaml`. Each JavaScript action is bundled independently by `esbuild` and targets `node24`.
+- two JavaScript actions (`prepare`, `publish`) plus two composite actions (`review/action.yaml` wrapping `openai/codex-action`, and the root `action.yaml` wiring all three). Only the JavaScript actions need bundling: each is bundled independently by `esbuild` and targets `node24`.
 - Default prompt and reference files embedded at build time via esbuild text loader.
 
 ## Module Structure
