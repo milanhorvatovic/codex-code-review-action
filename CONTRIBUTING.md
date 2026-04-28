@@ -102,7 +102,17 @@ Both clauses coexist intentionally. The exclude list is the declarative defense 
 
 1. Update `version` in `package.json`
 2. Update `CHANGELOG.md` with the release date and any new entries
+   - **2b. Trust-boundary callout.** If the release contains any PRs labeled `trust-boundary`, add a dedicated subsection to the CHANGELOG entry:
+
+     ```markdown
+     ### ⚠️ Trust boundary change
+
+     - <what changed> — <why> — <what callers should re-review>
+     ```
+
+     Applies to releases cut after this section lands; historical entries are not rewritten.
 3. Rebuild dist: `npm run build`
+   - **3b. Sync cross-doc SHA and version references.** When the canonical pin in `action.yaml`, `prepare/action.yaml`, `publish/action.yaml`, or `review/action.yaml` changes — or when any release bumps a third-party Action — update every other reference to that pin in the same release: `README.md` (including the "Adopting in enterprise environments" section), examples, and any other docs. The unified-pins rule (one SHA + tag per third-party Action across the entire repo) is enforced at release time. Verify with a quick repo-wide grep for the previous SHA before tagging. Automating this sweep with a CI check is tracked in [#68](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/68); until that lands, the sweep is manual.
 4. Commit and merge to `main`
 5. Tag and push the release: `git tag vx.y.z && git push origin vx.y.z`
 6. The release workflow automatically creates a GitHub Release, generates release notes, and updates the major version tag (e.g. `v1`)
