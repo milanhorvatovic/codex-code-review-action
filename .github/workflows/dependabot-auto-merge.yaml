@@ -106,8 +106,19 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+      # See CONTRIBUTING.md → Trust-boundary changes for the policy.
+      # Two guards coexist intentionally:
+      #   1. Exclude-by-name: skip auto-merge for any (possibly grouped) bump that includes
+      #      `openai/codex-action`. Extend this list when a new trust-boundary dependency
+      #      is added to the repo.
+      #   2. Label guard: skip auto-merge for any PR a maintainer has manually labeled
+      #      `trust-boundary`, even if the dep is not yet on the exclude list.
+      # Removing either clause weakens the policy.
       - name: Auto-merge patch and minor updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        if: >-
+          steps.metadata.outputs.update-type != 'version-update:semver-major'
+          && !contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')
+          && !contains(github.event.pull_request.labels.*.name, 'trust-boundary')
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
