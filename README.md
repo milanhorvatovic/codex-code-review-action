@@ -154,7 +154,7 @@ Diffs leave the repository boundary and reach OpenAI via [`openai/codex-action`]
 
 Apply every recommendation from [Public repos](#public-repos) — `pull_request`, SHA pinning, `allow-users`, minimum `permissions:` — and add three private-repo controls:
 
-- **Environment-scoped secret.** Bind `OPENAI_API_KEY` to a GitHub Environment so it is not available to unrelated workflows in the repo. The [Production workflow example](#production-workflow-example) demonstrates the `environment: codex-review` pattern.
+- **Environment-scoped secret.** Bind `OPENAI_API_KEY` to a GitHub Environment so jobs must declare `environment:` to receive it. This is a scoping guardrail, not airtight enforcement — any maintainer-authored workflow that names the same environment can still read the secret. Add branch-restriction deployment protection rules if your policy needs harder gating; required reviewers are not viable here because the matrix `review` job would prompt once per chunk. The [Production workflow example](#production-workflow-example) demonstrates the `environment: codex-review` pattern.
 - **Same-repo restriction.** Gate every job on `github.event.pull_request.head.repo.full_name == github.repository` so a fork PR cannot trigger a private-repo review.
 - **Default `retain-findings`.** Leave `retain-findings` at its default (`false`). Long-lived artifacts retain the diff and the model's findings; opt in only when an auditor or compliance regime requires it.
 
