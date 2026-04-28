@@ -25,6 +25,7 @@ npm install
 | `npm test` | Run tests once (CI mode) |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm test -- --coverage` | Run tests with coverage report |
+| `npm run verify:doc-pins` | Verify Markdown references match the canonical third-party Action pins in YAML (also runs in CI) |
 
 ## Committing dist/
 
