@@ -142,6 +142,24 @@ The same pattern applies to the `review` and `publish` actions. Pin all three su
 
 Inside this repository, `review/action.yaml` SHA-pins `openai/codex-action`. That transitive pin is only frozen for you when you pin this action itself to a full SHA — at the SHA you chose, `review/action.yaml` is fixed and the `openai/codex-action` reference cannot move. Pinning to `@v2` does not carry that guarantee: a future `v2` release can update the transitive SHA.
 
+### Public repos
+
+The diff is already public, so concerns shift from data confidentiality to workflow abuse and token scope. Use `pull_request` as the workflow trigger (see [Do not use `pull_request_target`](#do-not-use-pull_request_target) above), [pin all three sub-actions](#pinning-the-action) to immutable SHAs, and set `allow-users` on the `prepare` step to a comma-separated list of GitHub usernames who can trigger reviews (see [Prepare action inputs](#prepare-action-inputs)). Scope each job's `permissions:` to the minimum it needs — the [Production workflow example](#production-workflow-example) shows the per-job split (read-only `prepare` and `review`, `pull-requests: write` only on `publish`).
+
+Fork PRs cannot run the `review` job under `pull_request`. GitHub does not pass repository or environment secrets to workflows triggered from forks, so `OPENAI_API_KEY` is unavailable and the job fails on `openai/codex-action` auth. This is the security trade-off — an attacker-controlled diff or script in a fork PR cannot exfiltrate the key — but it also means fork PRs need to be skipped rather than reviewed. Add the same-repo gate (`github.event.pull_request.head.repo.full_name == github.repository`) from the [Production workflow example](#production-workflow-example) so fork PRs do not trigger failing workflow runs. Reviewing fork PRs at all requires a maintainer-triggered pattern (for example, `workflow_dispatch` that fetches the diff via the GitHub API) running on trusted base-repo code; this repository does not ship such a workflow.
+
+### Private repos
+
+Diffs leave the repository boundary and reach OpenAI via [`openai/codex-action`](https://github.com/openai/codex-action). Adopt this action only if that data transfer is acceptable under your organisation's policy.
+
+Apply every recommendation from [Public repos](#public-repos) — `pull_request`, SHA pinning, `allow-users`, minimum `permissions:` — and add three private-repo controls:
+
+- **Environment-scoped secret.** Bind `OPENAI_API_KEY` to a GitHub Environment so jobs must declare `environment:` to receive it. This is a scoping guardrail, not airtight enforcement — any maintainer-authored workflow that names the same environment can still read the secret. Add branch-restriction deployment protection rules if your policy needs harder gating; required reviewers are not viable here because the matrix `review` job would prompt once per chunk. The [Production workflow example](#production-workflow-example) demonstrates the `environment: codex-review` pattern.
+- **Same-repo restriction.** Gate every job on `github.event.pull_request.head.repo.full_name == github.repository` so a fork PR cannot trigger a private-repo review.
+- **Default `retain-findings`.** Leave `retain-findings` at its default (`false`). Long-lived artifacts retain the diff and the model's findings; opt in only when an auditor or compliance regime requires it.
+
+For organisations whose policy forbids running non-vendor public actions even when SHA-pinned, the [fork/internal-mirror adoption path](#adopting-in-enterprise-environments) describes how to host a wrapped fork inside the org instead.
+
 ## Production workflow example
 
 The Minimal quick start prioritises legibility. Use this section instead when adopting the action in a private repository, an enterprise org, or any setting where you want fewer assumptions about who can trigger reviews and tighter blast-radius controls. The example below preserves every guardrail from the Minimal quick start and adds runner pinning, an environment-scoped API key, a PR-author allowlist (gated on `pull_request.user.login`, not `github.actor`, so a maintainer re-run does not bypass it), immutable SHAs for this action's three sub-actions, per-job timeouts, and a same-repo trigger restriction.
