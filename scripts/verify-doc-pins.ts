@@ -84,6 +84,7 @@ export function buildCanonicalMap(yamls: YamlSource[]): {
       if (usesIdx === -1) continue;
       const tail = raw.slice(usesIdx + "uses:".length).trimStart();
       if (tail.startsWith("./") || tail.startsWith(".\\")) continue;
+      PIN_PATTERN.lastIndex = 0;
       const match = PIN_PATTERN.exec(raw);
       PIN_PATTERN.lastIndex = 0;
       if (!match) continue;
@@ -125,6 +126,7 @@ export function findDocDrift(canonical: CanonicalMap, mds: MdSource[]): DocMisma
   const drifts: DocMismatch[] = [];
   for (const { path, content } of mds) {
     const lines = content.split("\n");
+    PIN_PATTERN.lastIndex = 0;
     for (const match of content.matchAll(PIN_PATTERN)) {
       const groups = readGroups(match);
       if (!groups?.owner || !groups.repo || !groups.sha) continue;

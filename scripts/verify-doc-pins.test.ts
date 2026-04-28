@@ -40,6 +40,32 @@ describe("PIN_PATTERN", () => {
       tag: "v4.35.2",
     });
   });
+
+  it("buildCanonicalMap is robust to a poisoned PIN_PATTERN.lastIndex", () => {
+    PIN_PATTERN.lastIndex = 9999;
+    const { map } = buildCanonicalMap([yamlFixture]);
+    PIN_PATTERN.lastIndex = 0;
+    expect(map.get("actions/checkout")?.sha).toBe(
+      "de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+    );
+  });
+
+  it("findDocDrift is robust to a poisoned PIN_PATTERN.lastIndex", () => {
+    const canonical = buildCanonicalMap([yamlFixture]).map;
+    PIN_PATTERN.lastIndex = 9999;
+    const drifts = findDocDrift(canonical, [
+      {
+        path: "README.md",
+        content:
+          "stale: actions/checkout@1111111111111111111111111111111111111111 # v6.0.2\n",
+      },
+    ]);
+    PIN_PATTERN.lastIndex = 0;
+    expect(drifts).toHaveLength(1);
+    expect(drifts[0]?.foundSha).toBe(
+      "1111111111111111111111111111111111111111",
+    );
+  });
 });
 
 describe("buildCanonicalMap", () => {
