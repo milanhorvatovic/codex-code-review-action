@@ -59,7 +59,7 @@ New code should include tests. Aim to maintain or improve coverage.
 
 ### Conventions
 
-- Commits: `Co-Authored-By` trailers are not added. Commit message bodies are not wrapped at a fixed column.
+- Commits: `Co-authored-by` trailers are not added. Commit message bodies are not wrapped at a fixed column.
 - Branches: Use feature branches off `main` and a PR per change. `main` is protected; do not push directly. Branch names are topic-only with a type prefix (e.g. `docs/<topic>`, `feat/<topic>`, `fix/<topic>`); reference issues in the PR title or body, not the branch name.
 - File extensions: YAML files in this repo use `.yaml`, not `.yml`. Match this convention when adding new YAML.
 - JSON key ordering: Keep keys alphabetically sorted unless an existing file establishes a different order.
@@ -91,12 +91,13 @@ This applies to every PR regardless of author — maintainer, outside contributo
 
 ### Dependabot enforcement
 
-The auto-merge workflow at [`.github/workflows/dependabot-auto-merge.yaml`](.github/workflows/dependabot-auto-merge.yaml) carries two guards in the auto-merge step's `if:` expression:
+The auto-merge workflow at [`.github/workflows/dependabot-auto-merge.yaml`](.github/workflows/dependabot-auto-merge.yaml) carries three layers of enforcement:
 
-- **Exclude-by-name guard:** `!contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')` — auto-merge skips any (possibly grouped) Dependabot PR that includes `openai/codex-action`. Extend this clause when a new trust-boundary dependency is added to the repo.
-- **Label guard:** `!contains(github.event.pull_request.labels.*.name, 'trust-boundary')` — auto-merge skips any PR a maintainer manually flagged, even if the dep is not yet on the exclude list.
+- **Exclude-by-name guard** in the auto-merge step's `if:` expression: `!contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')` — auto-merge is never enabled for any (possibly grouped) Dependabot PR that includes `openai/codex-action`. Extend this clause when a new trust-boundary dependency is added to the repo.
+- **Label guard** in the same `if:` expression: `!contains(github.event.pull_request.labels.*.name, 'trust-boundary')` — auto-merge is never enabled when the `trust-boundary` label is present at open or synchronize time.
+- **Reactive disable job** triggered on the `labeled` pull_request event: if a maintainer applies the `trust-boundary` label *after* auto-merge has already been enabled, the `disable-auto-merge-on-trust-boundary` job runs `gh pr merge --disable-auto` to revoke it. The `if:` guards above only prevent enabling auto-merge — they cannot retract an enable that already happened, which is why this third layer is required.
 
-Both clauses coexist intentionally. The exclude list is the declarative defense (fail-closed for known dependencies); the label is the manual override that catches a new dep before the exclude list has been updated. Removing either clause weakens the policy.
+All three coexist intentionally. The exclude list is the declarative defense (fail-closed for known dependencies); the label `if:` guard catches PRs labeled before the auto-merge step runs; the reactive disable job catches PRs labeled after auto-merge was already enabled. Removing any layer weakens the policy.
 
 ## Release process
 

@@ -2,6 +2,11 @@ name: Dependabot Auto-Merge
 
 on:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
 
 permissions:
   contents: read
@@ -9,7 +14,10 @@ permissions:
 
 jobs:
   rebuild-dist:
+    # Skip on label events — head SHA is unchanged, so dist/ cannot have drifted since the last
+    # opened/synchronize run. Avoids a wasted no-op rebuild when a maintainer applies a label.
     if: >-
+      github.event.action != 'labeled' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -91,7 +99,11 @@ jobs:
           git push "https://x-access-token:${REBUILD_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}"
 
   auto-merge:
+    # Skip on label events — auto-merge is set once at open/synchronize time. If a maintainer later
+    # applies the trust-boundary label, the disable-auto-merge-on-trust-boundary job below handles
+    # revoking the previously-enabled auto-merge.
     if: >-
+      github.event.action != 'labeled' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
     needs: rebuild-dist
@@ -123,3 +135,25 @@ jobs:
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           PR_URL: "${{ github.event.pull_request.html_url }}"
+
+  # Reactive disable: if a maintainer applies the `trust-boundary` label after auto-merge has
+  # already been enabled by the auto-merge job above, the label-guard `if:` on that step only
+  # prevents re-enabling — it does not revoke a previously-enabled auto-merge. This job runs on
+  # the `labeled` pull_request event and explicitly disables auto-merge so the PR stays open
+  # for manual maintainer review and merging.
+  disable-auto-merge-on-trust-boundary:
+    if: >-
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'trust-boundary' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Disable auto-merge
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          PR_URL: "${{ github.event.pull_request.html_url }}"
+        run: gh pr merge --disable-auto "$PR_URL"
