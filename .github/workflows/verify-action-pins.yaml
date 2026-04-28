@@ -18,6 +18,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ratchet_image='ghcr.io/sethvargo/ratchet@sha256:527e78e6d29a9ac306e843cf766afe0604a0b35633f16913d85dd522218e8ca1' # v0.11.4
           mapfile -t files < <(
             git ls-files \
               'action.yaml' \
@@ -28,5 +29,5 @@ jobs:
             --env GITHUB_ACTIONS \
             --volume "${GITHUB_WORKSPACE}:/workspace" \
             --workdir /workspace \
-            ghcr.io/sethvargo/ratchet@sha256:527e78e6d29a9ac306e843cf766afe0604a0b35633f16913d85dd522218e8ca1 \
+            "${ratchet_image}" \
             lint -format=actions "${files[@]}"
