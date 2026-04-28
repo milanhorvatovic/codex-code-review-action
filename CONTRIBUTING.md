@@ -57,6 +57,15 @@ New code should include tests. Aim to maintain or improve coverage.
 4. Rebuild dist: `npm run build`
 5. Open a PR targeting `main`
 
+### Conventions
+
+- Commits: `Co-Authored-By` trailers are not added. Commit message bodies are not wrapped at a fixed column.
+- Branches: Use feature branches off `main` and a PR per change. `main` is protected; do not push directly. Branch names are topic-only with a type prefix (e.g. `docs/<topic>`, `feat/<topic>`, `fix/<topic>`); reference issues in the PR title or body, not the branch name.
+- File extensions: YAML files in this repo use `.yaml`, not `.yml`. Match this convention when adding new YAML.
+- JSON key ordering: Keep keys alphabetically sorted unless an existing file establishes a different order.
+- Markdown: No artificial line wrapping at a fixed column. Let each paragraph flow naturally.
+- Merge strategy: Squash-merge via `gh pr merge --squash` (matching the Dependabot auto-merge workflow at `.github/workflows/dependabot-auto-merge.yaml`).
+
 ## Release process
 
 1. Update `version` in `package.json`
