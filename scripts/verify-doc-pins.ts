@@ -173,28 +173,42 @@ export function formatDrift(drift: Drift): string {
   return `${drift.file}:${drift.line}: ${drift.key} — found ${found}, expected ${expected} (canonical: ${drift.canonicalLocation.path}:${drift.canonicalLocation.line})`;
 }
 
-function gitLsFiles(...patterns: string[]): string[] {
+function defaultGitLsFiles(...patterns: string[]): string[] {
   const stdout = execFileSync("git", ["ls-files", "--", ...patterns], { encoding: "utf-8" });
   return stdout.split("\n").filter((s) => s.length > 0);
 }
 
-function readSources(paths: string[]): Array<{ path: string; content: string }> {
-  return paths.map((p) => ({ path: p, content: readFileSync(p, "utf-8") }));
+function defaultReadSource(path: string): string {
+  return readFileSync(path, "utf-8");
 }
 
-export function runCli(): number {
-  const yamls = readSources(gitLsFiles("*.yaml"));
-  const mds = readSources(gitLsFiles("*.md"));
+function defaultStderrWrite(chunk: string): void {
+  process.stderr.write(chunk);
+}
+
+export type RunCliDeps = {
+  gitLsFiles?: (...patterns: string[]) => string[];
+  readSource?: (path: string) => string;
+  stderrWrite?: (chunk: string) => void;
+};
+
+export function runCli(deps: RunCliDeps = {}): number {
+  const lsFiles = deps.gitLsFiles ?? defaultGitLsFiles;
+  const readSource = deps.readSource ?? defaultReadSource;
+  const writeErr = deps.stderrWrite ?? defaultStderrWrite;
+
+  const yamls = lsFiles("*.yaml").map((p) => ({ path: p, content: readSource(p) }));
+  const mds = lsFiles("*.md").map((p) => ({ path: p, content: readSource(p) }));
 
   const { map, disagreements } = buildCanonicalMap(yamls);
   if (disagreements.length > 0) {
-    for (const d of disagreements) process.stderr.write(`${formatDrift(d)}\n`);
+    for (const d of disagreements) writeErr(`${formatDrift(d)}\n`);
     return 1;
   }
 
   const drifts = findDocDrift(map, mds);
   if (drifts.length > 0) {
-    for (const d of drifts) process.stderr.write(`${formatDrift(d)}\n`);
+    for (const d of drifts) writeErr(`${formatDrift(d)}\n`);
     return 1;
   }
 

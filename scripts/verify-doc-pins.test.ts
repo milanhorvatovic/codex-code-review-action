@@ -5,6 +5,7 @@ import {
   findDocDrift,
   formatDrift,
   PIN_PATTERN,
+  runCli,
   SELF_REPO,
   type DocMismatch,
 } from "./verify-doc-pins.js";
@@ -211,5 +212,104 @@ describe("formatDrift", () => {
     expect(formatted).toContain("canonical-pin disagreement for actions/checkout");
     expect(formatted).toContain("a.yaml:1: @aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v1.0.0");
     expect(formatted).toContain("b.yaml:2: @bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # v2.0.0");
+  });
+});
+
+describe("runCli", () => {
+  type Stub = {
+    files: Record<string, string>;
+    calls: string[][];
+    stderr: string[];
+  };
+
+  function makeDeps(stub: Stub) {
+    return {
+      gitLsFiles: (...patterns: string[]) => {
+        stub.calls.push(patterns);
+        const ext = patterns[0]?.replace(/^\*\./, "") ?? "";
+        return Object.keys(stub.files).filter((p) => p.endsWith(`.${ext}`));
+      },
+      readSource: (path: string) => {
+        const content = stub.files[path];
+        if (content === undefined) throw new Error(`no fixture for ${path}`);
+        return content;
+      },
+      stderrWrite: (chunk: string) => {
+        stub.stderr.push(chunk);
+      },
+    };
+  }
+
+  const cleanYaml =
+    "    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2\n";
+
+  it("queries git ls-files for *.yaml and *.md in that order", () => {
+    const stub: Stub = { files: {}, calls: [], stderr: [] };
+    runCli(makeDeps(stub));
+    expect(stub.calls).toEqual([["*.yaml"], ["*.md"]]);
+  });
+
+  it("returns 0 when YAML and Markdown are consistent", () => {
+    const stub: Stub = {
+      files: {
+        "review/action.yaml": cleanYaml,
+        "README.md":
+          "Use `actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`.\n",
+      },
+      calls: [],
+      stderr: [],
+    };
+    expect(runCli(makeDeps(stub))).toBe(0);
+    expect(stub.stderr).toEqual([]);
+  });
+
+  it("returns 1 and prints drift when Markdown disagrees with YAML", () => {
+    const stub: Stub = {
+      files: {
+        "review/action.yaml": cleanYaml,
+        "README.md":
+          "actions/checkout@1111111111111111111111111111111111111111 # v6.0.2\n",
+      },
+      calls: [],
+      stderr: [],
+    };
+    expect(runCli(makeDeps(stub))).toBe(1);
+    expect(stub.stderr.join("")).toContain("README.md:1: actions/checkout");
+  });
+
+  it("returns 1 and prints disagreement when two YAML files conflict", () => {
+    const stub: Stub = {
+      files: {
+        "a.yaml":
+          "    - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v1.0.0\n",
+        "b.yaml":
+          "    - uses: actions/checkout@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # v2.0.0\n",
+      },
+      calls: [],
+      stderr: [],
+    };
+    expect(runCli(makeDeps(stub))).toBe(1);
+    expect(stub.stderr.join("")).toContain(
+      "canonical-pin disagreement for actions/checkout",
+    );
+  });
+
+  it("reports YAML disagreement and skips doc check when both fail", () => {
+    const stub: Stub = {
+      files: {
+        "a.yaml":
+          "    - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v1.0.0\n",
+        "b.yaml":
+          "    - uses: actions/checkout@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # v2.0.0\n",
+        "README.md":
+          "actions/checkout@cccccccccccccccccccccccccccccccccccccccc # v3.0.0\n",
+      },
+      calls: [],
+      stderr: [],
+    };
+    expect(runCli(makeDeps(stub))).toBe(1);
+    const errOutput = stub.stderr.join("");
+    expect(errOutput).toContain("canonical-pin disagreement for actions/checkout");
+    expect(errOutput).not.toContain("README.md:");
   });
 });
