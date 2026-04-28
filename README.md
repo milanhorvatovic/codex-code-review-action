@@ -9,7 +9,7 @@ AI-powered code review GitHub Action using [OpenAI Codex](https://github.com/ope
 
 PR diffs, title, body, and metadata leave your runner only via two destinations:
 
-- **GitHub** — for fetching the PR base commit, posting the review, and storing inter-job artifacts. This is expected behaviour for any GitHub Action.
+- **GitHub** — for fetching the PR base commit, posting the review, and storing inter-job artifacts. This is expected behavior for any GitHub Action.
 - **OpenAI** — via [`openai/codex-action`](https://github.com/openai/codex-action), which sends the prompt (including the diff) to OpenAI's API to generate the review.
 
 This repository does **not** operate any maintainer-owned backend, proxy, analytics service, or telemetry pipeline that receives diffs. There is no data destination beyond GitHub and OpenAI. The action does not phone home, and it does not collect usage data beyond what `openai/codex-action` itself does.
@@ -17,9 +17,9 @@ This repository does **not** operate any maintainer-owned backend, proxy, analyt
 Two trust questions are commonly conflated; they have different answers:
 
 - *"Does OpenAI see the diff?"* — **Yes.** The review job invokes `openai/codex-action`, which calls OpenAI's API with the prompt and the diff. This is the explicit purpose of the action.
-- *"Does the action maintainer see the diff?"* — **No.** No maintainer-operated destination exists. The action's source is auditable in this repository, and `openai/codex-action` is SHA-pinned in [`review/action.yaml`](review/action.yaml) (currently `@086169432f1d2ab2f4057540b1754d550f6a1189`, v1.4) so the referenced commit is immutable unless this repo bumps the SHA. (Runtime behaviour of OpenAI's API and model selection are outside this guarantee — see OpenAI's data-handling terms.)
+- *"Does the action maintainer see the diff?"* — **No.** No maintainer-operated destination exists. The action's source is auditable in this repository, and `openai/codex-action` is SHA-pinned in [`review/action.yaml`](review/action.yaml) (currently `@086169432f1d2ab2f4057540b1754d550f6a1189`, v1.4) so the referenced commit is immutable unless this repo bumps the SHA. (Runtime behavior of OpenAI's API and model selection are outside this guarantee — see OpenAI's data-handling terms.)
 
-This action reduces risk when wired safely (read-only `prepare` and `review`, write access scoped to `publish`), but it does not make sending diffs to OpenAI risk-free. Evaluate OpenAI's data-handling terms separately for your organisation.
+This action reduces risk when wired safely (read-only `prepare` and `review`, write access scoped to `publish`), but it does not make sending diffs to OpenAI risk-free. Evaluate OpenAI's data-handling terms separately for your organization.
 
 ## Minimal quick start
 
@@ -150,7 +150,7 @@ Fork PRs cannot run the `review` job under `pull_request`. GitHub does not pass 
 
 ### Private repos
 
-Diffs leave the repository boundary and reach OpenAI via [`openai/codex-action`](https://github.com/openai/codex-action). Adopt this action only if that data transfer is acceptable under your organisation's policy.
+Diffs leave the repository boundary and reach OpenAI via [`openai/codex-action`](https://github.com/openai/codex-action). Adopt this action only if that data transfer is acceptable under your organization's policy.
 
 Apply every recommendation from [Public repos](#public-repos) — `pull_request`, SHA pinning, `allow-users`, minimum `permissions:` — and add three private-repo controls:
 
@@ -158,7 +158,7 @@ Apply every recommendation from [Public repos](#public-repos) — `pull_request`
 - **Same-repo restriction.** Gate every job on `github.event.pull_request.head.repo.full_name == github.repository` so a fork PR cannot trigger a private-repo review.
 - **Default `retain-findings`.** Leave `retain-findings` at its default (`false`). Long-lived artifacts retain the diff and the model's findings; opt in only when an auditor or compliance regime requires it.
 
-For organisations whose policy forbids running non-vendor public actions even when SHA-pinned, the [fork/internal-mirror adoption path](#adopting-in-enterprise-environments) describes how to host a wrapped fork inside the org instead.
+For organizations whose policy forbids running non-vendor public actions even when SHA-pinned, the [fork/internal-mirror adoption path](#adopting-in-enterprise-environments) describes how to host a wrapped fork inside the org instead.
 
 ### Responsibility boundary
 
@@ -166,7 +166,7 @@ This action handles review orchestration and privilege separation within the rev
 
 ## Production workflow example
 
-The Minimal quick start prioritises legibility. Use this section instead when adopting the action in a private repository, an enterprise org, or any setting where you want fewer assumptions about who can trigger reviews and tighter blast-radius controls. The example below preserves every guardrail from the Minimal quick start and adds runner pinning, an environment-scoped API key, a PR-author allowlist (gated on `pull_request.user.login`, not `github.actor`, so a maintainer re-run does not bypass it), immutable SHAs for this action's three sub-actions, per-job timeouts, and a same-repo trigger restriction.
+The Minimal quick start prioritizes legibility. Use this section instead when adopting the action in a private repository, an enterprise org, or any setting where you want fewer assumptions about who can trigger reviews and tighter blast-radius controls. The example below preserves every guardrail from the Minimal quick start and adds runner pinning, an environment-scoped API key, a PR-author allowlist (gated on `pull_request.user.login`, not `github.actor`, so a maintainer re-run does not bypass it), immutable SHAs for this action's three sub-actions, per-job timeouts, and a same-repo trigger restriction.
 
 ### One-time repo setup
 
@@ -378,7 +378,7 @@ See [`defaults/review-reference.md`](defaults/review-reference.md) for the struc
 
 ## Adopting in enterprise environments
 
-Some organisations have policies that prohibit running non-vendor public actions in sensitive repositories — even when those actions are SHA-pinned. The fork-and-wrap pattern documented below is a first-class adoption path for those environments, not a workaround.
+Some organizations have policies that prohibit running non-vendor public actions in sensitive repositories — even when those actions are SHA-pinned. The fork-and-wrap pattern documented below is a first-class adoption path for those environments, not a workaround.
 
 The pattern uses two distinct internal repositories:
 
@@ -406,7 +406,7 @@ Build a reusable workflow inside `<org>/codex-review-internal` that wraps the fo
 
 ### 4. Restrict product repos to the internal version
 
-Configure org-level policy so that product repos can only invoke `<org>/codex-review-internal/.github/workflows/...` and not the public `<owner>/codex-ai-code-review-action/...` references. GitHub allows actions to be shared across repositories within the same organisation without Marketplace publication via **Settings → Actions → Allow actions from repositories within the organization**.
+Configure org-level policy so that product repos can only invoke `<org>/codex-review-internal/.github/workflows/...` and not the public `<owner>/codex-ai-code-review-action/...` references. GitHub allows actions to be shared across repositories within the same organization without Marketplace publication via **Settings → Actions → Allow actions from repositories within the organization**.
 
 ### 5. Pull upstream updates deliberately
 
@@ -440,7 +440,7 @@ jobs:
 
 The `concurrency:` block is the consumer's responsibility, not the wrapper's: the consumer owns the `pull_request` trigger, so it owns the policy for cancelling in-flight runs when a new push lands. Omitting it lets repeated pushes overlap and race when uploading or downloading artifacts.
 
-A reusable workflow can _narrow_ but not _widen_ the caller's `GITHUB_TOKEN` scope. The `permissions:` block above is required whenever the consumer repo's (or its org's) default `GITHUB_TOKEN` permissions are read-only — i.e. anything narrower than `pull-requests: write`. Omitting it then makes the wrapper inherit the read-only default, and the publish job fails with `Resource not accessible by integration` even though the wrapper itself declares `pull-requests: write` at job level. Repos whose default `GITHUB_TOKEN` already includes `pull-requests: write` work without the explicit block, but spelling it out at the call site is recommended for defence-in-depth and to make the workflow portable across orgs with different defaults.
+A reusable workflow can _narrow_ but not _widen_ the caller's `GITHUB_TOKEN` scope. The `permissions:` block above is required whenever the consumer repo's (or its org's) default `GITHUB_TOKEN` permissions are read-only — i.e. anything narrower than `pull-requests: write`. Omitting it then makes the wrapper inherit the read-only default, and the publish job fails with `Resource not accessible by integration` even though the wrapper itself declares `pull-requests: write` at job level. Repos whose default `GITHUB_TOKEN` already includes `pull-requests: write` work without the explicit block, but spelling it out at the call site is recommended for defense-in-depth and to make the workflow portable across orgs with different defaults.
 
 ### Example wrapper workflow
 
