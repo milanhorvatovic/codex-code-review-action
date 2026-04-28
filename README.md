@@ -142,6 +142,24 @@ The same pattern applies to the `review` and `publish` actions. Pin all three su
 
 Inside this repository, `review/action.yaml` SHA-pins `openai/codex-action`. That transitive pin is only frozen for you when you pin this action itself to a full SHA — at the SHA you chose, `review/action.yaml` is fixed and the `openai/codex-action` reference cannot move. Pinning to `@v2` does not carry that guarantee: a future `v2` release can update the transitive SHA.
 
+### Public repos
+
+The diff is already public, so concerns shift from data confidentiality to workflow abuse and token scope. Use `pull_request` as the workflow trigger (see [Do not use `pull_request_target`](#do-not-use-pull_request_target) above), [pin all three sub-actions](#pinning-the-action) to immutable SHAs, and set `allow-users` on the `prepare` step to a comma-separated list of GitHub usernames who can trigger reviews (see [Prepare action inputs](#prepare-action-inputs)). Scope each job's `permissions:` to the minimum it needs — the [Production workflow example](#production-workflow-example) shows the per-job split (read-only `prepare` and `review`, `pull-requests: write` only on `publish`).
+
+Fork PRs are a public-repo design point, not a hazard: under `pull_request`, repository secrets are not exposed to the fork's workflow run, so the OpenAI API key cannot leak through an attacker-controlled diff or script. If you want to refuse fork PRs entirely, add the same-repo gate (`github.event.pull_request.head.repo.full_name == github.repository`) from the [Production workflow example](#production-workflow-example).
+
+### Private repos
+
+Diffs leave the repository boundary and reach OpenAI via [`openai/codex-action`](https://github.com/openai/codex-action). Adopt this action only if that data transfer is acceptable under your organisation's policy.
+
+Apply every recommendation from [Public repos](#public-repos) — `pull_request`, SHA pinning, `allow-users`, minimum `permissions:` — and add three private-repo controls:
+
+- **Environment-scoped secret.** Bind `OPENAI_API_KEY` to a GitHub Environment so it is not available to unrelated workflows in the repo. The [Production workflow example](#production-workflow-example) demonstrates the `environment: codex-review` pattern.
+- **Same-repo restriction.** Gate every job on `github.event.pull_request.head.repo.full_name == github.repository` so a fork PR cannot trigger a private-repo review.
+- **Default `retain-findings`.** Leave `retain-findings` at its default (`false`). Long-lived artifacts retain the diff and the model's findings; opt in only when an auditor or compliance regime requires it.
+
+For organisations whose policy forbids running non-vendor public actions even when SHA-pinned, the [fork/internal-mirror adoption path](#adopting-in-enterprise-environments) describes how to host a wrapped fork inside the org instead.
+
 ## Production workflow example
 
 The Minimal quick start prioritises legibility. Use this section instead when adopting the action in a private repository, an enterprise org, or any setting where you want fewer assumptions about who can trigger reviews and tighter blast-radius controls. The example below preserves every guardrail from the Minimal quick start and adds runner pinning, an environment-scoped API key, a PR-author allowlist (gated on `pull_request.user.login`, not `github.actor`, so a maintainer re-run does not bypass it), immutable SHAs for this action's three sub-actions, per-job timeouts, and a same-repo trigger restriction.
