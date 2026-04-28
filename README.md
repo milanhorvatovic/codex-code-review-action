@@ -57,7 +57,7 @@ jobs:
       - id: prepare
         uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
 
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
         with:
           name: codex-prepare
@@ -220,7 +220,7 @@ jobs:
         with:
           allow-users: alice,bob,charlie # replace with real GitHub usernames; an empty value allows everyone
 
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
         with:
           name: codex-prepare
@@ -477,7 +477,7 @@ jobs:
         uses: <org>/codex-ai-code-review-action-fork/prepare@<full-sha> # v2.0.0
         with:
           allow-users: alice,bob,charlie
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
         with:
           name: codex-prepare
