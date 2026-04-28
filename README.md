@@ -17,7 +17,7 @@ This repository does **not** operate any maintainer-owned backend, proxy, analyt
 Two trust questions are commonly conflated; they have different answers:
 
 - *"Does OpenAI see the diff?"* — **Yes.** The review job invokes `openai/codex-action`, which calls OpenAI's API with the prompt and the diff. This is the explicit purpose of the action.
-- *"Does the action maintainer see the diff?"* — **No.** No maintainer-operated destination exists. The action's source is auditable in this repository, and `openai/codex-action` is SHA-pinned in [`review/action.yaml`](review/action.yaml) (currently `@086169432f1d2ab2f4057540b1754d550f6a1189`, v1.4) so the referenced commit is immutable unless this repo bumps the SHA. (Runtime behavior of OpenAI's API and model selection are outside this guarantee — see OpenAI's data-handling terms.)
+- *"Does the action maintainer see the diff?"* — **No.** No maintainer-operated destination exists. The action's source is auditable in this repository, and `openai/codex-action` is SHA-pinned in [`review/action.yaml`](review/action.yaml) (currently `@c300d2798ce5b59a7667c806b5e3a3d2c397ed2f`, v1.7) so the referenced commit is immutable unless this repo bumps the SHA. (Runtime behavior of OpenAI's API and model selection are outside this guarantee — see OpenAI's data-handling terms.)
 
 This action reduces risk when wired safely (read-only `prepare` and `review`, write access scoped to `publish`), but it does not make sending diffs to OpenAI risk-free. Evaluate OpenAI's data-handling terms separately for your organization.
 
@@ -398,7 +398,7 @@ Document the choice inline in the fork's `README.md` so future maintainers know 
 
 ### 2. Pin all action references inside the fork
 
-Pin every `uses:` reference in the fork to an immutable SHA, including the transitive pin of `openai/codex-action` in [`review/action.yaml`](review/action.yaml) (currently `@086169432f1d2ab2f4057540b1754d550f6a1189 # v1.4`). Update the transitive pin on the org's own schedule, not OpenAI's — each bump is a trust-boundary change and should go through whatever internal review the org applies to other vendor dependencies.
+Pin every `uses:` reference in the fork to an immutable SHA, including the transitive pin of `openai/codex-action` in [`review/action.yaml`](review/action.yaml) (currently `@c300d2798ce5b59a7667c806b5e3a3d2c397ed2f # v1.7`). Update the transitive pin on the org's own schedule, not OpenAI's — each bump is a trust-boundary change and should go through whatever internal review the org applies to other vendor dependencies. See [Trust-boundary changes](CONTRIBUTING.md#trust-boundary-changes) for the maintainer-side criteria and CHANGELOG treatment.
 
 ### 3. Create an org-owned reusable workflow
 
@@ -410,7 +410,7 @@ Configure org-level policy so that product repos can only invoke `<org>/codex-re
 
 ### 5. Pull upstream updates deliberately
 
-Watch the upstream `CHANGELOG.md` and review each release internally before adopting. Treat each fork-side SHA bump (and each transitive `openai/codex-action` bump) the same way the org treats other vendor dependency upgrades.
+Watch the upstream `CHANGELOG.md` and review each release internally before adopting. Treat each fork-side SHA bump (and each transitive `openai/codex-action` bump) the same way the org treats other vendor dependency upgrades. Upstream releases that contain trust-boundary changes carry a `### ⚠️ Trust boundary change` subsection in the CHANGELOG entry — those are the bumps that must not skip the org's vendor-review step. See [Trust-boundary changes](CONTRIBUTING.md#trust-boundary-changes) for what qualifies and how upstream documents it.
 
 ### Example consumer workflow
 

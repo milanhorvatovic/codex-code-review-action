@@ -2,6 +2,11 @@ name: Dependabot Auto-Merge
 
 on:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
 
 permissions:
   contents: read
@@ -9,7 +14,10 @@ permissions:
 
 jobs:
   rebuild-dist:
+    # Skip on label events — head SHA is unchanged, so dist/ cannot have drifted since the last
+    # opened/synchronize run. Avoids a wasted no-op rebuild when a maintainer applies a label.
     if: >-
+      github.event.action != 'labeled' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -91,7 +99,11 @@ jobs:
           git push "https://x-access-token:${REBUILD_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}"
 
   auto-merge:
+    # Skip on label events — auto-merge is set once at open/synchronize time. If a maintainer later
+    # applies the trust-boundary label, the disable-auto-merge-on-trust-boundary job below handles
+    # revoking the previously-enabled auto-merge.
     if: >-
+      github.event.action != 'labeled' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
     needs: rebuild-dist
@@ -106,9 +118,79 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+      # See CONTRIBUTING.md → Trust-boundary changes for the policy.
+      # Two guards coexist intentionally:
+      #   1. Exclude-by-name: skip auto-merge for any (possibly grouped) bump that includes
+      #      `openai/codex-action`. Extend this list when a new trust-boundary dependency
+      #      is added to the repo.
+      #   2. Label guard: skip auto-merge for any PR a maintainer has manually labeled
+      #      `trust-boundary`, even if the dep is not yet on the exclude list.
+      # The `if:` clauses below evaluate against the event payload captured at workflow start.
+      # That payload can be stale by the time this step runs (label applied during the run).
+      # The runtime checks inside `run:` close that TOCTOU race — see the comments there.
       - name: Auto-merge patch and minor updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
-        run: gh pr merge --auto --squash "$PR_URL"
+        if: >-
+          steps.metadata.outputs.update-type != 'version-update:semver-major'
+          && !contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')
+          && !contains(github.event.pull_request.labels.*.name, 'trust-boundary')
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           PR_URL: "${{ github.event.pull_request.html_url }}"
+        # Two runtime checks close the race the `if:` cannot:
+        #   - Pre-check: skip if the trust-boundary label is now present (applied between
+        #     workflow start and this step).
+        #   - Post-check: if the label is applied while we are enabling auto-merge, revert
+        #     the auto-merge state. The disable-auto-merge job below cannot help in that
+        #     window because it would fire before auto-merge was set, find nothing to
+        #     disable, and exit cleanly.
+        run: |
+          set -euo pipefail
+          has_trust_boundary() {
+            gh pr view "$PR_URL" --json labels --jq 'any(.labels[]; .name == "trust-boundary")'
+          }
+          if [ "$(has_trust_boundary)" = "true" ]; then
+            echo "trust-boundary label is now present (applied after workflow start); skipping auto-merge."
+            exit 0
+          fi
+          gh pr merge --auto --squash "$PR_URL"
+          if [ "$(has_trust_boundary)" = "true" ]; then
+            echo "trust-boundary label was applied while enabling auto-merge; reverting."
+            gh pr merge --disable-auto "$PR_URL"
+          fi
+
+  # Reactive disable: if a maintainer applies the `trust-boundary` label after auto-merge has
+  # already been enabled by the auto-merge job above, the label-guard `if:` on that step only
+  # prevents re-enabling — it does not revoke a previously-enabled auto-merge. This job runs on
+  # the `labeled` pull_request event and explicitly disables auto-merge so the PR stays open
+  # for manual maintainer review and merging.
+  disable-auto-merge-on-trust-boundary:
+    if: >-
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'trust-boundary' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Pre-check whether auto-merge is currently enabled. Auto-merge may legitimately not be set
+      # — e.g. semver-major bumps that the auto-merge job already excluded, or grouped bumps that
+      # already contained `openai/codex-action` and hit the exclude-by-name guard at open time.
+      # In those cases `gh pr merge --disable-auto` errors out and would fail this job for no
+      # operational reason. Skip cleanly when there is nothing to disable.
+      - name: Disable auto-merge if enabled
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          PR_URL: "${{ github.event.pull_request.html_url }}"
+        # Bash strict mode so a transient `gh pr view` failure aborts the job rather than
+        # silently leaving `auto_merge` empty and falling through to a misleading
+        # `--disable-auto` error.
+        run: |
+          set -euo pipefail
+          auto_merge=$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest')
+          if [ "$auto_merge" = "null" ]; then
+            echo "Auto-merge is not enabled on this PR; nothing to disable."
+            exit 0
+          fi
+          gh pr merge --disable-auto "$PR_URL"
