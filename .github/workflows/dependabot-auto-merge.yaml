@@ -152,8 +152,19 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Disable auto-merge
+      # Pre-check whether auto-merge is currently enabled. Auto-merge may legitimately not be set
+      # — e.g. semver-major bumps that the auto-merge job already excluded, or grouped bumps that
+      # already contained `openai/codex-action` and hit the exclude-by-name guard at open time.
+      # In those cases `gh pr merge --disable-auto` errors out and would fail this job for no
+      # operational reason. Skip cleanly when there is nothing to disable.
+      - name: Disable auto-merge if enabled
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           PR_URL: "${{ github.event.pull_request.html_url }}"
-        run: gh pr merge --disable-auto "$PR_URL"
+        run: |
+          auto_merge=$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest')
+          if [ "$auto_merge" = "null" ]; then
+            echo "Auto-merge is not enabled on this PR; nothing to disable."
+            exit 0
+          fi
+          gh pr merge --disable-auto "$PR_URL"
