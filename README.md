@@ -160,6 +160,10 @@ Apply every recommendation from [Public repos](#public-repos) — `pull_request`
 
 For organisations whose policy forbids running non-vendor public actions even when SHA-pinned, the [fork/internal-mirror adoption path](#adopting-in-enterprise-environments) describes how to host a wrapped fork inside the org instead.
 
+### Responsibility boundary
+
+This action handles review orchestration and privilege separation within the review pipeline. It does not replace caller responsibilities: safe trigger selection, same-repo restrictions, environment gating, secret management, and organizational approval policy. The architecture reduces risk when wired into a workflow safely; it does not provide security by default.
+
 ## Production workflow example
 
 The Minimal quick start prioritises legibility. Use this section instead when adopting the action in a private repository, an enterprise org, or any setting where you want fewer assumptions about who can trigger reviews and tighter blast-radius controls. The example below preserves every guardrail from the Minimal quick start and adds runner pinning, an environment-scoped API key, a PR-author allowlist (gated on `pull_request.user.login`, not `github.actor`, so a maintainer re-run does not bypass it), immutable SHAs for this action's three sub-actions, per-job timeouts, and a same-repo trigger restriction.
