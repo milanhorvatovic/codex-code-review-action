@@ -4,7 +4,7 @@ Thank you for considering contributing to Codex AI Code Review Action!
 
 ## Prerequisites
 
-- Node.js 22 (see `mise.toml` for the exact version)
+- Node.js 24 (see `mise.toml` for the exact version)
 - npm
 
 ## Getting started
@@ -19,7 +19,7 @@ npm install
 
 | Command | Description |
 |---------|-------------|
-| `npm run build` | Bundle both actions into `dist/` with esbuild |
+| `npm run build` | Bundle all JavaScript actions into `dist/` with esbuild |
 | `npm run lint` | Lint source code with ESLint |
 | `npm run typecheck` | Type-check without emitting |
 | `npm test` | Run tests once (CI mode) |
