@@ -1,0 +1,32 @@
+name: Verify Action Pins
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ratchet-lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify all third-party Actions are SHA-pinned
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(
+            git ls-files \
+              'action.yaml' \
+              '*/action.yaml' \
+              '.github/workflows/*.yaml'
+          )
+          docker run --rm \
+            --env GITHUB_ACTIONS \
+            --volume "${GITHUB_WORKSPACE}:/workspace" \
+            --workdir /workspace \
+            ghcr.io/sethvargo/ratchet@sha256:527e78e6d29a9ac306e843cf766afe0604a0b35633f16913d85dd522218e8ca1 \
+            lint -format=actions "${files[@]}"
