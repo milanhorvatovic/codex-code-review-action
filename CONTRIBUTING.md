@@ -66,6 +66,38 @@ New code should include tests. Aim to maintain or improve coverage.
 - Markdown: No artificial line wrapping at a fixed column. Let each paragraph flow naturally.
 - Merge strategy: Squash-merge via `gh pr merge --squash` (matching the Dependabot auto-merge workflow at `.github/workflows/dependabot-auto-merge.yaml`).
 
+## Trust-boundary changes
+
+Changes that affect data destinations, forwarding, telemetry, auth scopes, or what callers must trust require explicit release-note treatment so adopters who have already hardened their workflow can re-review.
+
+A change is trust-boundary-affecting if it:
+
+- adds or changes an outbound HTTP destination (any `fetch`, `axios`, Octokit client targeting a new host, or subprocess that calls an external API);
+- changes what data is sent to OpenAI (e.g. new fields in the prompt, larger diff excerpts, new metadata);
+- adds any analytics, logging, or telemetry that leaves the GitHub Actions runner;
+- changes the permissions required by the action (new `permissions:` scope, new token usage);
+- alters the artifact contents in a way that changes what callers must trust;
+- updates a transitive dependency that itself changes any of the above (e.g. updating the `openai/codex-action` SHA pin in `review/action.yaml`).
+
+When in doubt, treat the change as trust-boundary-affecting.
+
+PRs with such changes must:
+
+- be labeled `trust-boundary`;
+- include a "Trust boundary impact" paragraph in the PR description (see [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md));
+- get a dedicated CHANGELOG callout at release time (see [Release process](#release-process) step 2b).
+
+This applies to every PR regardless of author — maintainer, outside contributor, or AI-assisted — including Dependabot PRs that bump a transitive SHA falling under the criteria above. Maintainers apply the label on Dependabot's behalf during review.
+
+### Dependabot enforcement
+
+The auto-merge workflow at [`.github/workflows/dependabot-auto-merge.yaml`](.github/workflows/dependabot-auto-merge.yaml) carries two guards in the auto-merge step's `if:` expression:
+
+- **Exclude-by-name guard:** `!contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')` — auto-merge skips any (possibly grouped) Dependabot PR that includes `openai/codex-action`. Extend this clause when a new trust-boundary dependency is added to the repo.
+- **Label guard:** `!contains(github.event.pull_request.labels.*.name, 'trust-boundary')` — auto-merge skips any PR a maintainer manually flagged, even if the dep is not yet on the exclude list.
+
+Both clauses coexist intentionally. The exclude list is the declarative defense (fail-closed for known dependencies); the label is the manual override that catches a new dep before the exclude list has been updated. Removing either clause weakens the policy.
+
 ## Release process
 
 1. Update `version` in `package.json`
