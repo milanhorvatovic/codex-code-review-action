@@ -162,7 +162,7 @@ For organisations whose policy forbids running non-vendor public actions even wh
 
 ### Responsibility boundary
 
-This action handles review orchestration and privilege separation within the review pipeline. It does not replace caller responsibilities: safe trigger selection, same-repo restrictions, environment gating, secret management, and organizational approval policy. The architecture reduces risk when wired into a workflow safely; it does not provide security by default.
+This action handles review orchestration and privilege separation within the review pipeline. It does not replace caller responsibilities: safe trigger selection, same-repo restrictions, environment gating, secret management, and organisational approval policy. The architecture reduces risk when wired into a workflow safely; it does not provide security by default.
 
 ## Production workflow example
 
