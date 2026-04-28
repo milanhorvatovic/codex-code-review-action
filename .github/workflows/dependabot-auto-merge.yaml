@@ -161,7 +161,11 @@ jobs:
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           PR_URL: "${{ github.event.pull_request.html_url }}"
+        # Bash strict mode so a transient `gh pr view` failure aborts the job rather than
+        # silently leaving `auto_merge` empty and falling through to a misleading
+        # `--disable-auto` error.
         run: |
+          set -euo pipefail
           auto_merge=$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest')
           if [ "$auto_merge" = "null" ]; then
             echo "Auto-merge is not enabled on this PR; nothing to disable."
