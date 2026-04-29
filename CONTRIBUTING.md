@@ -25,6 +25,7 @@ npm install
 | `npm test` | Run tests once (CI mode) |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm test -- --coverage` | Run tests with coverage report |
+| `npm run extract:changelog -- <version>` | Print the matching `## [<version>]` section from `CHANGELOG.md` (used by the release workflow to populate Release notes) |
 | `npm run verify:doc-pins` | Verify Markdown references match the canonical third-party Action pins in YAML (also runs in CI) |
 | `npm run verify:prose-style` | Verify all prose uses US English (also runs in CI) |
 
@@ -136,15 +137,22 @@ All three coexist intentionally. The exclude list is the declarative defense (fa
    - **3b. Sync cross-doc SHA and version references.** When the canonical pin in `action.yaml`, `prepare/action.yaml`, `publish/action.yaml`, or `review/action.yaml` changes — or when any release bumps a third-party Action — update every other reference to that pin in the same release: `README.md` (including the "Adopting in enterprise environments" section), examples, and any other docs. The unified-pins rule (one SHA + tag per third-party Action across the entire repo) is enforced by CI on every PR and push to `main` by `.github/workflows/verify-action-pins.yaml`. The `ratchet-lint` job rejects any `uses:` that is not pinned to a full commit SHA, and the `verify-doc-pins` job (running `npm run verify:doc-pins`) fails when any tracked Markdown file references a third-party Action with a SHA or tag that drifts from the canonical pin in YAML. If either job fails, fix the listed files; do not bypass the check. The release-time sweep is now "verify CI passes" rather than a manual grep.
 4. Commit and merge to `main`
 5. Tag and push the release: `git tag vx.y.z && git push origin vx.y.z`
-6. The release workflow automatically creates a GitHub Release, generates release notes, and updates the major version tag (e.g. `v1`)
+6. The release workflow automatically creates a GitHub Release whose notes are extracted verbatim from the matching `## [<version>]` section in `CHANGELOG.md`, and updates the major version tag (e.g. `v1`). Pre-release tags (e.g. `v2.1.0-rc.1`) are accepted: the extraction script resolves the corresponding `## [2.1.0-rc.1]` CHANGELOG section, and the resulting Release page renders that content verbatim. The Release is **not yet marked as pre-release** on GitHub — passing `--prerelease` to `gh release create` for tags matching `v*.*.*-*` is tracked in #78.
 
-> **Tip:** You can also create the tag and release in one step using the GitHub CLI:
+> **Tip:** Preview the release notes locally before pushing the tag:
 >
 > ```bash
-> gh release create vx.y.z --generate-notes
+> npm run extract:changelog -- x.y.z
 > ```
 >
-> The release workflow will still run on the tag push to verify the build, run tests, and update the major version tag.
+> The release workflow runs on the tag push and creates the GitHub Release from the same `CHANGELOG.md` section.
+>
+> If the workflow is unavailable and you need to create the release by hand, extract the notes and pass them explicitly — do **not** use `--generate-notes`, which bypasses the CHANGELOG:
+>
+> ```bash
+> npx tsx scripts/extract-changelog-section.ts x.y.z > /tmp/notes.md
+> gh release create vx.y.z --notes-file /tmp/notes.md
+> ```
 
 ## License
 

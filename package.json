@@ -35,6 +35,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "extract:changelog": "tsx scripts/extract-changelog-section.ts",
     "lint": "eslint src/ scripts/",
     "test": "vitest run",
     "test:watch": "vitest",

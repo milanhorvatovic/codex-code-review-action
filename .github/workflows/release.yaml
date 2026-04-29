@@ -40,12 +40,17 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: ./.github/actions/setup-node-deps
+
       - name: Create GitHub Release
         run: |
+          set -euo pipefail
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             echo "Release for $GITHUB_REF_NAME already exists; skipping creation."
           else
-            gh release create "$GITHUB_REF_NAME" --generate-notes
+            NOTES_FILE="$(mktemp)"
+            npx --no-install tsx scripts/extract-changelog-section.ts "${GITHUB_REF_NAME#v}" > "$NOTES_FILE"
+            gh release create "$GITHUB_REF_NAME" --notes-file "$NOTES_FILE"
           fi
         env:
           GH_TOKEN: ${{ github.token }}
