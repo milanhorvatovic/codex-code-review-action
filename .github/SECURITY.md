@@ -23,7 +23,7 @@ We will acknowledge receipt within 48 hours and aim to release a fix within 7 da
 
 ## Security Considerations
 
-This action processes untrusted input (PR diffs and metadata). It mitigates prompt injection via backtick neutralisation, dynamic fencing, and untrusted-data labelling.
+This action processes untrusted input (PR diffs and metadata). It mitigates prompt injection via backtick neutralization, dynamic fencing, and untrusted-data labeling.
 
 The three-job architecture splits responsibilities by permission scope:
 
@@ -31,4 +31,4 @@ The three-job architecture splits responsibilities by permission scope:
 - `review` (`contents: read`) — invokes `openai/codex-action` per chunk in parallel. This is the only job that requires the OpenAI API key, and it has no write access to the repository.
 - `publish` (`contents: read`, `pull-requests: write`) — merges chunk reviews and posts the PR review with inline comments. Does not require or receive the OpenAI API key.
 
-If you believe any of these defences can be bypassed, please report it using the process above.
+If you believe any of these defenses can be bypassed, please report it using the process above.

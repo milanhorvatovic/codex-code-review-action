@@ -64,8 +64,29 @@ New code should include tests. Aim to maintain or improve coverage.
 - Branches: Use feature branches off `main` and a PR per change. `main` is protected; do not push directly. Branch names are topic-only with a type prefix (e.g. `docs/<topic>`, `feat/<topic>`, `fix/<topic>`); reference issues in the PR title or body, not the branch name.
 - File extensions: YAML files in this repo use `.yaml`, not `.yml`. Match this convention when adding new YAML.
 - JSON key ordering: Keep keys alphabetically sorted unless an existing file establishes a different order.
-- Markdown: No artificial line wrapping at a fixed column. Let each paragraph flow naturally.
 - Merge strategy: Squash-merge via `gh pr merge --squash` (matching the Dependabot auto-merge workflow at `.github/workflows/dependabot-auto-merge.yaml`).
+- Documentation prose: Follows the [Documentation tone and style](#documentation-tone-and-style) section below.
+
+## Documentation tone and style
+
+Applies to all prose in the repository: `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, files under `.github/`, and the default review prompts under `defaults/`. Source-code identifiers (variable, function, and file names) are out of scope — only natural-language prose.
+
+- **Language.** Use US English spellings (e.g. `organization`, `behavior`, `prioritize`, `canceling`, `defense`, `neutralization`, `labeling`, `analyze`). Verbatim quotes of external UI labels, third-party documentation, or external proper nouns may keep their original spelling; when the exception isn't obvious from context, note it inline.
+- **Tone.** Write neutrally and precisely. Describe behavior in terms of inputs, outputs, trust boundaries, and concrete examples — not customer or vendor names, internal personas, or marketing language. Avoid company-specific references unless the context (a quoted GitHub setting, an upstream Action repository, etc.) requires the exact name.
+- **Voice.** Prefer direct, present-tense statements about what the action does. Avoid hedging ("may", "could potentially") when the behavior is deterministic, and avoid imperative tone toward maintainers ("you must") when describing invariants the code already enforces.
+- **Formatting.** No artificial line wrapping at a fixed column; let each paragraph flow naturally. Match the repository's existing heading depth and bullet style. The same rule applies to commit message bodies.
+- **Historical record.** `CHANGELOG.md` entries are a record of what shipped under each version; style fixes (US English conversions, wording tweaks) are not retroactively applied to released entries. Apply the conventions to upcoming entries instead. The same principle is reused by the [Trust-boundary changes](#trust-boundary-changes) section below.
+
+To audit the repository for drift, run:
+
+```bash
+grep -rniE '(behaviour|colour|favour|honour|labour|neighbour|harbour|humour|rumour|vapour|savour|valour|vigour|armour|endeavour|flavour|splendour|demeanour|defence|offence|pretence|licence|practise|whilst|amongst|amidst|enquir|artefact|aluminium|mould|plough|learnt|spelt|dreamt|burnt|leapt|knelt|smelt|spilt|backwards|forwards|upwards|downwards|organis|prioritis|customis|optimis|recognis|emphasis|categoris|standardis|summaris|specialis|finalis|normalis|serialis|initialis|generalis|modernis|criticis|harmonis|maximis|minimis|mobilis|neutralis|patronis|pluralis|privatis|randomis|sanitis|scrutinis|stabilis|sterilis|stigmatis|subsidis|sympathis|synchronis|systematis|theoris|utilis|visualis|incentivis|materialis|memoris|metabolis|militaris|nationalis|naturalis|personalis|polaris|rationalis|reorganis|revolutionis|sensitis|signalis|socialis|symbolis|tantalis|terroris|unionis|urbanis|labelling|labelled|cancelling|cancelled|travelling|travelled|modelling|modelled|signalling|signalled|fuelling|fuelled|levelling|levelled|totalling|totalled|focussed|focussing|programme|judgement|acknowledgement|tyre|kerb|cheque|enrolment|fulfilment|instalment|skilful|wilful|centre|fibre|theatre|calibre)' \
+  --include='*.md' --include='*.yaml' --include='*.ts' . \
+  | grep -v node_modules | grep -v dist | grep -v coverage \
+  | grep -viE '(\banalysis\b|\brealistic\b|## Code analysis|CodeQL.*Analysis)'
+```
+
+The expected result is no matches outside `CHANGELOG.md` historical entries (carved out above) and the documented false positives filtered by the trailing `grep -v` (`analysis`, `realistic`, the CodeQL job name).
 
 ## Trust-boundary changes
 
