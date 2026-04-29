@@ -230,13 +230,19 @@ describe("runCli", () => {
   it("returns 1 and prints usage when no version is passed", () => {
     const stub: Stub = { files: {}, stdout: [], stderr: [] };
     expect(runCli(makeDeps(stub, []))).toBe(1);
-    expect(stub.stderr.join("")).toContain("Usage: extract-changelog-section");
+    const err = stub.stderr.join("");
+    expect(err).toContain("Usage:");
+    expect(err).toContain("npm run extract:changelog -- <version>");
+    expect(err).toContain("npx tsx scripts/extract-changelog-section.ts <version>");
   });
 
   it("returns 1 and prints usage when more than one argument is passed", () => {
     const stub: Stub = { files: {}, stdout: [], stderr: [] };
     expect(runCli(makeDeps(stub, ["1.0.0", "extra"]))).toBe(1);
-    expect(stub.stderr.join("")).toContain("Usage: extract-changelog-section");
+    const err = stub.stderr.join("");
+    expect(err).toContain("Usage:");
+    expect(err).toContain("npm run extract:changelog -- <version>");
+    expect(err).toContain("npx tsx scripts/extract-changelog-section.ts <version>");
   });
 
   it("returns 1 with the not-found error for an unknown version", () => {

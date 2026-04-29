@@ -119,7 +119,14 @@ export function runCli(deps: RunCliDeps = {}): number {
   const stderrWrite = deps.stderrWrite ?? defaultStderrWrite;
 
   if (argv.length !== 1 || argv[0] === undefined) {
-    stderrWrite("Usage: extract-changelog-section <version>\n");
+    stderrWrite(
+      [
+        "Usage:",
+        "  npm run extract:changelog -- <version>",
+        "  npx tsx scripts/extract-changelog-section.ts <version>",
+        "",
+      ].join("\n"),
+    );
     return 1;
   }
 
