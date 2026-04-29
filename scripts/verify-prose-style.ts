@@ -36,11 +36,19 @@ export const UK_PATTERNS: readonly string[] = [
   "splendour(?:s)?",
   "demeanour(?:s)?",
 
-  // -ce (UK noun) → -se (US)
+  // -ce (UK noun) → -se (US noun): "defence"/"defense", "offence"/"offense",
+  // "pretence"/"pretense", "licence"/"license". The corresponding US verb
+  // forms ("license", "defense" used as a verb, etc.) deliberately remain
+  // unflagged.
   "defence(?:s|less|lessness)?",
   "offence(?:s|less)?",
   "pretence(?:s)?",
   "licence(?:s|d)?",
+
+  // -ise (UK verb) → -ice (US verb): "practise"/"practice". Note this is the
+  // inverse of the noun rule above — UK uses "practice" for the noun and
+  // "practise" for the verb; US uses "practice" for both. Only the UK verb
+  // form is flagged.
   "practise(?:s|d|ing)?",
 
   // standalone UK words and inflections
