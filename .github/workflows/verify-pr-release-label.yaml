@@ -19,9 +19,24 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          MATCHES="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
-            --jq '[.labels[].name | select(startswith("release: "))] | length')"
-          if [ "$MATCHES" != "1" ]; then
-            echo "::error::PR must carry exactly one of: 'release: major', 'release: minor', 'release: patch', 'release: skip'. Found $MATCHES."
+
+          ALL_LABELS_JSON="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
+            --jq '.labels | map(.name)')"
+
+          INVALID="$(jq -rn --argjson l "$ALL_LABELS_JSON" '
+            $l
+            | map(select(startswith("release: ")))
+            | . - ["release: major", "release: minor", "release: patch", "release: skip"]
+            | join(", ")
+          ')"
+          if [ -n "$INVALID" ]; then
+            echo "::error::PR carries non-canonical release label(s): $INVALID. Allowed: 'release: major', 'release: minor', 'release: patch', 'release: skip'."
+            exit 1
+          fi
+
+          COUNT="$(jq -n --argjson l "$ALL_LABELS_JSON" \
+            '$l | map(select(startswith("release: "))) | length')"
+          if [ "$COUNT" != "1" ]; then
+            echo "::error::PR must carry exactly one of: 'release: major', 'release: minor', 'release: patch', 'release: skip'. Found $COUNT."
             exit 1
           fi
