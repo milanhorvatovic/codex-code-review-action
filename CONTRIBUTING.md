@@ -138,6 +138,22 @@ The auto-merge workflow at [`.github/workflows/dependabot-auto-merge.yaml`](.git
 
 All three coexist intentionally. The exclude list is the declarative defense (fail-closed for known dependencies); the label guard's runtime checks close the TOCTOU race during the auto-merge step itself; the reactive disable job catches PRs labeled later in the PR's lifecycle. Removing any layer weakens the policy.
 
+#### Auto-approval
+
+The default-branch ruleset on `main` requires one approving code-owner review before merge. `GITHUB_TOKEN` cannot approve PRs and Dependabot cannot approve its own PRs, so without an additional approver auto-merge would never complete. To close that gap, the auto-merge job posts an approving review *before* enabling auto-merge, gated by the same three trust-boundary guards above (semver-major bumps, the `openai/codex-action` exclude, and the `trust-boundary` label).
+
+The approval is posted using a fine-grained PAT belonging to a code-owner, stored as the Dependabot secret **`DEPENDABOT_APPROVE_TOKEN`**. The PAT must be:
+
+- Scoped to this repository.
+- Granted `Pull requests: write` permission (sufficient to submit a review).
+- Owned by a user listed in [`.github/CODEOWNERS`](.github/CODEOWNERS), so the review counts toward the code-owner requirement.
+
+Configure under **Settings → Secrets and variables → Dependabot → New secret**. Workflows triggered by Dependabot do not have access to Actions secrets, so the value must live under the Dependabot scope.
+
+When the secret is unset, the approval step emits a warning and exits cleanly — auto-merge is still enabled, but the PR waits for a manual approving review.
+
+Auto-approval reviews carry the marker body `Auto-approved by the Dependabot Auto-Merge workflow (...)` so they are easy to identify in the PR review list. If a maintainer later applies the `trust-boundary` label, the reactive disable job revokes auto-merge but does not dismiss the bot review; the ruleset's `dismiss_stale_reviews_on_push: true` will clear it on the next push, and the maintainer can dismiss it manually before re-evaluating.
+
 ## Release process
 
 1. Update `version` in `package.json`
