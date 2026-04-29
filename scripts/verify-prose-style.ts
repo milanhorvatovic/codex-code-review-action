@@ -7,7 +7,6 @@ export type Hit = {
   line: number;
   column: number;
   word: string;
-  match: string;
 };
 
 // Regex source strings, each matching a complete UK English word (the
@@ -235,7 +234,6 @@ export function findHits(file: string, content: string): Hit[] {
         line: i + 1,
         column: (wordMatch.index ?? 0) + 1,
         word,
-        match: word,
       });
     }
   }
