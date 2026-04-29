@@ -260,6 +260,14 @@ describe("findHits", () => {
     const hits = findHits("test.ts", "type XMLOrganiseRunner = {};");
     expect(hits.map((h) => h.word)).toEqual(["Organise"]);
   });
+
+  it("treats non-ASCII letters as token splitters", () => {
+    // Diacritic characters like č are outside [A-Za-z] and split tokens. A
+    // UK form adjacent to a non-ASCII letter is still flagged because the
+    // ASCII run on each side is tokenized independently.
+    const hits = findHits("test.md", "Horvatovič wrote organisation guidance");
+    expect(hits.map((h) => h.word)).toEqual(["organisation"]);
+  });
 });
 
 describe("runCli", () => {

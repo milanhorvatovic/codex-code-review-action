@@ -228,13 +228,15 @@ const COMBINED_PATTERN = new RegExp(
   `^(?:${UK_PATTERNS.join("|")})$`,
   "i",
 );
-// Pure-alphabetic tokens. Splitting on hyphens, apostrophes (straight and
-// curly), underscores, and any other non-letter character is deliberate:
-// "organisation's", "organisation-wide", "_organisation_" all tokenize to a
-// bare "organisation", which the anchored COMBINED_PATTERN can then match. UK
-// patterns never legitimately include punctuation, so widening the token to
-// cover hyphens/apostrophes (the previous behavior) only created false
-// negatives on possessive and hyphenated forms.
+// Pure ASCII-letter tokens. Any character outside [A-Za-z] — hyphens, straight
+// or curly apostrophes, underscores, digits, whitespace, punctuation, and
+// non-ASCII letters such as accented characters — splits tokens. This is
+// deliberate: "organisation's", "organisation-wide", "_organisation_",
+// "Horvatovič" (the č splits the surrounding ASCII run) all tokenize cleanly
+// for the anchored COMBINED_PATTERN to match. UK_PATTERNS contains only ASCII
+// characters, so ASCII-only tokenization is sufficient; widening to Unicode
+// letters would not improve detection but would risk surprising splits across
+// adjacent diacritic-bearing prose.
 const WORD_PATTERN = /[A-Za-z]+/g;
 
 // camelCase / PascalCase / SCREAMING_CASE-aware splitter. Each raw alphabetic
