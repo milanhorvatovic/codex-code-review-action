@@ -62,7 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Configurable confidence threshold (`min-confidence`) and comment cap (`max-comments`)
 - User allowlist to restrict which PR authors trigger reviews
 - Custom review reference file support for per-repository review rules
-- Prompt injection defences (backtick neutralisation, dynamic fencing, untrusted-data labelling)
+- Prompt injection defenses (backtick neutralization, dynamic fencing, untrusted-data labeling)
 - Long-lived artifact upload for audit/analytics via `retain-findings`
 - Per-file summary and overall correctness verdict in PR review body
 - Automatic truncation to GitHub API limits (65K body, 65K inline comment)

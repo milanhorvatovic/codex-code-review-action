@@ -19,3 +19,7 @@ Codex AI Code Review Action is a GitHub Action that performs AI-powered code rev
 4. **Modularity** — clear boundaries, constructor injection, single responsibility, low coupling
 5. **Action correctness** — proper use of @actions/core and @actions/github APIs, input/output handling, secret masking
 6. **Test coverage** — co-located tests for all modules, mock external dependencies, pure function unit tests
+
+## Documentation tone and style
+
+When reviewing or editing prose in any file (Markdown, YAML descriptions, JSON `description` fields, code comments, commit messages), follow the conventions in [`CONTRIBUTING.md` § Documentation tone and style](../CONTRIBUTING.md#documentation-tone-and-style). The repository uses **US English** at all times — including in released `CHANGELOG.md` entries. CI enforces this via `npm run verify:prose-style` ([`.github/workflows/verify-prose-style.yaml`](workflows/verify-prose-style.yaml)); do not propose UK spellings even when neighboring text is inconsistent (it is drift to be cleaned up, not a convention to match).

@@ -26,6 +26,7 @@ npm install
 | `npm run test:watch` | Run tests in watch mode |
 | `npm test -- --coverage` | Run tests with coverage report |
 | `npm run verify:doc-pins` | Verify Markdown references match the canonical third-party Action pins in YAML (also runs in CI) |
+| `npm run verify:prose-style` | Verify all prose uses US English (also runs in CI) |
 
 ## Committing dist/
 
@@ -64,8 +65,26 @@ New code should include tests. Aim to maintain or improve coverage.
 - Branches: Use feature branches off `main` and a PR per change. `main` is protected; do not push directly. Branch names are topic-only with a type prefix (e.g. `docs/<topic>`, `feat/<topic>`, `fix/<topic>`); reference issues in the PR title or body, not the branch name.
 - File extensions: YAML files in this repo use `.yaml`, not `.yml`. Match this convention when adding new YAML.
 - JSON key ordering: Keep keys alphabetically sorted unless an existing file establishes a different order.
-- Markdown: No artificial line wrapping at a fixed column. Let each paragraph flow naturally.
 - Merge strategy: Squash-merge via `gh pr merge --squash` (matching the Dependabot auto-merge workflow at `.github/workflows/dependabot-auto-merge.yaml`).
+- Documentation prose: Follows the [Documentation tone and style](#documentation-tone-and-style) section below.
+
+## Documentation tone and style
+
+Applies to every prose-bearing file in the repository. The verifier scans the file types curated in `FILE_PATTERNS` and `EXTRA_FILES` at the top of [`scripts/verify-prose-style.ts`](scripts/verify-prose-style.ts) — currently Markdown, YAML, TypeScript, JSON, `.mjs`, `.sh`, `.toml`, `.gitignore`, and `.github/CODEOWNERS`. Bundled artifacts under `dist/` and the verbatim `LICENSE` text are deliberately not scanned. The verifier inspects prose, code comments, string literals, and identifiers alike: each line is split on every character outside `[A-Za-z]` (punctuation, digits, whitespace, accented or other non-ASCII letters) into raw ASCII-letter tokens, and each raw token is then split on camelCase, PascalCase, and adjacent-uppercase boundaries before matching. ASCII-only tokenization is sufficient because the UK English patterns themselves contain only ASCII characters. UK forms anywhere inside compound identifiers — camelCase, PascalCase, all-caps constants joined by underscores, or upper-prefix-then-camel patterns — are caught the same as UK forms in prose. Concrete examples live in [`scripts/verify-prose-style.test.ts`](scripts/verify-prose-style.test.ts). In practice this codebase already uses US conventions for identifiers, so the rule and the verifier agree. To extend coverage to a new file type, add a glob to `FILE_PATTERNS` (or an explicit path to `EXTRA_FILES`).
+
+- **Language.** Use US English spellings (e.g. `organization`, `behavior`, `prioritize`, `canceling`, `defense`, `neutralization`, `labeling`, `analyze`). Verbatim quotes of external UI labels, third-party documentation, or external proper nouns may keep their original spelling; when the exception isn't obvious from context, note it inline.
+- **Tone.** Write neutrally and precisely. Describe behavior in terms of inputs, outputs, trust boundaries, and concrete examples — not customer or vendor names, internal personas, or marketing language. Avoid company-specific references unless the context (a quoted GitHub setting, an upstream Action repository, etc.) requires the exact name.
+- **Voice.** Prefer direct, present-tense statements about what the action does. Avoid hedging ("may", "could potentially") when the behavior is deterministic, and avoid imperative tone toward maintainers ("you must") when describing invariants the code already enforces.
+- **Formatting.** No artificial line wrapping at a fixed column; let each paragraph flow naturally. Match the repository's existing heading depth and bullet style. The same rule applies to commit message bodies.
+- **No historical exceptions.** The conventions apply to all prose in the repository at all times, including `CHANGELOG.md` entries for already-released versions. When drift is discovered in a historical entry, fix it in place — release notes are technical documentation, not an immutable transcript.
+
+To audit the repository for drift, run:
+
+```bash
+npm run verify:prose-style
+```
+
+This invokes `scripts/verify-prose-style.ts`, which scans every text-bearing tracked file, reports any UK English form with `file:line:column` precision, and exits non-zero on drift. The same script runs in CI on every pull request and push to `main` via [`.github/workflows/verify-prose-style.yaml`](.github/workflows/verify-prose-style.yaml). Each `UK_PATTERNS` entry is an anchored regex matching a complete UK word (e.g. `organis(?:e|es|ed|ing|ation|ations|ational|er|ers|able)`), so US English nouns that share a UK verb stem — `criticism`, `optimism`, `terrorism`, `organism`, `programmer`, `programmed`, `emphasis`, and so on — are not flagged. When a new UK form needs coverage, add an anchored pattern to `UK_PATTERNS` and a test case in `scripts/verify-prose-style.test.ts`. The `ALLOWED_WORDS` set is reserved for proper nouns whose canonical spelling collides with a UK English word (brand, party, or place names); add lowercased entries when one appears in repository prose.
 
 ## Trust-boundary changes
 
