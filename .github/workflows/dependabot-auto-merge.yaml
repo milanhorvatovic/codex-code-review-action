@@ -136,7 +136,7 @@ jobs:
       # PAT belonging to a code-owner is required and must be stored as a *Dependabot*
       # secret (workflows triggered by Dependabot do not have access to Actions secrets).
       # When the secret is unset, the step warns and skips — auto-merge is still enabled
-      # and the PR waits for manual approval, matching the prior behaviour.
+      # and the PR waits for manual approval, matching the prior behavior.
       - name: Approve PR (so required-review check passes)
         if: >-
           steps.metadata.outputs.update-type != 'version-update:semver-major'
