@@ -1,0 +1,27 @@
+name: verify-pr-release-label
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, labeled, unlabeled, synchronize]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  verify-pr-release-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify exactly one release label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          MATCHES="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
+            --jq '[.labels[].name | select(startswith("release: "))] | length')"
+          if [ "$MATCHES" != "1" ]; then
+            echo "::error::PR must carry exactly one of: 'release: major', 'release: minor', 'release: patch', 'release: skip'. Found $MATCHES."
+            exit 1
+          fi
