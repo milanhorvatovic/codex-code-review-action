@@ -42,20 +42,15 @@ jobs:
 
       - uses: ./.github/actions/setup-node-deps
 
-      - name: Extract release notes from CHANGELOG
-        id: notes
-        run: |
-          set -euo pipefail
-          NOTES_FILE="$(mktemp)"
-          npx --no-install tsx scripts/extract-changelog-section.ts "${GITHUB_REF_NAME#v}" > "$NOTES_FILE"
-          echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
-
       - name: Create GitHub Release
         run: |
+          set -euo pipefail
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             echo "Release for $GITHUB_REF_NAME already exists; skipping creation."
           else
-            gh release create "$GITHUB_REF_NAME" --notes-file "${{ steps.notes.outputs.file }}"
+            NOTES_FILE="$(mktemp)"
+            npx --no-install tsx scripts/extract-changelog-section.ts "${GITHUB_REF_NAME#v}" > "$NOTES_FILE"
+            gh release create "$GITHUB_REF_NAME" --notes-file "$NOTES_FILE"
           fi
         env:
           GH_TOKEN: ${{ github.token }}
