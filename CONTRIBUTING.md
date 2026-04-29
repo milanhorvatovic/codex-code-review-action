@@ -68,6 +68,24 @@ New code should include tests. Aim to maintain or improve coverage.
 - JSON key ordering: Keep keys alphabetically sorted unless an existing file establishes a different order.
 - Merge strategy: Squash-merge via `gh pr merge --squash` (matching the Dependabot auto-merge workflow at `.github/workflows/dependabot-auto-merge.yaml`).
 - Documentation prose: Follows the [Documentation tone and style](#documentation-tone-and-style) section below.
+- PR titles: informally follow Conventional Commits (`type(scope): subject`). The title is for human readability; release intent is set by the `release: *` label, not parsed from the title.
+
+### Release label
+
+Every PR carries exactly one of:
+
+- `release: major` — major version bump (breaking change)
+- `release: minor` — minor version bump (new feature)
+- `release: patch` — patch version bump (fix or documentation only)
+- `release: skip`  — excluded from the next release (chore, infra, internal-only, release-prep)
+
+The required check `verify-pr-release-label` enforces this on every PR. Reviewers apply or correct the label as part of approval. Dependabot PRs auto-carry `release: patch`; trust-boundary Dependabot bumps additionally receive `trust-boundary` from maintainers during review (both labels coexist).
+
+Release-preparation PRs themselves carry `release: skip` — the release IS the bump, so the PR is not contributing a level.
+
+### Squash-body policy
+
+When merging via squash, replace the auto-generated commit-list body with a hand-written summary paragraph. The PR title, labels, and CHANGELOG entry are the durable record; the squash body is for `git log -p` readers. Release tooling reads PR metadata (title, labels), not commit messages — do not encode release semantics in the squash body.
 
 ## Documentation tone and style
 
