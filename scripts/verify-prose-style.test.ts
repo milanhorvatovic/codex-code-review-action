@@ -176,6 +176,49 @@ describe("findHits", () => {
     expect(hits).toHaveLength(1);
     expect(hits[0]?.word).toBe("Organisation");
   });
+
+  it("flags possessive forms (straight and curly apostrophes)", () => {
+    const hits = findHits(
+      "test.md",
+      "the organisation's policy and the organisation’s plan",
+    );
+    expect(hits.map((h) => h.word)).toEqual(["organisation", "organisation"]);
+  });
+
+  it("flags trailing-apostrophe plural possessives", () => {
+    const hits = findHits("test.md", "the organisations' policies");
+    expect(hits.map((h) => h.word)).toEqual(["organisations"]);
+  });
+
+  it("flags hyphenated UK forms (organisation-wide, defence-in-depth)", () => {
+    const hits = findHits(
+      "test.md",
+      "an organisation-wide standard and defence-in-depth posture",
+    );
+    expect(hits.map((h) => h.word)).toEqual(["organisation", "defence"]);
+  });
+
+  it("does not flag US possessive 'organization's'", () => {
+    const hits = findHits("test.md", "the organization's policy");
+    expect(hits).toEqual([]);
+  });
+
+  it("does not flag English contractions (don't, it's, you're)", () => {
+    const hits = findHits("test.md", "don't say it's organised — you're wrong");
+    expect(hits.map((h) => h.word)).toEqual(["organised"]);
+  });
+
+  it("flags UK forms inside Markdown emphasis (_word_, *word*, **word**)", () => {
+    const hits = findHits(
+      "test.md",
+      "the _organisation_ said *behaviour* and **defence**",
+    );
+    expect(hits.map((h) => h.word)).toEqual([
+      "organisation",
+      "behaviour",
+      "defence",
+    ]);
+  });
 });
 
 describe("runCli", () => {

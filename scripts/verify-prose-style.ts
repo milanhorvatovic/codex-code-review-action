@@ -195,12 +195,14 @@ export const EXCLUDE_PATHS: ReadonlySet<string> = new Set([
   "scripts/verify-prose-style.ts",
 ]);
 
-// Glob patterns for `git ls-files`. Covers every text-bearing file type tracked
-// in the repository. JSON config files (`package.json`, `tsconfig.json`) carry
-// occasional prose in `description` fields and are worth auditing too. `.js` is
-// intentionally omitted: the only tracked `*.js` files are bundled artifacts in
-// `dist/`, derived from `.ts` source which is already audited.
+// Glob patterns for `git ls-files`. Curated, not exhaustive: covers the file
+// types where prose actually lives in this repository. `.js` is intentionally
+// omitted (the only tracked `*.js` files are bundled artifacts in `dist/`,
+// derived from `.ts` source which is already audited). Any tracked extension
+// that does not appear here is unscanned by design — extend this list (or
+// EXTRA_FILES below) when adding a new prose-bearing file type.
 export const FILE_PATTERNS: readonly string[] = [
+  "*.gitignore",
   "*.json",
   "*.md",
   "*.mjs",
@@ -210,7 +212,7 @@ export const FILE_PATTERNS: readonly string[] = [
   "*.yaml",
 ];
 
-// Extensionless prose-bearing files that the FILE_PATTERNS globs cannot reach.
+// Extensionless tracked files that the FILE_PATTERNS globs cannot reach.
 // `LICENSE` is a verbatim third-party text and is deliberately not included.
 export const EXTRA_FILES: readonly string[] = [".github/CODEOWNERS"];
 
@@ -218,7 +220,14 @@ const COMBINED_PATTERN = new RegExp(
   `^(?:${UK_PATTERNS.join("|")})$`,
   "i",
 );
-const WORD_PATTERN = /[A-Za-z][A-Za-z'-]*/g;
+// Pure-alphabetic tokens. Splitting on hyphens, apostrophes (straight and
+// curly), underscores, and any other non-letter character is deliberate:
+// "organisation's", "organisation-wide", "_organisation_" all tokenize to a
+// bare "organisation", which the anchored COMBINED_PATTERN can then match. UK
+// patterns never legitimately include punctuation, so widening the token to
+// cover hyphens/apostrophes (the previous behavior) only created false
+// negatives on possessive and hyphenated forms.
+const WORD_PATTERN = /[A-Za-z]+/g;
 
 export function findHits(file: string, content: string): Hit[] {
   const hits: Hit[] = [];
