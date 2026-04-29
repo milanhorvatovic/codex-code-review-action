@@ -237,21 +237,37 @@ const COMBINED_PATTERN = new RegExp(
 // negatives on possessive and hyphenated forms.
 const WORD_PATTERN = /[A-Za-z]+/g;
 
+// camelCase / PascalCase / SCREAMING_CASE-aware splitter. Each raw alphabetic
+// token from WORD_PATTERN is further split into sub-tokens so UK forms inside
+// compound identifiers are caught: `organiseRuns` → ["organise", "Runs"];
+// `XMLHttpRequest` → ["XML", "Http", "Request"]; `ORGANISATION` → single
+// all-caps token (still matched case-insensitively by COMBINED_PATTERN). The
+// alternation handles three cases:
+//   1. `[A-Z]?[a-z]+` — optional capital + lowercase run ("Organise", "runs")
+//   2. `[A-Z]+(?=[A-Z][a-z])` — uppercase run followed by another camel hump
+//      ("XML" before "Http")
+//   3. `[A-Z]+` — trailing all-uppercase run that has no lowercase suffix
+const SUBTOKEN_PATTERN = /[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z])|[A-Z]+/g;
+
 export function findHits(file: string, content: string): Hit[] {
   const hits: Hit[] = [];
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
     for (const wordMatch of line.matchAll(WORD_PATTERN)) {
-      const word = wordMatch[0];
-      if (ALLOWED_WORDS.has(word.toLowerCase())) continue;
-      if (!COMBINED_PATTERN.test(word)) continue;
-      hits.push({
-        file,
-        line: i + 1,
-        column: (wordMatch.index ?? 0) + 1,
-        word,
-      });
+      const rawWord = wordMatch[0];
+      const wordStart = wordMatch.index ?? 0;
+      for (const partMatch of rawWord.matchAll(SUBTOKEN_PATTERN)) {
+        const part = partMatch[0];
+        if (ALLOWED_WORDS.has(part.toLowerCase())) continue;
+        if (!COMBINED_PATTERN.test(part)) continue;
+        hits.push({
+          file,
+          line: i + 1,
+          column: wordStart + (partMatch.index ?? 0) + 1,
+          word: part,
+        });
+      }
     }
   }
   return hits;

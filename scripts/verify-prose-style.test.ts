@@ -219,6 +219,47 @@ describe("findHits", () => {
       "defence",
     ]);
   });
+
+  it("flags UK forms inside camelCase identifiers", () => {
+    const hits = findHits("test.ts", "let organiseRuns = 1");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.word).toBe("organise");
+    expect(hits[0]?.column).toBe(5);
+  });
+
+  it("flags UK forms inside PascalCase identifiers", () => {
+    const hits = findHits("test.ts", "class OrganiseRunsConfig {}");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.word).toBe("Organise");
+    expect(hits[0]?.column).toBe(7);
+  });
+
+  it("flags UK forms in trailing camelCase position", () => {
+    const hits = findHits("test.ts", "function runOrganiser() {}");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.word).toBe("Organiser");
+    expect(hits[0]?.column).toBe(13);
+  });
+
+  it("does not split clean US-English camelCase identifiers", () => {
+    const hits = findHits(
+      "test.ts",
+      "const organizeRuns = (idValue: string) => idValue;",
+    );
+    expect(hits).toEqual([]);
+  });
+
+  it("flags UK forms in SCREAMING_SNAKE_CASE constants (case-insensitive)", () => {
+    const hits = findHits("test.ts", "const ORGANISATION_ID = 1");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.word).toBe("ORGANISATION");
+  });
+
+  it("handles XMLHttpRequest-style PascalCase with adjacent uppercase runs", () => {
+    // The "XML" prefix is split off cleanly; "Organise" inside still flags.
+    const hits = findHits("test.ts", "type XMLOrganiseRunner = {};");
+    expect(hits.map((h) => h.word)).toEqual(["Organise"]);
+  });
 });
 
 describe("runCli", () => {
