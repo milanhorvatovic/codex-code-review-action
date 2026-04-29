@@ -98,26 +98,26 @@ describe("parseVersion", () => {
 describe("findSection", () => {
   it("finds a section between two others", () => {
     const result = findSection(sampleChangelog, "2.0.0");
-    expect(result.startLine).toBe(10);
-    expect(result.endLine).toBe(21);
+    expect(result.startIndex).toBe(10);
+    expect(result.endIndex).toBe(21);
   });
 
   it("finds the first section in the file", () => {
     const result = findSection(sampleChangelog, "2.1.0-rc.1");
-    expect(result.startLine).toBe(4);
-    expect(result.endLine).toBe(10);
+    expect(result.startIndex).toBe(4);
+    expect(result.endIndex).toBe(10);
   });
 
   it("finds the last section, ending at EOF", () => {
     const result = findSection(sampleChangelog, "1.0.0");
-    expect(result.startLine).toBe(21);
-    expect(result.endLine).toBe(sampleChangelog.split("\n").length);
+    expect(result.startIndex).toBe(21);
+    expect(result.endIndex).toBe(sampleChangelog.split("\n").length);
   });
 
   it("matches a heading without a date suffix", () => {
     const changelog = ["## [3.0.0]", "", "- entry", ""].join("\n");
     const result = findSection(changelog, "3.0.0");
-    expect(result.startLine).toBe(0);
+    expect(result.startIndex).toBe(0);
   });
 
   it("does not match a longer version prefix", () => {

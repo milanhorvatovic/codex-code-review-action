@@ -44,7 +44,7 @@ export function parseVersion(input: string): string {
 export function findSection(
   changelog: string,
   version: string,
-): { startLine: number; endLine: number } {
+): { startIndex: number; endIndex: number } {
   const lines = changelog.split("\n");
   const headingPrefix = `## [${version}]`;
   const matches: number[] = [];
@@ -65,24 +65,24 @@ export function findSection(
       `Multiple ## [${version}] headings at lines ${lineNumbers}`,
     );
   }
-  const startLine = matches[0] ?? 0;
-  let endLine = lines.length;
-  for (let i = startLine + 1; i < lines.length; i++) {
+  const startIndex = matches[0] ?? 0;
+  let endIndex = lines.length;
+  for (let i = startIndex + 1; i < lines.length; i++) {
     if (lines[i]?.startsWith("## [")) {
-      endLine = i;
+      endIndex = i;
       break;
     }
   }
-  return { startLine, endLine };
+  return { startIndex, endIndex };
 }
 
 export function extractSectionContent(
   changelog: string,
   version: string,
 ): string {
-  const { startLine, endLine } = findSection(changelog, version);
+  const { startIndex, endIndex } = findSection(changelog, version);
   const lines = changelog.split("\n");
-  const body = lines.slice(startLine + 1, endLine);
+  const body = lines.slice(startIndex + 1, endIndex);
   let start = 0;
   let end = body.length;
   while (start < end && (body[start] ?? "").trim() === "") start++;
