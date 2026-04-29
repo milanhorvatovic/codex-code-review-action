@@ -52,8 +52,10 @@ describe("parseVersion", () => {
     expect(parseVersion(input)).toBe(input);
   });
 
-  it("rejects the literal Unreleased", () => {
-    expect(() => parseVersion("Unreleased")).toThrow(/Refusing to extract/);
+  it("rejects the literal Unreleased and names it in the error", () => {
+    expect(() => parseVersion("Unreleased")).toThrow(
+      /Refusing to extract the Unreleased section/,
+    );
   });
 
   it("rejects a leading v", () => {
