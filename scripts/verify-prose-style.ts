@@ -10,40 +10,51 @@ export type Hit = {
   match: string;
 };
 
-// UK substrings. When found inside a word, the entire word is reported as UK English
-// unless the word is in ALLOWED_WORDS. Matching is case-insensitive.
+// Regex source strings, each matching a complete UK English word (the
+// `COMBINED_PATTERN` below anchors them with `^...$`). Anchored matching
+// eliminates the class of false positives where a UK `-ise` verb stem appears
+// inside a correct US English noun (e.g. "criticism" contains "criticis";
+// "organism" contains "organis"; "programmer" contains "programme") — those
+// nouns simply do not match the verb-form alternatives listed here.
 export const UK_PATTERNS: readonly string[] = [
-  "behaviour",
-  "colour",
-  "favour",
-  "honour",
-  "labour",
-  "neighbour",
-  "harbour",
-  "humour",
-  "rumour",
-  "vapour",
-  "savour",
+  // -our (UK) → -or (US)
+  "behaviour(?:s|al|ally|ism|ist|ists)?",
+  "colour(?:s|ed|ing|ful|fully|less|ist|ists)?",
+  "favour(?:s|ed|ing|able|ably|ite|ites|itism)?",
+  "honour(?:s|ed|ing|able|ably)?",
+  "labour(?:s|ed|ing|er|ers|ite|ites)?",
+  "neighbour(?:s|ly|hood|hoods|ing|ed)?",
+  "harbour(?:s|ed|ing)?",
+  "humour(?:s|ed|ing|ist|ists|less)?",
+  "rumour(?:s|ed|ing)?",
+  "vapour(?:s|ed|ing|ish|y)?",
+  "savour(?:s|ed|ing|y|ies)?",
   "valour",
-  "vigour",
-  "armour",
-  "endeavour",
-  "flavour",
-  "splendour",
-  "demeanour",
-  "defence",
-  "offence",
-  "pretence",
-  "licence",
-  "practise",
+  "vigour(?:s)?",
+  "armour(?:s|ed|ing|y|er|ers)?",
+  "endeavour(?:s|ed|ing)?",
+  "flavour(?:s|ed|ing|ful|fully|less|some|ist|ists)?",
+  "splendour(?:s)?",
+  "demeanour(?:s)?",
+
+  // -ce (UK noun) → -se (US)
+  "defence(?:s|less|lessness)?",
+  "offence(?:s|less)?",
+  "pretence(?:s)?",
+  "licence(?:s|d)?",
+  "practise(?:s|d|ing)?",
+
+  // standalone UK words and inflections
   "whilst",
   "amongst",
   "amidst",
-  "enquir",
-  "artefact",
+  "enquir(?:e|es|ed|ing|y|ies)",
+  "artefact(?:s|ual)?",
   "aluminium",
-  "mould",
-  "plough",
+  "mould(?:s|ed|ing|y|able)?",
+  "plough(?:s|ed|ing|man|men|share)?",
+
+  // -t past tense (UK) — single-form
   "learnt",
   "spelt",
   "dreamt",
@@ -52,68 +63,80 @@ export const UK_PATTERNS: readonly string[] = [
   "knelt",
   "smelt",
   "spilt",
+
+  // -wards (UK; US drops the trailing 's')
   "backwards",
   "forwards",
   "upwards",
   "downwards",
-  "organis",
-  "prioritis",
-  "customis",
-  "optimis",
-  "recognis",
-  "emphasis",
-  "categoris",
-  "standardis",
-  "summaris",
-  "specialis",
-  "finalis",
-  "normalis",
-  "serialis",
-  "initialis",
-  "generalis",
-  "modernis",
-  "criticis",
-  "harmonis",
-  "maximis",
-  "minimis",
-  "mobilis",
-  "neutralis",
-  "patronis",
-  "pluralis",
-  "privatis",
-  "randomis",
-  "sanitis",
-  "scrutinis",
-  "stabilis",
-  "sterilis",
-  "stigmatis",
-  "subsidis",
-  "sympathis",
-  "synchronis",
-  "systematis",
-  "theoris",
-  "utilis",
-  "visualis",
-  "incentivis",
-  "materialis",
-  "memoris",
-  "metabolis",
-  "militaris",
-  "nationalis",
-  "naturalis",
-  "personalis",
-  "polaris",
-  "rationalis",
-  "reorganis",
-  "revolutionis",
-  "sensitis",
-  "signalis",
-  "socialis",
-  "symbolis",
-  "tantalis",
-  "terroris",
-  "unionis",
-  "urbanis",
+
+  // -ise (UK) verb family — verb forms only.
+  // Crucially, these patterns do NOT match the corresponding -ism/-ist nouns
+  // ("criticism", "optimism", "specialist", "theorist", "materialism",
+  // "metabolism", "militarism", "nationalism", "naturalism", "pluralism",
+  // "rationalism", "socialism", "symbolism", "terrorism", "modernism",
+  // "astigmatism", "organism", "organist", "optimist", "finalist",
+  // "generalist", "minimist") which are correct in US English.
+  "organis(?:e|es|ed|ing|ation|ations|ational|er|ers|able)",
+  "prioritis(?:e|es|ed|ing|ation)",
+  "customis(?:e|es|ed|ing|ation|ations|able|er|ers)",
+  "optimis(?:e|es|ed|ing|ation|ations|er|ers|able)",
+  "recognis(?:e|es|ed|ing|able|ably)",
+  "emphasis(?:e|es|ed|ing)",
+  "categoris(?:e|es|ed|ing|ation|ations)",
+  "standardis(?:e|es|ed|ing|ation|ations)",
+  "summaris(?:e|es|ed|ing|ation)",
+  "specialis(?:e|es|ed|ing|ation|ations)",
+  "finalis(?:e|es|ed|ing|ation)",
+  "normalis(?:e|es|ed|ing|ation)",
+  "serialis(?:e|es|ed|ing|ation)",
+  "initialis(?:e|es|ed|ing|ation)",
+  "generalis(?:e|es|ed|ing|ation|ations)",
+  "modernis(?:e|es|ed|ing|ation)",
+  "criticis(?:e|es|ed|ing|able)",
+  "harmonis(?:e|es|ed|ing|ation)",
+  "maximis(?:e|es|ed|ing|ation)",
+  "minimis(?:e|es|ed|ing|ation)",
+  "mobilis(?:e|es|ed|ing|ation)",
+  "neutralis(?:e|es|ed|ing|ation|er|ers)",
+  "patronis(?:e|es|ed|ing|ingly)",
+  "pluralis(?:e|es|ed|ing|ation)",
+  "privatis(?:e|es|ed|ing|ation)",
+  "randomis(?:e|es|ed|ing|ation)",
+  "sanitis(?:e|es|ed|ing|ation|er|ers)",
+  "scrutinis(?:e|es|ed|ing)",
+  "stabilis(?:e|es|ed|ing|ation|er|ers)",
+  "sterilis(?:e|es|ed|ing|ation|er|ers)",
+  "stigmatis(?:e|es|ed|ing|ation)",
+  "subsidis(?:e|es|ed|ing|ation)",
+  "sympathis(?:e|es|ed|ing|er|ers)",
+  "synchronis(?:e|es|ed|ing|ation)",
+  "systematis(?:e|es|ed|ing|ation)",
+  "theoris(?:e|es|ed|ing)",
+  "utilis(?:e|es|ed|ing|ation|er|ers)",
+  "visualis(?:e|es|ed|ing|ation)",
+  "incentivis(?:e|es|ed|ing)",
+  "materialis(?:e|es|ed|ing|ation)",
+  "memoris(?:e|es|ed|ing)",
+  "metabolis(?:e|es|ed|ing)",
+  "militaris(?:e|es|ed|ing|ation)",
+  "nationalis(?:e|es|ed|ing|ation)",
+  "naturalis(?:e|es|ed|ing|ation)",
+  "personalis(?:e|es|ed|ing|ation)",
+  "polaris(?:e|es|ed|ing|ation)",
+  "rationalis(?:e|es|ed|ing|ation)",
+  "reorganis(?:e|es|ed|ing|ation|ations)",
+  "revolutionis(?:e|es|ed|ing)",
+  "sensitis(?:e|es|ed|ing)",
+  "signalis(?:e|es|ed|ing)",
+  "socialis(?:e|es|ed|ing|ation)",
+  "symbolis(?:e|es|ed|ing)",
+  "tantalis(?:e|es|ed|ing|ingly)",
+  "terroris(?:e|es|ed|ing)",
+  "unionis(?:e|es|ed|ing|ation)",
+  "urbanis(?:e|es|ed|ing|ation)",
+
+  // doubled-consonant verb forms (UK; US drops one consonant)
   "labelling",
   "labelled",
   "cancelling",
@@ -132,42 +155,41 @@ export const UK_PATTERNS: readonly string[] = [
   "totalled",
   "focussed",
   "focussing",
-  "programme",
-  "judgement",
-  "acknowledgement",
-  "tyre",
-  "kerb",
-  "cheque",
-  "enrolment",
-  "fulfilment",
-  "instalment",
-  "skilful",
-  "wilful",
-  "centre",
-  "fibre",
-  "theatre",
-  "calibre",
+
+  // -re (UK) → -er (US)
+  "centre(?:s|d|piece|pieces|line|lines|fold|folds)?",
+  "fibre(?:s|board|glass|optic)?",
+  "theatre(?:s|goer|goers|going)?",
+  "calibre(?:s)?",
+
+  // -mme / -gement / other UK-only.
+  // "programme(?:s)?" matches the UK noun and its plural only — NOT
+  // "programmer", "programmers", "programmed", or "programming", all of which
+  // are correct in US English (and in UK English, in the verb sense).
+  "programme(?:s)?",
+  "judgement(?:s|al)?",
+  "acknowledgement(?:s)?",
+  "tyre(?:s|d)?",
+  "kerb(?:s|ed|ing|side|stone|stones)?",
+  "cheque(?:s|book|books)?",
+  "enrolment(?:s)?",
+  "fulfilment(?:s)?",
+  "instalment(?:s)?",
+  "skilful(?:ly|ness)?",
+  "wilful(?:ly|ness)?",
 ];
 
-// Full words that legitimately contain a UK substring. Keys are lowercase.
-// Real US English words: "organism"/"organist" contain "organis"; "optimist"
-// contains "optimis". External identifiers (npm package names) keep their
-// original spelling.
-export const ALLOWED_WORDS: ReadonlySet<string> = new Set([
-  "minimist",
-  "optimist",
-  "optimistic",
-  "optimistically",
-  "optimists",
-  "organism",
-  "organisms",
-  "organist",
-  "organists",
-]);
+// Reserved for proper nouns and external identifiers whose canonical spelling
+// is the UK form (e.g. "Labour" the political party, "Polaris" the star).
+// Empty by default — the anchored regex matching in UK_PATTERNS already
+// excludes shared US English nouns like "organism", "optimist", and
+// "minimist" without needing them listed here. Add lowercased entries if a
+// proper noun later appears in repository prose.
+export const ALLOWED_WORDS: ReadonlySet<string> = new Set<string>([]);
 
 // Paths excluded from scanning.
-// - package-lock.json: machine-generated; npm package names ("minimist") are noise.
-// - this script and its test: contain UK substrings as data, not prose.
+// - package-lock.json: machine-generated; npm package names are noise.
+// - this script and its test: contain UK regex sources as data, not prose.
 export const EXCLUDE_PATHS: ReadonlySet<string> = new Set([
   "package-lock.json",
   "scripts/verify-prose-style.test.ts",
@@ -193,7 +215,10 @@ export const FILE_PATTERNS: readonly string[] = [
 // `LICENSE` is a verbatim third-party text and is deliberately not included.
 export const EXTRA_FILES: readonly string[] = [".github/CODEOWNERS"];
 
-const COMBINED_PATTERN = new RegExp(`(${UK_PATTERNS.join("|")})`, "i");
+const COMBINED_PATTERN = new RegExp(
+  `^(?:${UK_PATTERNS.join("|")})$`,
+  "i",
+);
 const WORD_PATTERN = /[A-Za-z][A-Za-z'-]*/g;
 
 export function findHits(file: string, content: string): Hit[] {
@@ -204,14 +229,13 @@ export function findHits(file: string, content: string): Hit[] {
     for (const wordMatch of line.matchAll(WORD_PATTERN)) {
       const word = wordMatch[0];
       if (ALLOWED_WORDS.has(word.toLowerCase())) continue;
-      const ukMatch = COMBINED_PATTERN.exec(word);
-      if (!ukMatch) continue;
+      if (!COMBINED_PATTERN.test(word)) continue;
       hits.push({
         file,
         line: i + 1,
         column: (wordMatch.index ?? 0) + 1,
         word,
-        match: ukMatch[1] ?? ukMatch[0],
+        match: word,
       });
     }
   }
@@ -255,7 +279,7 @@ export function runCli(deps: RunCliDeps = {}): number {
     const content = readSource(file);
     for (const hit of findHits(file, content)) {
       writeErr(
-        `${hit.file}:${hit.line}:${hit.column}: UK English "${hit.word}" (matched "${hit.match}")\n`,
+        `${hit.file}:${hit.line}:${hit.column}: UK English "${hit.word}"\n`,
       );
       total++;
     }

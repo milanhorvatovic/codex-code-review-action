@@ -70,7 +70,7 @@ New code should include tests. Aim to maintain or improve coverage.
 
 ## Documentation tone and style
 
-Applies to all prose in the repository: `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, files under `.github/`, and the default review prompts under `defaults/`. Source-code identifiers (variable, function, and file names) are out of scope — only natural-language prose.
+Applies to every text-bearing file tracked by git — Markdown (`README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `defaults/*.md`, files under `.github/`), YAML, TypeScript, JSON, and the other extensions listed in `FILE_PATTERNS` at the top of `scripts/verify-prose-style.ts`. The verifier (and CI) scans prose, code comments, string literals, and identifiers alike; in practice this codebase already uses US conventions for identifiers, so the rule and the verifier agree. If a UK-spelled identifier ever lands here, treat it the same as drift in prose — rename it.
 
 - **Language.** Use US English spellings (e.g. `organization`, `behavior`, `prioritize`, `canceling`, `defense`, `neutralization`, `labeling`, `analyze`). Verbatim quotes of external UI labels, third-party documentation, or external proper nouns may keep their original spelling; when the exception isn't obvious from context, note it inline.
 - **Tone.** Write neutrally and precisely. Describe behavior in terms of inputs, outputs, trust boundaries, and concrete examples — not customer or vendor names, internal personas, or marketing language. Avoid company-specific references unless the context (a quoted GitHub setting, an upstream Action repository, etc.) requires the exact name.
@@ -84,7 +84,7 @@ To audit the repository for drift, run:
 npm run verify:prose-style
 ```
 
-This invokes `scripts/verify-prose-style.ts`, which scans every text-bearing file tracked by git, reports any UK English form with `file:line:column` precision, and exits non-zero on drift. The same script runs in CI on every pull request and push to `main` via [`.github/workflows/verify-prose-style.yaml`](.github/workflows/verify-prose-style.yaml). When a real US English word legitimately contains a UK English substring (e.g. `optimist`, `organism`) or an external identifier collides (e.g. the `minimist` npm package), add the word to the `ALLOWED_WORDS` set at the top of the script and add a test case in `scripts/verify-prose-style.test.ts`. To extend coverage to a new UK form, add it to `UK_PATTERNS` in the same file.
+This invokes `scripts/verify-prose-style.ts`, which scans every text-bearing tracked file, reports any UK English form with `file:line:column` precision, and exits non-zero on drift. The same script runs in CI on every pull request and push to `main` via [`.github/workflows/verify-prose-style.yaml`](.github/workflows/verify-prose-style.yaml). Each `UK_PATTERNS` entry is an anchored regex matching a complete UK word (e.g. `organis(?:e|es|ed|ing|ation|ations|ational|er|ers|able)`), so US English nouns that share a UK verb stem — `criticism`, `optimism`, `terrorism`, `organism`, `programmer`, `programmed`, `emphasis`, and so on — are not flagged. When a new UK form needs coverage, add an anchored pattern to `UK_PATTERNS` and a test case in `scripts/verify-prose-style.test.ts`. The `ALLOWED_WORDS` set is reserved for proper nouns whose canonical spelling collides with a UK English word (brand, party, or place names); add lowercased entries when one appears in repository prose.
 
 ## Trust-boundary changes
 

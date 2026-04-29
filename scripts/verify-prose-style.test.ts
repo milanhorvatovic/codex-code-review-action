@@ -45,17 +45,88 @@ describe("findHits", () => {
     ]);
   });
 
-  it("skips ALLOWED_WORDS (real US words and external identifiers)", () => {
+  it("does not flag US English nouns that share a UK verb stem", () => {
+    // -ism / -ist nouns that are correct in US English. Each shares a stem with
+    // a UK -ise verb in UK_PATTERNS but does not match the verb-form regex
+    // because the noun suffix is not in the alternation list.
+    const text = [
+      "criticism",
+      "criticisms",
+      "optimism",
+      "optimist",
+      "optimists",
+      "specialist",
+      "specialists",
+      "finalist",
+      "finalists",
+      "generalist",
+      "generalists",
+      "modernism",
+      "modernist",
+      "modernists",
+      "pluralism",
+      "pluralist",
+      "pluralists",
+      "astigmatism",
+      "theorist",
+      "theorists",
+      "materialism",
+      "materialist",
+      "metabolism",
+      "militarism",
+      "militarist",
+      "nationalism",
+      "nationalist",
+      "naturalism",
+      "naturalist",
+      "rationalism",
+      "rationalist",
+      "socialism",
+      "socialist",
+      "symbolism",
+      "symbolist",
+      "terrorism",
+      "terrorist",
+      "organism",
+      "organisms",
+      "organist",
+      "organists",
+      "minimist",
+      "emphasis",
+      "emphases",
+    ].join(" ");
+    expect(findHits("test.md", text)).toEqual([]);
+  });
+
+  it("does not flag 'programmer', 'programmers', 'programmed', or 'programming'", () => {
+    // The UK noun is "programme" (and plural "programmes"); the verb forms
+    // "programmed", "programming", "programmer", "programmers" are correct in
+    // both dialects and must not match.
     const hits = findHits(
       "test.md",
-      "an organism, an organist, an optimist, the minimist package",
+      "the programmer programmed the programming language; programmers everywhere",
     );
     expect(hits).toEqual([]);
   });
 
-  it("skips ALLOWED_WORDS case-insensitively", () => {
-    const hits = findHits("test.md", "An Organism is a living thing");
-    expect(hits).toEqual([]);
+  it("flags the UK noun 'programme' and its plural", () => {
+    const hits = findHits(
+      "test.md",
+      "the TV programme had two programmes scheduled",
+    );
+    expect(hits.map((h) => h.word)).toEqual(["programme", "programmes"]);
+  });
+
+  it("flags UK -ise verb forms while leaving US English nouns alone", () => {
+    const hits = findHits(
+      "test.md",
+      "We organise around criticism, but we organised the criticisms; emphasising the emphasis matters",
+    );
+    expect(hits.map((h) => h.word)).toEqual([
+      "organise",
+      "organised",
+      "emphasising",
+    ]);
   });
 
   it("returns empty for clean US English text", () => {
@@ -68,11 +139,6 @@ describe("findHits", () => {
 
   it("returns empty for empty content", () => {
     expect(findHits("empty.md", "")).toEqual([]);
-  });
-
-  it("captures the matched UK substring on the hit", () => {
-    const hits = findHits("test.md", "the colour");
-    expect(hits[0]?.match.toLowerCase()).toBe("colour");
   });
 
   it("flags doubled-consonant verb forms", () => {
@@ -103,6 +169,12 @@ describe("findHits", () => {
       "fibre",
       "calibre",
     ]);
+  });
+
+  it("matches case-insensitively", () => {
+    const hits = findHits("test.md", "the Organisation publishes");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.word).toBe("Organisation");
   });
 });
 
