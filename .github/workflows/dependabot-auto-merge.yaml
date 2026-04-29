@@ -145,20 +145,31 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVE_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+        # This step is intentionally fail-open: any failure (missing token, revoked PAT,
+        # insufficient PAT scope, transient GitHub API error, malformed response) emits a
+        # warning and exits 0. `set -e` is deliberately *not* enabled — a hard failure here
+        # would cause GitHub Actions to skip the subsequent auto-merge enable step, which
+        # would degrade behavior worse than the prior state (no approval AND no auto-merge).
+        # The intended fallback is: the PR waits for manual review with auto-merge already
+        # enabled, which matches the prior behavior.
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "::warning::DEPENDABOT_APPROVE_TOKEN is not set — skipping auto-approval. The PR will require manual review before auto-merge can complete. Configure a fine-grained PAT scoped to this repo (Pull requests: write) belonging to a code-owner and store it under Settings → Secrets and variables → Dependabot → DEPENDABOT_APPROVE_TOKEN."
             exit 0
           fi
-          has_trust_boundary() {
-            gh pr view "$PR_URL" --json labels --jq 'any(.labels[]; .name == "trust-boundary")'
-          }
-          if [ "$(has_trust_boundary)" = "true" ]; then
+          if ! label_state=$(gh pr view "$PR_URL" --json labels --jq 'any(.labels[]; .name == "trust-boundary")'); then
+            echo "::warning::Failed to query trust-boundary label state; skipping auto-approval. Auto-merge will still be attempted; the PR will wait for manual review if approval cannot be posted."
+            exit 0
+          fi
+          if [ "$label_state" = "true" ]; then
             echo "trust-boundary label is now present (applied after workflow start); skipping auto-approval."
             exit 0
           fi
-          gh pr review --approve --body "Auto-approved by the Dependabot Auto-Merge workflow (non-major, non-trust-boundary update)." "$PR_URL"
+          if ! gh pr review --approve --body "Auto-approved by the Dependabot Auto-Merge workflow (non-major, non-trust-boundary update)." "$PR_URL"; then
+            echo "::warning::Failed to post auto-approval review (likely a revoked or insufficiently-scoped DEPENDABOT_APPROVE_TOKEN, or a transient GitHub API error). Auto-merge will still be enabled; the PR will wait for manual review."
+            exit 0
+          fi
 
       - name: Auto-merge patch and minor updates
         if: >-
