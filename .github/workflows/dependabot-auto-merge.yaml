@@ -128,6 +128,38 @@ jobs:
       # The `if:` clauses below evaluate against the event payload captured at workflow start.
       # That payload can be stale by the time this step runs (label applied during the run).
       # The runtime checks inside `run:` close that TOCTOU race — see the comments there.
+      #
+      # Auto-approval runs before auto-merge enable so that, by the time auto-merge fires,
+      # the required code-owner review is already in place. The repo's branch ruleset on
+      # `main` requires one approving review with code-owner approval, and `GITHUB_TOKEN`
+      # cannot approve PRs (Dependabot also cannot approve its own). A separately-issued
+      # PAT belonging to a code-owner is required and must be stored as a *Dependabot*
+      # secret (workflows triggered by Dependabot do not have access to Actions secrets).
+      # When the secret is unset, the step warns and skips — auto-merge is still enabled
+      # and the PR waits for manual approval, matching the prior behaviour.
+      - name: Approve PR (so required-review check passes)
+        if: >-
+          steps.metadata.outputs.update-type != 'version-update:semver-major'
+          && !contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')
+          && !contains(github.event.pull_request.labels.*.name, 'trust-boundary')
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_APPROVE_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::DEPENDABOT_APPROVE_TOKEN is not set — skipping auto-approval. The PR will require manual review before auto-merge can complete. Configure a fine-grained PAT scoped to this repo (Pull requests: write) belonging to a code-owner and store it under Settings → Secrets and variables → Dependabot → DEPENDABOT_APPROVE_TOKEN."
+            exit 0
+          fi
+          has_trust_boundary() {
+            gh pr view "$PR_URL" --json labels --jq 'any(.labels[]; .name == "trust-boundary")'
+          }
+          if [ "$(has_trust_boundary)" = "true" ]; then
+            echo "trust-boundary label is now present (applied after workflow start); skipping auto-approval."
+            exit 0
+          fi
+          gh pr review --approve --body "Auto-approved by the Dependabot Auto-Merge workflow (non-major, non-trust-boundary update)." "$PR_URL"
+
       - name: Auto-merge patch and minor updates
         if: >-
           steps.metadata.outputs.update-type != 'version-update:semver-major'
@@ -163,6 +195,12 @@ jobs:
   # prevents re-enabling — it does not revoke a previously-enabled auto-merge. This job runs on
   # the `labeled` pull_request event and explicitly disables auto-merge so the PR stays open
   # for manual maintainer review and merging.
+  #
+  # A previously-posted auto-approval review (from the approve step above) is intentionally
+  # left in place. Disabling auto-merge is sufficient to stop the automatic merge; the
+  # ruleset's `dismiss_stale_reviews_on_push: true` will clear the bot review on the next push,
+  # and the maintainer who applied the label can dismiss it manually if they want a clean
+  # review state before re-evaluating.
   disable-auto-merge-on-trust-boundary:
     if: >-
       github.event.action == 'labeled' &&
