@@ -26,6 +26,7 @@ npm install
 | `npm run test:watch` | Run tests in watch mode |
 | `npm test -- --coverage` | Run tests with coverage report |
 | `npm run verify:doc-pins` | Verify Markdown references match the canonical third-party Action pins in YAML (also runs in CI) |
+| `npm run verify:prose-style` | Verify all prose uses US English (also runs in CI) |
 
 ## Committing dist/
 
@@ -80,13 +81,10 @@ Applies to all prose in the repository: `README.md`, `CONTRIBUTING.md`, `CHANGEL
 To audit the repository for drift, run:
 
 ```bash
-grep -rniE '(behaviour|colour|favour|honour|labour|neighbour|harbour|humour|rumour|vapour|savour|valour|vigour|armour|endeavour|flavour|splendour|demeanour|defence|offence|pretence|licence|practise|whilst|amongst|amidst|enquir|artefact|aluminium|mould|plough|learnt|spelt|dreamt|burnt|leapt|knelt|smelt|spilt|backwards|forwards|upwards|downwards|organis|prioritis|customis|optimis|recognis|emphasis|categoris|standardis|summaris|specialis|finalis|normalis|serialis|initialis|generalis|modernis|criticis|harmonis|maximis|minimis|mobilis|neutralis|patronis|pluralis|privatis|randomis|sanitis|scrutinis|stabilis|sterilis|stigmatis|subsidis|sympathis|synchronis|systematis|theoris|utilis|visualis|incentivis|materialis|memoris|metabolis|militaris|nationalis|naturalis|personalis|polaris|rationalis|reorganis|revolutionis|sensitis|signalis|socialis|symbolis|tantalis|terroris|unionis|urbanis|labelling|labelled|cancelling|cancelled|travelling|travelled|modelling|modelled|signalling|signalled|fuelling|fuelled|levelling|levelled|totalling|totalled|focussed|focussing|programme|judgement|acknowledgement|tyre|kerb|cheque|enrolment|fulfilment|instalment|skilful|wilful|centre|fibre|theatre|calibre)' . \
-  --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=coverage --exclude-dir=.git \
-  --exclude=package-lock.json \
-  | grep -viE '(\banalysis\b|\brealistic\b|## Code analysis|CodeQL.*Analysis|\bminimist\b)'
+npm run verify:prose-style
 ```
 
-The only expected match is the audit pattern itself in `CONTRIBUTING.md` (it has to contain the words it searches for). The trailing `grep -v` strips the documented false positives — `analysis` and `realistic` (correct US English), the CodeQL job name, and the `minimist` npm package — without dropping the underlying substrings from the search, so real coverage is preserved. Update the exclusion list when a new external identifier or file collides with the pattern.
+This invokes `scripts/verify-prose-style.ts`, which scans every text-bearing file tracked by git, reports any UK English form with `file:line:column` precision, and exits non-zero on drift. The same script runs in CI on every pull request and push to `main` via [`.github/workflows/verify-prose-style.yaml`](.github/workflows/verify-prose-style.yaml). When a real US English word legitimately contains a UK English substring (e.g. `optimist`, `organism`) or an external identifier collides (e.g. the `minimist` npm package), add the word to the `ALLOWED_WORDS` set at the top of the script and add a test case in `scripts/verify-prose-style.test.ts`. To extend coverage to a new UK form, add it to `UK_PATTERNS` in the same file.
 
 ## Trust-boundary changes
 

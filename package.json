@@ -39,7 +39,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
-    "verify:doc-pins": "tsx scripts/verify-doc-pins.ts"
+    "verify:doc-pins": "tsx scripts/verify-doc-pins.ts",
+    "verify:prose-style": "tsx scripts/verify-prose-style.ts"
   },
   "version": "2.0.0"
 }
