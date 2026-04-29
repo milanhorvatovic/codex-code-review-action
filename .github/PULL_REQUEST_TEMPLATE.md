@@ -20,6 +20,20 @@
 
 None.
 
+## Release label
+
+<!--
+  Apply exactly one of:
+
+  - `release: major` — major version bump (breaking change)
+  - `release: minor` — minor version bump (new feature)
+  - `release: patch` — patch version bump (fix or documentation only)
+  - `release: skip`  — excluded from the next release (chore, infra, internal-only, release-prep)
+
+  The required check `verify-pr-release-label` enforces exactly one.
+  Dependabot PRs auto-carry `release: patch`.
+-->
+
 ## Test plan
 
 - [ ] `npm run lint`
