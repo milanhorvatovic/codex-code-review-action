@@ -179,4 +179,28 @@ describe("runCli", () => {
     expect(out).toContain("one.md:");
     expect(out).toContain("two.md:");
   });
+
+  it("includes EXTRA_FILES (e.g. CODEOWNERS) and dedupes against FILE_PATTERNS", () => {
+    const errs: string[] = [];
+    const calls: string[][] = [];
+    const exit = runCli({
+      gitLsFiles: (...patterns: string[]) => {
+        calls.push(patterns);
+        if (patterns.includes(".github/CODEOWNERS")) {
+          return [".github/CODEOWNERS"];
+        }
+        return ["clean.md"];
+      },
+      readSource: (p) =>
+        p === ".github/CODEOWNERS" ? "# the colour" : "clean prose",
+      stderrWrite: (c) => {
+        errs.push(c);
+      },
+    });
+    expect(exit).toBe(1);
+    expect(errs.join("")).toContain(".github/CODEOWNERS:");
+    expect(calls.some((args) => args.includes(".github/CODEOWNERS"))).toBe(
+      true,
+    );
+  });
 });

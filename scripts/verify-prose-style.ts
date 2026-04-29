@@ -176,7 +176,9 @@ export const EXCLUDE_PATHS: ReadonlySet<string> = new Set([
 
 // Glob patterns for `git ls-files`. Covers every text-bearing file type tracked
 // in the repository. JSON config files (`package.json`, `tsconfig.json`) carry
-// occasional prose in `description` fields and are worth auditing too.
+// occasional prose in `description` fields and are worth auditing too. `.js` is
+// intentionally omitted: the only tracked `*.js` files are bundled artifacts in
+// `dist/`, derived from `.ts` source which is already audited.
 export const FILE_PATTERNS: readonly string[] = [
   "*.json",
   "*.md",
@@ -186,6 +188,10 @@ export const FILE_PATTERNS: readonly string[] = [
   "*.ts",
   "*.yaml",
 ];
+
+// Extensionless prose-bearing files that the FILE_PATTERNS globs cannot reach.
+// `LICENSE` is a verbatim third-party text and is deliberately not included.
+export const EXTRA_FILES: readonly string[] = [".github/CODEOWNERS"];
 
 const COMBINED_PATTERN = new RegExp(`(${UK_PATTERNS.join("|")})`, "i");
 const WORD_PATTERN = /[A-Za-z][A-Za-z'-]*/g;
@@ -238,7 +244,11 @@ export function runCli(deps: RunCliDeps = {}): number {
   const readSource = deps.readSource ?? defaultReadSource;
   const writeErr = deps.stderrWrite ?? defaultStderrWrite;
 
-  const files = lsFiles(...FILE_PATTERNS).filter((p) => !EXCLUDE_PATHS.has(p));
+  const tracked = new Set([
+    ...lsFiles(...FILE_PATTERNS),
+    ...lsFiles(...EXTRA_FILES),
+  ]);
+  const files = [...tracked].filter((p) => !EXCLUDE_PATHS.has(p)).sort();
 
   let total = 0;
   for (const file of files) {
