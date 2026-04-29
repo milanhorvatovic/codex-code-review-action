@@ -25,6 +25,7 @@ npm install
 | `npm test` | Run tests once (CI mode) |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm test -- --coverage` | Run tests with coverage report |
+| `npm run verify:doc-pins` | Verify Markdown references match the canonical third-party Action pins in YAML (also runs in CI) |
 
 ## Committing dist/
 
@@ -113,7 +114,7 @@ All three coexist intentionally. The exclude list is the declarative defense (fa
 
      Applies to releases cut after this section lands; historical entries are not rewritten.
 3. Rebuild dist: `npm run build`
-   - **3b. Sync cross-doc SHA and version references.** When the canonical pin in `action.yaml`, `prepare/action.yaml`, `publish/action.yaml`, or `review/action.yaml` changes — or when any release bumps a third-party Action — update every other reference to that pin in the same release: `README.md` (including the "Adopting in enterprise environments" section), examples, and any other docs. The unified-pins rule (one SHA + tag per third-party Action across the entire repo) is enforced at release time. The SHA-pinning half (every `uses:` resolves to a full commit SHA) is also CI-enforced on every PR and push to `main` by `.github/workflows/verify-action-pins.yaml`, so a floating tag like `@v4` slipping into a workflow or composite action will fail required checks. The cross-doc half (Markdown references match the canonical pin in the YAML) is still a manual grep before tagging — automating that sweep is tracked in the remaining scope of [#68](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/68).
+   - **3b. Sync cross-doc SHA and version references.** When the canonical pin in `action.yaml`, `prepare/action.yaml`, `publish/action.yaml`, or `review/action.yaml` changes — or when any release bumps a third-party Action — update every other reference to that pin in the same release: `README.md` (including the "Adopting in enterprise environments" section), examples, and any other docs. The unified-pins rule (one SHA + tag per third-party Action across the entire repo) is enforced by CI on every PR and push to `main` by `.github/workflows/verify-action-pins.yaml`. The `ratchet-lint` job rejects any `uses:` that is not pinned to a full commit SHA, and the `verify-doc-pins` job (running `npm run verify:doc-pins`) fails when any tracked Markdown file references a third-party Action with a SHA or tag that drifts from the canonical pin in YAML. If either job fails, fix the listed files; do not bypass the check. The release-time sweep is now "verify CI passes" rather than a manual grep.
 4. Commit and merge to `main`
 5. Tag and push the release: `git tag vx.y.z && git push origin vx.y.z`
 6. The release workflow automatically creates a GitHub Release, generates release notes, and updates the major version tag (e.g. `v1`)
