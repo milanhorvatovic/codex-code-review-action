@@ -147,12 +147,18 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
         # This step is intentionally fail-open: any failure (missing token, revoked PAT,
         # insufficient PAT scope, transient GitHub API error, malformed response) emits a
-        # warning and exits 0. `set -e` is deliberately *not* enabled — a hard failure here
-        # would cause GitHub Actions to skip the subsequent auto-merge enable step, which
-        # would degrade behavior worse than the prior state (no approval AND no auto-merge).
-        # The intended fallback is: the PR waits for manual review with auto-merge already
-        # enabled, which matches the prior behavior.
+        # warning and exits 0. A hard failure here would cause GitHub Actions to skip the
+        # subsequent auto-merge enable step, which would degrade behavior worse than the
+        # prior state (no approval AND no auto-merge). The fallback is: the PR waits for
+        # manual review with auto-merge already enabled, matching the prior behavior.
+        #
+        # GitHub Actions invokes the default bash shell as `bash --noprofile --norc -eo
+        # pipefail {0}`, so errexit is on by default. We explicitly disable it (`set +e`)
+        # because future edits could add an unwrapped `gh` call and silently regress the
+        # fail-open invariant. Every external command below is independently guarded with
+        # `if !` and emits a warning before `exit 0`; preserve that pattern when extending.
         run: |
+          set +e
           set -uo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "::warning::DEPENDABOT_APPROVE_TOKEN is not set — skipping auto-approval. The PR will require manual review before auto-merge can complete. Configure a fine-grained PAT scoped to this repo (Pull requests: write) belonging to a code-owner and store it under Settings → Secrets and variables → Dependabot → DEPENDABOT_APPROVE_TOKEN."
