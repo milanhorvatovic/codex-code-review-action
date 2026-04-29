@@ -12,6 +12,7 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+      - "release: patch"
     schedule:
       day: "monday"
       interval: "weekly"
@@ -29,6 +30,7 @@ updates:
     labels:
       - "dependencies"
       - "npm"
+      - "release: patch"
     schedule:
       day: "monday"
       interval: "weekly"
