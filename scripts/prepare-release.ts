@@ -398,13 +398,15 @@ function listReleases(runGh: GhRunner): ReleaseRow[] {
 }
 
 function listExistingTags(runGit: GitRunner): Set<string> {
-  const raw = runGit(["tag", "--list"]);
-  return new Set(
-    raw
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0),
-  );
+  const raw = runGit(["ls-remote", "--tags", "origin"]);
+  const tags = new Set<string>();
+  for (const line of raw.split("\n")) {
+    const ref = line.trim().split(/\s+/)[1];
+    if (ref === undefined) continue;
+    const name = ref.replace(/^refs\/tags\//, "").replace(/\^\{\}$/, "");
+    if (name !== "" && name !== ref) tags.add(name);
+  }
+  return tags;
 }
 
 function listMergedPrs(runGh: GhRunner, sincePublishedAt: string | undefined): PullRequest[] {
@@ -482,7 +484,15 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     }
 
     const packageJson = readFile("package.json");
-    const currentVersion = (JSON.parse(packageJson) as { version: string }).version;
+    const parsedPackageJson = JSON.parse(packageJson) as Record<string, unknown>;
+    const rawCurrentVersion = parsedPackageJson.version;
+    if (typeof rawCurrentVersion !== "string" || rawCurrentVersion === "") {
+      throw new Error(
+        "package.json is missing a string 'version' field; cannot compute the next release version.",
+      );
+    }
+    parseVersion(rawCurrentVersion);
+    const currentVersion = rawCurrentVersion;
     const targetVersion = resolveTargetVersion({
       explicit,
       currentVersion,
@@ -509,13 +519,14 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       ? `${botUserId}+${botLogin}@users.noreply.github.com`
       : `${botLogin}@users.noreply.github.com`;
 
-    runGit(["fetch", "origin", "--tags"]);
     const remoteRef = runGit(["ls-remote", "--heads", "origin", branch]).trim();
+    let remoteSha = "";
     if (remoteRef !== "") {
-      const remoteSha = remoteRef.split(/\s+/, 1)[0] ?? "";
+      remoteSha = remoteRef.split(/\s+/, 1)[0] ?? "";
+      runGit(["fetch", "origin", `+${remoteSha}:refs/remotes/origin/${branch}`]);
       const log = runGit([
         "log",
-        "--format=%H%x09%ae",
+        "--format=%H%x09%ae%x09%ce",
         `${remoteSha}`,
         `^origin/main`,
       ]);
@@ -524,12 +535,12 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
         .map((line) => line.trim())
         .filter((line) => line.length > 0)
         .filter((line) => {
-          const email = line.split("\t", 2)[1] ?? "";
-          return email !== botEmail;
+          const [, authorEmail = "", committerEmail = ""] = line.split("\t");
+          return authorEmail !== botEmail || committerEmail !== botEmail;
         });
       if (nonBot.length > 0) {
         throw new Error(
-          `Refusing to force-push ${branch}: it contains commits not authored by the release bot:\n${nonBot.join("\n")}\nRebase or delete the branch manually before re-running.`,
+          `Refusing to force-push ${branch}: it contains commits whose author or committer is not the release bot:\n${nonBot.join("\n")}\nRebase or delete the branch manually before re-running.`,
         );
       }
     }
@@ -541,7 +552,11 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     runGit(["config", "user.email", botEmail]);
     runGit(["add", "package.json", "CHANGELOG.md"]);
     runGit(["commit", "-m", `release: v${targetVersion}`]);
-    runGit(["push", "--force-with-lease", "origin", branch]);
+    if (remoteSha === "") {
+      runGit(["push", "origin", branch]);
+    } else {
+      runGit(["push", `--force-with-lease=${branch}:${remoteSha}`, "origin", branch]);
+    }
 
     const prBody = buildPrBody({
       version: targetVersion,

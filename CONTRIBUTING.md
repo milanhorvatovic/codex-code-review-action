@@ -164,7 +164,7 @@ Auto-approval reviews carry the marker body `Auto-approved by the Dependabot Aut
 4. The tag push triggers `release.yaml`, which creates the GitHub Release with notes extracted from `CHANGELOG.md`, force-updates the major version tag (skipped for pre-releases), and opens a follow-up PR refreshing SHA-pinned self-references in `README.md` (skipped for pre-releases).
 5. Squash-merge the self-pin refresh PR.
 
-**Pre-releases (RCs).** Pass `--version 2.1.0-rc.N` to evaluate a build before the final cut. Each RC gets its own `## [2.1.0-rc.N]` CHANGELOG section; the final non-RC cut emits a single `## [2.1.0]` section containing the full set of changes since the last non-pre-release tag and removes the orphan RC sections in the same commit. The major tag (`v2`) does not move for RCs, and consumers should not pin to RC tags.
+**Pre-releases (RCs).** To evaluate a build before the final cut, run `prepare-release.yaml` with the `version` input set to `2.1.0-rc.N` (or pass `--version 2.1.0-rc.N` to `npm run prepare:release` if using the manual fallback below). Each RC gets its own `## [2.1.0-rc.N]` CHANGELOG section; the final non-RC cut emits a single `## [2.1.0]` section containing the full set of changes since the last non-pre-release tag and removes the orphan RC sections in the same commit. The major tag (`v2`) does not move for RCs, and consumers should not pin to RC tags.
 
 ### Manual release (fallback)
 

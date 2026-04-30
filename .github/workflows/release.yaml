@@ -97,7 +97,7 @@ jobs:
           VERSION_NUM="${GITHUB_REF_NAME#v}"
           SHA="$(git rev-parse "${GITHUB_REF_NAME}^{}")"
           BRANCH="docs/refresh-self-pins-v${VERSION_NUM}"
-          git fetch origin main
+          git fetch origin main "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || git fetch origin main
           git checkout -B "${BRANCH}" origin/main
           npx --no-install tsx scripts/refresh-self-pins.ts "${VERSION_NUM}" "${SHA}"
           if git diff --quiet README.md; then
@@ -106,7 +106,12 @@ jobs:
           fi
           git add README.md
           git commit -m "docs: refresh self-pin SHAs to v${VERSION_NUM}"
-          git push --force-with-lease origin "${BRANCH}"
+          if git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" >/dev/null; then
+            REMOTE_SHA="$(git rev-parse "refs/remotes/origin/${BRANCH}")"
+            git push --force-with-lease="${BRANCH}:${REMOTE_SHA}" origin "${BRANCH}"
+          else
+            git push origin "${BRANCH}"
+          fi
           if gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number' | grep -q '^[0-9]'; then
             echo "Refresh PR for ${BRANCH} already open; leaving it as-is."
             exit 0
