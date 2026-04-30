@@ -347,7 +347,7 @@ type PrSearchRow = {
   url: string;
 };
 
-const PR_SEARCH_LIMIT = 200;
+const PR_SEARCH_LIMIT = 1000;
 const RELEASE_LIST_LIMIT = 100;
 
 export type PrepareReleaseDeps = {
@@ -449,8 +449,11 @@ function listMergedPrs(runGh: GhRunner, sincePublishedAt: string | undefined): P
   ]);
   const rows = JSON.parse(raw) as PrSearchRow[];
   if (rows.length >= PR_SEARCH_LIMIT) {
+    const sinceClause = sincePublishedAt
+      ? `since ${sincePublishedAt}`
+      : "since project inception (no prior non-pre-release tag found)";
     throw new Error(
-      `gh pr list returned ${PR_SEARCH_LIMIT} results (the per-call cap). Cut a release more often or raise PR_SEARCH_LIMIT.`,
+      `gh pr list hit the ${PR_SEARCH_LIMIT}-result cap ${sinceClause}. The GitHub Search API caps at ~1000 results per query, so this script cannot prepare a single release covering more than ${PR_SEARCH_LIMIT} merged PRs. Cut interim releases manually first, or implement pagination in listMergedPrs.`,
     );
   }
   return rows.map((row) => ({
@@ -575,6 +578,13 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     runGit(["config", "user.name", botLogin]);
     runGit(["config", "user.email", botEmail]);
     runGit(["add", "package.json", "CHANGELOG.md"]);
+    const stagedDiff = runGit(["diff", "--cached", "--name-only"]).trim();
+    if (stagedDiff === "") {
+      stdoutWrite(
+        `No changes for v${targetVersion}: package.json and CHANGELOG.md on origin/main already match the computed output. Skipping commit and PR update.\n`,
+      );
+      return 0;
+    }
     runGit(["commit", "-m", `release: v${targetVersion}`]);
     if (remoteSha === "") {
       runGit(["push", "origin", branch]);

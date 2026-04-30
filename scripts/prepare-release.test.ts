@@ -509,7 +509,7 @@ describe("runCli (dry-run integration)", () => {
       "release list --limit 100 --json tagName,publishedAt,isPrerelease": JSON.stringify([
         { tagName: "v2.0.0", publishedAt: "2026-04-07T00:00:00Z", isPrerelease: false },
       ]),
-      "pr list --state merged --base main --search merged:>2026-04-07T00:00:00Z base:main --json number,title,body,labels,url --limit 200":
+      "pr list --state merged --base main --search merged:>2026-04-07T00:00:00Z base:main --json number,title,body,labels,url --limit 1000":
         JSON.stringify([
           {
             number: 100,
