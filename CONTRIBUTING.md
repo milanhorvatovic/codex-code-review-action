@@ -156,8 +156,22 @@ Auto-approval reviews carry the marker body `Auto-approved by the Dependabot Aut
 
 ## Release process
 
-1. Update `version` in `package.json`
-2. Update `CHANGELOG.md` with the release date and any new entries
+### Automated release (default)
+
+1. Trigger `prepare-release.yaml` via the GitHub UI (`Actions → Prepare Release → Run workflow`). Optionally pass an explicit `version` (e.g. `2.1.0` or `2.1.0-rc.1`); leave empty to compute from the `release: <level>` labels of merged PRs since the last non-pre-release tag.
+2. The workflow opens a PR titled `release: v<X.Y.Z>` against `main` containing the `package.json` bump and the new `CHANGELOG.md` entry. Review it like any other PR. Re-running the workflow for the same target version updates the existing release branch and PR in place; the bot refuses to force-push if any non-bot commits are present on the release branch.
+3. Squash-merge the release PR. The `release-on-merge.yaml` workflow tags the merge commit with `v<X.Y.Z>` and pushes the tag automatically.
+4. The tag push triggers `release.yaml`, which creates the GitHub Release with notes extracted from `CHANGELOG.md`, force-updates the major version tag (skipped for pre-releases), and opens a follow-up PR refreshing SHA-pinned self-references in `README.md` (skipped for pre-releases).
+5. Squash-merge the self-pin refresh PR.
+
+**Pre-releases (RCs).** Pass `--version 2.1.0-rc.N` to evaluate a build before the final cut. Each RC gets its own `## [2.1.0-rc.N]` CHANGELOG section; the final non-RC cut emits a single `## [2.1.0]` section containing the full set of changes since the last non-pre-release tag and removes the orphan RC sections in the same commit. The major tag (`v2`) does not move for RCs, and consumers should not pin to RC tags.
+
+### Manual release (fallback)
+
+Use this path when `prepare-release.yaml` is broken or an urgent hotfix needs cutting from a fresh local clone. Both flows produce identical output (a `v<X.Y.Z>` tag pointing at a commit on `main` with the right `package.json` version + `CHANGELOG.md` entry).
+
+1. Update `version` in `package.json`.
+2. Update `CHANGELOG.md` with the release date and any new entries.
    - **2b. Trust-boundary callout.** If the release contains any PRs labeled `trust-boundary`, add a dedicated subsection to the CHANGELOG entry:
 
      ```markdown
@@ -167,11 +181,11 @@ Auto-approval reviews carry the marker body `Auto-approved by the Dependabot Aut
      ```
 
      Applies to releases cut after this section lands; historical entries are not rewritten.
-3. Rebuild dist: `npm run build`
+3. Rebuild dist: `npm run build`.
    - **3b. Sync cross-doc SHA and version references.** When the canonical pin in `action.yaml`, `prepare/action.yaml`, `publish/action.yaml`, or `review/action.yaml` changes — or when any release bumps a third-party Action — update every other reference to that pin in the same release: `README.md` (including the "Adopting in enterprise environments" section), examples, and any other docs. The unified-pins rule (one SHA + tag per third-party Action across the entire repo) is enforced by CI on every PR and push to `main` by `.github/workflows/verify-action-pins.yaml`. The `ratchet-lint` job rejects any `uses:` that is not pinned to a full commit SHA, and the `verify-doc-pins` job (running `npm run verify:doc-pins`) fails when any tracked Markdown file references a third-party Action with a SHA or tag that drifts from the canonical pin in YAML. If either job fails, fix the listed files; do not bypass the check. The release-time sweep is now "verify CI passes" rather than a manual grep.
-4. Commit and merge to `main`
-5. Tag and push the release: `git tag vx.y.z && git push origin vx.y.z`
-6. The release workflow automatically creates a GitHub Release whose notes are extracted verbatim from the matching `## [<version>]` section in `CHANGELOG.md`, and updates the major version tag (e.g. `v1`). Pre-release tags (e.g. `v2.1.0-rc.1`) are accepted: the extraction script resolves the corresponding `## [2.1.0-rc.1]` CHANGELOG section, and the resulting Release page renders that content verbatim. The Release is **not yet marked as pre-release** on GitHub — passing `--prerelease` to `gh release create` for tags matching `v*.*.*-*` is tracked in #78.
+4. Commit and merge to `main`.
+5. Tag and push the release: `git tag vx.y.z && git push origin vx.y.z`.
+6. The release workflow automatically creates a GitHub Release whose notes are extracted verbatim from the matching `## [<version>]` section in `CHANGELOG.md`, updates the major version tag (skipped for pre-releases), and opens a follow-up PR refreshing SHA-pinned self-references in `README.md` (skipped for pre-releases). Pre-release tags (e.g. `v2.1.0-rc.1`) are accepted: the extraction script resolves the corresponding `## [2.1.0-rc.1]` CHANGELOG section, and the resulting Release page is marked as a pre-release.
 
 > **Tip:** Preview the release notes locally before pushing the tag:
 >
