@@ -1,0 +1,65 @@
+name: Auto-tag release PR
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        id: app-token
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
+      - name: Validate version consistency
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          VERSION="${HEAD_REF#release/v}"
+          PKG_VERSION="$(jq -r .version package.json)"
+          if [ "${VERSION}" != "${PKG_VERSION}" ]; then
+            echo "::error::branch=v${VERSION} but package.json=${PKG_VERSION}"
+            exit 1
+          fi
+          CHANGELOG_VERSION="$(grep -oE '^## \[[^]]+\]' CHANGELOG.md | head -1 | sed -E 's/^## \[([^]]+)\]/\1/')"
+          if [ "${VERSION}" != "${CHANGELOG_VERSION}" ]; then
+            echo "::error::branch=v${VERSION} but top CHANGELOG section=[${CHANGELOG_VERSION}]"
+            exit 1
+          fi
+
+      - name: Tag and push
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          BOT_USER_ID: ${{ vars.RELEASE_APP_BOT_USER_ID }}
+        run: |
+          set -euo pipefail
+          VERSION="${HEAD_REF#release/v}"
+          BOT_LOGIN="codex-review-action-release-bot[bot]"
+          git config user.name "${BOT_LOGIN}"
+          git config user.email "${BOT_USER_ID}+${BOT_LOGIN}@users.noreply.github.com"
+          git tag "v${VERSION}" "${MERGE_SHA}"
+          git push origin "v${VERSION}"
