@@ -1,0 +1,29 @@
+name: Lint Workflows
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Lint .github/workflows with actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          actionlint_image='rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667' # v1.7.12
+          docker run --rm \
+            --env GITHUB_ACTIONS \
+            --volume "${GITHUB_WORKSPACE}:/repo" \
+            --workdir /repo \
+            "${actionlint_image}" \
+            -color

@@ -105,6 +105,23 @@ npm run verify:prose-style
 
 This invokes `scripts/verify-prose-style.ts`, which scans every text-bearing tracked file, reports any UK English form with `file:line:column` precision, and exits non-zero on drift. The same script runs in CI on every pull request and push to `main` via [`.github/workflows/verify-prose-style.yaml`](.github/workflows/verify-prose-style.yaml). Each `UK_PATTERNS` entry is an anchored regex matching a complete UK word (e.g. `organis(?:e|es|ed|ing|ation|ations|ational|er|ers|able)`), so US English nouns that share a UK verb stem — `criticism`, `optimism`, `terrorism`, `organism`, `programmer`, `programmed`, `emphasis`, and so on — are not flagged. When a new UK form needs coverage, add an anchored pattern to `UK_PATTERNS` and a test case in `scripts/verify-prose-style.test.ts`. The `ALLOWED_WORDS` set is reserved for proper nouns whose canonical spelling collides with a UK English word (brand, party, or place names); add lowercased entries when one appears in repository prose.
 
+## Workflow linting
+
+The files under `.github/workflows/` are linted with [`actionlint`](https://github.com/rhysd/actionlint) (with `shellcheck` integration on `run:` blocks) on every pull request and push to `main` via [`.github/workflows/actionlint.yaml`](.github/workflows/actionlint.yaml). The workflow runs the SHA-pinned `rhysd/actionlint` Docker image, which bundles `shellcheck` and `pyflakes`. actionlint covers workflow YAML structure, expression syntax, context references, runner/`uses:` references, matrix shapes, and embedded shell scripts. Composite action files (the top-level `action.yaml`, `prepare/action.yaml`, `publish/action.yaml`, `review/action.yaml`, and `.github/actions/*/action.yaml`) are out of scope because actionlint targets workflow files, not composite action metadata; SHA-pinning across all of them is enforced by [`.github/workflows/verify-action-pins.yaml`](.github/workflows/verify-action-pins.yaml).
+
+To run the same lint locally, pick whichever path fits your platform:
+
+- **mise (recommended; matches the CI versions and works on macOS, Linux, and Windows via WSL).** `mise.toml` already pins `actionlint` and `shellcheck` alongside Node, so `mise install` provisions both. After that, `actionlint` runs from `$PATH`.
+- **Docker (no host install; identical to CI).** Use the same digest pinned in [`.github/workflows/actionlint.yaml`](.github/workflows/actionlint.yaml) so the image is byte-identical to the one CI uses, not a tag that can be retargeted upstream:
+
+  ```bash
+  docker run --rm -v "$PWD:/repo" --workdir /repo \
+    rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+    -color
+  ```
+
+- **Native package managers.** macOS: `brew install actionlint shellcheck`. Linux: install `shellcheck` from your distro and `actionlint` from the [upstream releases](https://github.com/rhysd/actionlint/releases). Windows: `scoop install actionlint shellcheck`.
+
 ## Trust-boundary changes
 
 Changes that affect data destinations, forwarding, telemetry, auth scopes, or what callers must trust require explicit release-note treatment so adopters who have already hardened their workflow can re-review.
