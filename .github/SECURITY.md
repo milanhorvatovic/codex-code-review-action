@@ -32,3 +32,31 @@ The three-job architecture splits responsibilities by permission scope:
 - `publish` (`contents: read`, `pull-requests: write`) — merges chunk reviews and posts the PR review with inline comments. Does not require or receive the OpenAI API key.
 
 If you believe any of these defenses can be bypassed, please report it using the process above.
+
+## Release automation identity
+
+Release automation is performed by a dedicated GitHub App installed only on this repository. The App identity is `codex-review-action-release-bot[bot]` in audit logs and PR authorship.
+
+### Permission scope
+
+The App has these repository permissions, and only these:
+
+- `Contents: Read and write` — push release branches, create version tags
+- `Pull requests: Read and write` — open release PRs and post-release refresh PRs
+- `Workflows: Read and write` — required by GitHub when pushes touch any workflow file
+- `Metadata: Read-only` — required by GitHub for any installed App
+
+The App has no organization permissions, no user permissions, no webhook, and no installations on other repositories.
+
+### Credentials
+
+App credentials are stored at the repo level (Settings → Secrets and variables → Actions):
+
+- `RELEASE_APP_ID` (variable) — the App's numeric ID. Not a secret; stored as a repo variable so workflows can reference it via `vars.RELEASE_APP_ID`.
+- `RELEASE_APP_PRIVATE_KEY` (secret) — the App's signing key. Release-automation workflows are expected to feed this into a token-minting Action (e.g. `actions/create-github-app-token`) to obtain short-lived installation tokens at runtime.
+
+GitHub App installation tokens expire automatically (one-hour default) and are scoped to the installation rather than to a specific workflow run, so a leaked token remains usable until expiry or explicit revocation. Release-automation workflows are expected to mint a token at job start and revoke it at job end (the default post-step behavior of `actions/create-github-app-token`); the App identity itself does not enforce that. Maintainers rotate the private key by generating a new one on the App settings page and replacing the secret value; old keys remain valid until manually revoked.
+
+### Why an App instead of `GITHUB_TOKEN`
+
+PRs opened by the default `GITHUB_TOKEN` do not trigger downstream workflows (a documented anti-recursion safeguard). Release automation requires that release PRs run their normal CI checks before merging, so the App identity is necessary. PATs are avoided because they tie automation to a person and have broader permission scopes than this use needs.
