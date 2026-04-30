@@ -101,7 +101,11 @@ export function computeVersionBump(prs: PullRequest[]): VersionBump | "none" {
   for (const pr of prs) {
     const level = releaseLevelOf(pr);
     if (level === "skip") continue;
-    if (best === "none" || LEVEL_RANK[level] > LEVEL_RANK[best as VersionBump]) {
+    if (best === "none") {
+      best = level;
+      continue;
+    }
+    if (LEVEL_RANK[level] > LEVEL_RANK[best]) {
       best = level;
     }
   }
@@ -287,7 +291,13 @@ export function resolveTargetVersion(args: {
       "All merged PRs since the last release are 'release: skip'; pass --version to force a bump.",
     );
   }
-  return bumpVersion(currentVersion, bump);
+  const targetVersion = bumpVersion(currentVersion, bump);
+  if (existingTags.has(`v${targetVersion}`)) {
+    throw new Error(
+      `Computed next version v${targetVersion} already exists as a tag. Did you mean to cut v${bumpVersion(targetVersion, "patch")}, or pass an explicit --version?`,
+    );
+  }
+  return targetVersion;
 }
 
 export function buildPrBody(args: {
@@ -513,11 +523,14 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     }
 
     const branch = `release/v${targetVersion}`;
-    const botUserId = env.RELEASE_APP_BOT_USER_ID ?? "";
+    const botUserId = env.RELEASE_APP_BOT_USER_ID;
     const botLogin = "codex-review-action-release-bot[bot]";
-    const botEmail = botUserId
-      ? `${botUserId}+${botLogin}@users.noreply.github.com`
-      : `${botLogin}@users.noreply.github.com`;
+    if (!botUserId) {
+      throw new Error(
+        "RELEASE_APP_BOT_USER_ID env var is required (the bot user ID is needed to author commits with the canonical noreply email and to verify the release branch contains only bot commits).",
+      );
+    }
+    const botEmail = `${botUserId}+${botLogin}@users.noreply.github.com`;
 
     const remoteRef = runGit(["ls-remote", "--heads", "origin", branch]).trim();
     let remoteSha = "";

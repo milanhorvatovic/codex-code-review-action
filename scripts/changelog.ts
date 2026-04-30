@@ -55,13 +55,23 @@ export function parseVersion(input: string): string {
 
 export function parseSemver(input: string): SemverParts {
   parseVersion(input);
-  const [base, prerelease] = input.split("-", 2) as [string, string | undefined];
-  const [majorStr, minorStr, patchStr] = base.split(".") as [string, string, string];
+  const dashIdx = input.indexOf("-");
+  const base = dashIdx === -1 ? input : input.slice(0, dashIdx);
+  const prerelease = dashIdx === -1 ? "" : input.slice(dashIdx + 1);
+  const baseParts = base.split(".");
+  const majorStr = baseParts[0];
+  const minorStr = baseParts[1];
+  const patchStr = baseParts[2];
+  if (majorStr === undefined || minorStr === undefined || patchStr === undefined) {
+    throw new Error(
+      `Internal error: parseVersion accepted ${input} but parseSemver could not split it.`,
+    );
+  }
   return {
     major: Number(majorStr),
     minor: Number(minorStr),
     patch: Number(patchStr),
-    prerelease: prerelease === undefined ? [] : prerelease.split("."),
+    prerelease: prerelease === "" ? [] : prerelease.split("."),
   };
 }
 
@@ -163,7 +173,7 @@ export function removeSections(
   const toRemove = sections.filter((section) => predicate(section.version));
   if (toRemove.length === 0) return changelog;
   const lines = changelog.split("\n");
-  const keep = new Array(lines.length).fill(true) as boolean[];
+  const keep = new Array<boolean>(lines.length).fill(true);
   for (const section of toRemove) {
     for (let i = section.startIndex; i < section.endIndex; i++) {
       keep[i] = false;

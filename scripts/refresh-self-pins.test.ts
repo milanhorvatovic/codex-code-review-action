@@ -50,6 +50,12 @@ describe("rewriteSelfPin", () => {
       /SHA must be a 40-character hex string/,
     );
   });
+
+  it("rejects a malformed version string", () => {
+    expect(() => rewriteSelfPin("noop", "v2.1.0", NEW_SHA)).toThrow(
+      /Strip the leading 'v'/,
+    );
+  });
 });
 
 describe("rewriteAllSelfPins", () => {

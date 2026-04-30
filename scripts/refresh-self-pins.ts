@@ -1,6 +1,8 @@
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { parseVersion } from "./changelog.js";
+
 const SELF_PIN_PATTERN =
   /(milanhorvatovic\/codex-ai-code-review-action)(\/[\w./-]+?)?@[0-9a-f]{40}(?:[ \t]*#[ \t]*[\w.+-]+)?/g;
 
@@ -15,6 +17,7 @@ export function rewriteSelfPin(line: string, version: string, sha: string): stri
   if (!/^[0-9a-f]{40}$/.test(sha)) {
     throw new Error(`SHA must be a 40-character hex string; got ${sha}`);
   }
+  parseVersion(version);
   return line.replace(SELF_PIN_PATTERN, (_match, owner: string, sub: string | undefined) => {
     const subPath = sub ?? "";
     return `${owner}${subPath}@${sha} # v${version}`;
@@ -57,6 +60,7 @@ export function removeIssue44Paragraph(content: string): string {
 }
 
 export function rewriteShaTagNote(content: string, version: string): string {
+  parseVersion(version);
   return content.replace(SHA_TAG_NOTE, (_match, prefix: string, suffix: string) => {
     return `${prefix}v${version}${suffix}`;
   });

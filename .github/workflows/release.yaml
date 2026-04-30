@@ -74,6 +74,10 @@ jobs:
           BOT_USER_ID: ${{ vars.RELEASE_APP_BOT_USER_ID }}
         run: |
           set -euo pipefail
+          if [ -z "${BOT_USER_ID}" ]; then
+            echo "::error::vars.RELEASE_APP_BOT_USER_ID is empty; refusing to push the major tag with a malformed bot email."
+            exit 1
+          fi
           BOT_LOGIN="codex-review-action-release-bot[bot]"
           git config user.name "${BOT_LOGIN}"
           git config user.email "${BOT_USER_ID}+${BOT_LOGIN}@users.noreply.github.com"
@@ -91,6 +95,10 @@ jobs:
           BOT_USER_ID: ${{ vars.RELEASE_APP_BOT_USER_ID }}
         run: |
           set -euo pipefail
+          if [ -z "${BOT_USER_ID}" ]; then
+            echo "::error::vars.RELEASE_APP_BOT_USER_ID is empty; refusing to open the self-pin refresh PR with a malformed bot email."
+            exit 1
+          fi
           BOT_LOGIN="codex-review-action-release-bot[bot]"
           git config user.name "${BOT_LOGIN}"
           git config user.email "${BOT_USER_ID}+${BOT_LOGIN}@users.noreply.github.com"

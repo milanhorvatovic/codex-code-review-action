@@ -434,6 +434,17 @@ describe("resolveTargetVersion", () => {
       }),
     ).toThrow(/all merged PRs since the last release are 'release: skip'/i);
   });
+
+  it("rejects a computed version that already exists as a tag", () => {
+    expect(() =>
+      resolveTargetVersion({
+        explicit: undefined,
+        currentVersion: "2.0.0",
+        prs: [makePr({ number: 1, labels: [{ name: "release: minor" }] })],
+        existingTags: new Set(["v2.0.0", "v2.1.0"]),
+      }),
+    ).toThrow(/Computed next version v2\.1\.0 already exists as a tag/);
+  });
 });
 
 describe("buildPrBody", () => {

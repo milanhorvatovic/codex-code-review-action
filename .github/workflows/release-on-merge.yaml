@@ -56,6 +56,10 @@ jobs:
           BOT_USER_ID: ${{ vars.RELEASE_APP_BOT_USER_ID }}
         run: |
           set -euo pipefail
+          if [ -z "${BOT_USER_ID}" ]; then
+            echo "::error::vars.RELEASE_APP_BOT_USER_ID is empty; refusing to tag with a malformed bot email."
+            exit 1
+          fi
           VERSION="${HEAD_REF#release/v}"
           BOT_LOGIN="codex-review-action-release-bot[bot]"
           git config user.name "${BOT_LOGIN}"
