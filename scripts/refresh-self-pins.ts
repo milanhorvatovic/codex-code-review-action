@@ -48,7 +48,12 @@ export function removeIssue44Paragraph(content: string): string {
   let after = idx + 1;
   while (after < lines.length && (lines[after] ?? "") !== "") after++;
   while (after < lines.length && (lines[after] ?? "") === "") after++;
-  return [...lines.slice(0, before), ...lines.slice(after - 1)].join("\n");
+  const beforeLines = lines.slice(0, before);
+  const afterLines = lines.slice(after);
+  if (beforeLines.length === 0 || afterLines.length === 0) {
+    return [...beforeLines, ...afterLines].join("\n");
+  }
+  return [...beforeLines, "", ...afterLines].join("\n");
 }
 
 export function rewriteShaTagNote(content: string, version: string): string {

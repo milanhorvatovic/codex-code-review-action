@@ -51,7 +51,6 @@ jobs:
 
       - name: Tag and push
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           BOT_USER_ID: ${{ vars.RELEASE_APP_BOT_USER_ID }}

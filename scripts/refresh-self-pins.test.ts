@@ -104,6 +104,24 @@ describe("removeIssue44Paragraph", () => {
     const content = "no issue 44 mention here\n";
     expect(removeIssue44Paragraph(content)).toBe(content);
   });
+
+  it("removes the paragraph when it is the last text in the file (no trailing newline)", () => {
+    const content = [
+      "previous content",
+      "",
+      "When you adopt a release that contains [issue #44](https://example), bump the SHAs.",
+    ].join("\n");
+    const result = removeIssue44Paragraph(content);
+    expect(result).not.toContain("issue #44");
+    expect(result).toContain("previous content");
+    expect(result).not.toContain("\n\n\n");
+  });
+
+  it("removes the paragraph when it is the only text in the file", () => {
+    const content =
+      "When you adopt a release that contains [issue #44](https://example), bump the SHAs.";
+    expect(removeIssue44Paragraph(content)).toBe("");
+  });
 });
 
 describe("rewriteShaTagNote", () => {
