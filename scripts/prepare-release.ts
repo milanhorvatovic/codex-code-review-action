@@ -135,8 +135,17 @@ export function extractTrustBoundaryImpact(prBody: string): string {
   const after = prBody.slice(headingMatch.index + headingMatch[0].length);
   const nextHeading = /^##\s/m.exec(after);
   const block = nextHeading ? after.slice(0, nextHeading.index) : after;
-  const stripped = block
-    .replace(/<!--[\s\S]*?-->/g, "")
+  let withoutComments = block;
+  for (let prev = ""; prev !== withoutComments; ) {
+    prev = withoutComments;
+    withoutComments = withoutComments.replace(/<!--[\s\S]*?-->/g, "");
+  }
+  if (withoutComments.includes("<!--")) {
+    throw new Error(
+      "'## Trust boundary impact' section contains an unclosed HTML comment; fix the PR body.",
+    );
+  }
+  const stripped = withoutComments
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0)

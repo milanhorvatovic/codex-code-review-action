@@ -85,7 +85,7 @@ describe("computeVersionBump", () => {
     expect(computeVersionBump(prs)).toBe("minor");
   });
 
-  it("recognises major as the top of the order", () => {
+  it("recognizes major as the top of the order", () => {
     const prs = [
       makePr({ number: 1, labels: [{ name: "release: minor" }] }),
       makePr({ number: 2, labels: [{ name: "release: major" }] }),

@@ -1,12 +1,8 @@
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const SELF_REPO = "milanhorvatovic/codex-ai-code-review-action";
-
-const SELF_PIN_PATTERN = new RegExp(
-  `(${SELF_REPO.replace(/\./g, "\\.")})(/[\\w./-]+?)?@[0-9a-f]{40}(?:[ \\t]*#[ \\t]*[\\w.+-]+)?`,
-  "g",
-);
+const SELF_PIN_PATTERN =
+  /(milanhorvatovic\/codex-ai-code-review-action)(\/[\w./-]+?)?@[0-9a-f]{40}(?:[ \t]*#[ \t]*[\w.+-]+)?/g;
 
 const FAIL_ON_MISSING_COMMENTED =
   /^(\s*)#\s*fail-on-missing-chunks:\s*"true"\s*#\s*available in the next tagged release;[^\n]*$/;
