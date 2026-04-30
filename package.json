@@ -37,6 +37,7 @@
     "build": "node scripts/build.mjs",
     "extract:changelog": "tsx scripts/extract-changelog-section.ts",
     "lint": "eslint src/ scripts/",
+    "prepare:release": "tsx scripts/prepare-release.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",

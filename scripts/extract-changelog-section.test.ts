@@ -54,7 +54,7 @@ describe("parseVersion", () => {
 
   it("rejects the literal Unreleased and names it in the error", () => {
     expect(() => parseVersion("Unreleased")).toThrow(
-      /Refusing to extract the Unreleased section/,
+      /'Unreleased' is not a valid version here/,
     );
   });
 
@@ -257,14 +257,14 @@ describe("runCli", () => {
     );
   });
 
-  it("returns 1 with the refusing-to-extract error on Unreleased", () => {
+  it("returns 1 with the not-a-valid-version error on Unreleased", () => {
     const stub: Stub = {
       files: { "CHANGELOG.md": sampleChangelog },
       stdout: [],
       stderr: [],
     };
     expect(runCli(makeDeps(stub, ["Unreleased"]))).toBe(1);
-    expect(stub.stderr.join("")).toContain("Refusing to extract");
+    expect(stub.stderr.join("")).toContain("'Unreleased' is not a valid version here");
   });
 
   it("returns 1 with the v-prefix error on a v-prefixed input", () => {
