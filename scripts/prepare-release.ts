@@ -362,12 +362,12 @@ export type PrepareReleaseDeps = {
   stderrWrite?: (chunk: string) => void;
 };
 
-function defaultRunGh(args: string[]): string {
-  return execFileSync("gh", args, { encoding: "utf-8" });
+function makeDefaultRunGh(env: NodeJS.ProcessEnv): GhRunner {
+  return (args) => execFileSync("gh", args, { encoding: "utf-8", env });
 }
 
-function defaultRunGit(args: string[]): string {
-  return execFileSync("git", args, { encoding: "utf-8" });
+function makeDefaultRunGit(env: NodeJS.ProcessEnv): GitRunner {
+  return (args) => execFileSync("git", args, { encoding: "utf-8", env });
 }
 
 function defaultToday(): string {
@@ -417,6 +417,16 @@ function listExistingTags(runGit: GitRunner): Set<string> {
     if (name !== "" && name !== ref) tags.add(name);
   }
   return tags;
+}
+
+export function tagCommitTimestamp(runGit: GitRunner, tag: string): string {
+  const raw = runGit(["log", "-1", "--format=%cI", `${tag}^{commit}`]).trim();
+  if (raw === "") {
+    throw new Error(
+      `git log returned no commit timestamp for tag ${tag}; is the tag fetched locally?`,
+    );
+  }
+  return raw;
 }
 
 function listMergedPrs(runGh: GhRunner, sincePublishedAt: string | undefined): PullRequest[] {
@@ -474,8 +484,8 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
   const readFile = deps.readFile ?? ((path: string) => readFileSync(path, "utf-8"));
   const writeFile =
     deps.writeFile ?? ((path: string, content: string) => writeFileSync(path, content));
-  const runGh = deps.runGh ?? defaultRunGh;
-  const runGit = deps.runGit ?? defaultRunGit;
+  const runGh = deps.runGh ?? makeDefaultRunGh(env);
+  const runGit = deps.runGit ?? makeDefaultRunGit(env);
   const today = (deps.today ?? defaultToday)();
   const stdoutWrite = deps.stdoutWrite ?? ((chunk: string) => process.stdout.write(chunk));
   const stderrWrite = deps.stderrWrite ?? ((chunk: string) => process.stderr.write(chunk));
@@ -487,7 +497,8 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     const releases = listReleases(runGh);
     const baseRelease = selectLastNonPrereleaseTag(releases);
     const existingTags = listExistingTags(runGit);
-    const prs = listMergedPrs(runGh, baseRelease?.publishedAt);
+    const cutoff = baseRelease ? tagCommitTimestamp(runGit, baseRelease.tagName) : undefined;
+    const prs = listMergedPrs(runGh, cutoff);
 
     for (const pr of prs) {
       releaseLevelOf(pr);

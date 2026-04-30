@@ -15,6 +15,7 @@ import {
   resolveTargetVersion,
   runCli,
   selectLastNonPrereleaseTag,
+  tagCommitTimestamp,
   type PullRequest,
 } from "./prepare-release.js";
 
@@ -358,6 +359,27 @@ describe("bumpPackageJsonVersion", () => {
   });
 });
 
+describe("tagCommitTimestamp", () => {
+  it("returns the trimmed git log output", () => {
+    const calls: string[][] = [];
+    const result = tagCommitTimestamp(
+      (args) => {
+        calls.push(args);
+        return "2026-04-07T09:13:43+00:00\n";
+      },
+      "v2.0.0",
+    );
+    expect(result).toBe("2026-04-07T09:13:43+00:00");
+    expect(calls).toEqual([["log", "-1", "--format=%cI", "v2.0.0^{commit}"]]);
+  });
+
+  it("throws when git returns an empty timestamp", () => {
+    expect(() => tagCommitTimestamp(() => "\n", "v2.0.0")).toThrow(
+      /no commit timestamp for tag v2\.0\.0/,
+    );
+  });
+});
+
 describe("selectLastNonPrereleaseTag", () => {
   it("returns the first non-pre-release row", () => {
     expect(
@@ -521,7 +543,12 @@ describe("runCli (dry-run integration)", () => {
       },
       runGit: (args) => {
         calls.push(`git ${args.join(" ")}`);
-        if (args[0] === "tag" && args[1] === "--list") return "v2.0.0\n";
+        if (args[0] === "ls-remote" && args[1] === "--tags") {
+          return "abc\trefs/tags/v2.0.0\n";
+        }
+        if (args[0] === "log" && args.includes("--format=%cI")) {
+          return "2026-04-07T00:00:00Z\n";
+        }
         return "";
       },
       today: () => "2026-05-01",
@@ -567,7 +594,15 @@ describe("runCli (dry-run integration)", () => {
           },
         ]);
       },
-      runGit: (args) => (args[0] === "tag" ? "v2.0.0\n" : ""),
+      runGit: (args) => {
+        if (args[0] === "ls-remote" && args[1] === "--tags") {
+          return "abc\trefs/tags/v2.0.0\n";
+        }
+        if (args[0] === "log" && args.includes("--format=%cI")) {
+          return "2026-04-07T00:00:00Z\n";
+        }
+        return "";
+      },
       today: () => "2026-05-01",
       stdoutWrite: () => undefined,
       stderrWrite: (chunk) => stderr.push(chunk),
