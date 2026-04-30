@@ -1,5 +1,7 @@
-import { execFileSync } from "node:child_process";
-import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -271,11 +273,11 @@ export function selectLastNonPrereleaseTag(
 
 export function resolveTargetVersion(args: {
   explicit: string | undefined;
-  currentVersion: string;
+  baseVersion: string;
   prs: PullRequest[];
   existingTags: ReadonlySet<string>;
 }): string {
-  const { explicit, currentVersion, prs, existingTags } = args;
+  const { explicit, baseVersion, prs, existingTags } = args;
   if (explicit !== undefined) {
     const parsed = parseTargetVersion(explicit);
     if (!isPrereleaseVersion(parsed) && existingTags.has(`v${parsed}`)) {
@@ -291,7 +293,12 @@ export function resolveTargetVersion(args: {
       "All merged PRs since the last release are 'release: skip'; pass --version to force a bump.",
     );
   }
-  const targetVersion = bumpVersion(currentVersion, bump);
+  if (isPrereleaseVersion(baseVersion)) {
+    throw new Error(
+      `Base version ${baseVersion} is a pre-release; pass --version explicitly so the bot does not skip the intended final cut.`,
+    );
+  }
+  const targetVersion = bumpVersion(baseVersion, bump);
   if (existingTags.has(`v${targetVersion}`)) {
     throw new Error(
       `Computed next version v${targetVersion} already exists as a tag. Did you mean to cut v${bumpVersion(targetVersion, "patch")}, or pass an explicit --version?`,
@@ -467,18 +474,32 @@ function listMergedPrs(runGh: GhRunner, sincePublishedAt: string | undefined): P
 
 function unifiedDiff(label: string, before: string, after: string): string {
   if (before === after) return `# ${label}: no changes\n`;
-  const beforeLines = before.split("\n");
-  const afterLines = after.split("\n");
-  const lines: string[] = [`--- a/${label}`, `+++ b/${label}`];
-  const max = Math.max(beforeLines.length, afterLines.length);
-  for (let i = 0; i < max; i++) {
-    const b = beforeLines[i];
-    const a = afterLines[i];
-    if (b === a) continue;
-    if (b !== undefined) lines.push(`-${b}`);
-    if (a !== undefined) lines.push(`+${a}`);
+  const dir = mkdtempSync(join(tmpdir(), "prepare-release-diff-"));
+  const beforePath = join(dir, "before");
+  const afterPath = join(dir, "after");
+  try {
+    writeFileSync(beforePath, before);
+    writeFileSync(afterPath, after);
+    const result = spawnSync(
+      "git",
+      [
+        "diff",
+        "--no-index",
+        "--unified=3",
+        `--src-prefix=a/`,
+        `--dst-prefix=b/`,
+        beforePath,
+        afterPath,
+      ],
+      { encoding: "utf-8" },
+    );
+    const stdout = result.stdout ?? "";
+    return stdout
+      .replace(new RegExp(beforePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), label)
+      .replace(new RegExp(afterPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), label);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
-  return `${lines.join("\n")}\n`;
 }
 
 export function runCli(deps: PrepareReleaseDeps = {}): number {
@@ -517,9 +538,12 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     }
     parseVersion(rawCurrentVersion);
     const currentVersion = rawCurrentVersion;
+    const baseVersion = baseRelease
+      ? baseRelease.tagName.replace(/^v/, "")
+      : currentVersion;
     const targetVersion = resolveTargetVersion({
       explicit,
-      currentVersion,
+      baseVersion,
       prs,
       existingTags,
     });

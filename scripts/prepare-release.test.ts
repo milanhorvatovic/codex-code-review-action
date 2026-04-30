@@ -406,7 +406,7 @@ describe("resolveTargetVersion", () => {
     expect(
       resolveTargetVersion({
         explicit: undefined,
-        currentVersion: "2.0.0",
+        baseVersion: "2.0.0",
         prs: [makePr({ number: 1, labels: [{ name: "release: minor" }] })],
         existingTags: new Set(["v2.0.0"]),
       }),
@@ -417,7 +417,7 @@ describe("resolveTargetVersion", () => {
     expect(
       resolveTargetVersion({
         explicit: "2.1.0-rc.1",
-        currentVersion: "2.0.0",
+        baseVersion: "2.0.0",
         prs: [],
         existingTags: new Set(["v2.0.0"]),
       }),
@@ -428,7 +428,7 @@ describe("resolveTargetVersion", () => {
     expect(() =>
       resolveTargetVersion({
         explicit: "2.0.0",
-        currentVersion: "2.0.0",
+        baseVersion: "2.0.0",
         prs: [],
         existingTags: new Set(["v2.0.0"]),
       }),
@@ -439,7 +439,7 @@ describe("resolveTargetVersion", () => {
     expect(
       resolveTargetVersion({
         explicit: "2.0.0-rc.1",
-        currentVersion: "2.0.0",
+        baseVersion: "2.0.0",
         prs: [],
         existingTags: new Set(["v2.0.0"]),
       }),
@@ -450,7 +450,7 @@ describe("resolveTargetVersion", () => {
     expect(() =>
       resolveTargetVersion({
         explicit: undefined,
-        currentVersion: "2.0.0",
+        baseVersion: "2.0.0",
         prs: [makePr({ number: 1, labels: [{ name: "release: skip" }] })],
         existingTags: new Set(["v2.0.0"]),
       }),
@@ -461,11 +461,22 @@ describe("resolveTargetVersion", () => {
     expect(() =>
       resolveTargetVersion({
         explicit: undefined,
-        currentVersion: "2.0.0",
+        baseVersion: "2.0.0",
         prs: [makePr({ number: 1, labels: [{ name: "release: minor" }] })],
         existingTags: new Set(["v2.0.0", "v2.1.0"]),
       }),
     ).toThrow(/Computed next version v2\.1\.0 already exists as a tag/);
+  });
+
+  it("refuses to compute a version when baseVersion is a pre-release (RC->final must be explicit)", () => {
+    expect(() =>
+      resolveTargetVersion({
+        explicit: undefined,
+        baseVersion: "2.1.0-rc.1",
+        prs: [makePr({ number: 1, labels: [{ name: "release: minor" }] })],
+        existingTags: new Set(["v2.0.0"]),
+      }),
+    ).toThrow(/Base version 2\.1\.0-rc\.1 is a pre-release; pass --version explicitly/);
   });
 });
 
