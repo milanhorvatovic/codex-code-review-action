@@ -52,10 +52,10 @@ The App has no organization permissions, no user permissions, no webhook, and no
 
 App credentials are stored at the repo level (Settings → Secrets and variables → Actions):
 
-- `RELEASE_APP_ID` (variable) — the App's numeric ID, public.
+- `RELEASE_APP_ID` (variable) — the App's numeric ID. Not a secret, but not intended for external publication either.
 - `RELEASE_APP_PRIVATE_KEY` (secret) — the App's signing key, used by `actions/create-github-app-token` to mint short-lived installation tokens at workflow runtime.
 
-Tokens minted from the App are scoped to a single workflow run and expire automatically. Maintainers rotate the private key by generating a new one on the App settings page and replacing the secret value; old keys remain valid until manually revoked.
+Installation tokens minted by the App are short-lived: they expire automatically (one-hour default) and `actions/create-github-app-token` revokes them when the job ends. They are not cryptographically bound to a specific workflow run, so a leaked token remains usable until revocation or expiry — treat it as a secret while it lives. Maintainers rotate the private key by generating a new one on the App settings page and replacing the secret value; old keys remain valid until manually revoked.
 
 ### Why an App instead of `GITHUB_TOKEN`
 
