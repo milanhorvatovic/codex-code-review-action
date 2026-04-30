@@ -19,7 +19,7 @@ export type VersionBump = "major" | "minor" | "patch";
 export function parseVersion(input: string): string {
   if (input === "Unreleased") {
     throw new Error(
-      "Refusing to extract the Unreleased section directly; pass a released or pre-release version (e.g. 2.0.0 or 2.1.0-rc.1).",
+      "'Unreleased' is not a valid version here; pass MAJOR.MINOR.PATCH[-PRERELEASE] (e.g. 2.0.0 or 2.1.0-rc.1).",
     );
   }
   if (input.startsWith("v")) {

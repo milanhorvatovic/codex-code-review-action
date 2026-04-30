@@ -522,12 +522,12 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     const remoteRef = runGit(["ls-remote", "--heads", "origin", branch]).trim();
     let remoteSha = "";
     if (remoteRef !== "") {
-      remoteSha = remoteRef.split(/\s+/, 1)[0] ?? "";
-      runGit(["fetch", "origin", `+${remoteSha}:refs/remotes/origin/${branch}`]);
+      runGit(["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
+      remoteSha = runGit(["rev-parse", `refs/remotes/origin/${branch}`]).trim();
       const log = runGit([
         "log",
         "--format=%H%x09%ae%x09%ce",
-        `${remoteSha}`,
+        `origin/${branch}`,
         `^origin/main`,
       ]);
       const nonBot = log
