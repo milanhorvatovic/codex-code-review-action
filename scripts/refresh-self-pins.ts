@@ -13,21 +13,30 @@ const ISSUE_44_INTRO_LINE = /^When you adopt a release that contains \[issue #44
 
 const SHA_TAG_NOTE = /(# SHA corresponds to tag )v\d+\.\d+\.\d+( — update when adopting a new release\.)/g;
 
-export function rewriteSelfPin(line: string, version: string, sha: string): string {
+function validateSelfPinInputs(version: string, sha: string): void {
   if (!/^[0-9a-f]{40}$/.test(sha)) {
     throw new Error(`SHA must be a 40-character hex string; got ${sha}`);
   }
   parseVersion(version);
+}
+
+function rewriteSelfPinValidated(line: string, version: string, sha: string): string {
   return line.replace(SELF_PIN_PATTERN, (_match, owner: string, sub: string | undefined) => {
     const subPath = sub ?? "";
     return `${owner}${subPath}@${sha} # v${version}`;
   });
 }
 
+export function rewriteSelfPin(line: string, version: string, sha: string): string {
+  validateSelfPinInputs(version, sha);
+  return rewriteSelfPinValidated(line, version, sha);
+}
+
 export function rewriteAllSelfPins(content: string, version: string, sha: string): string {
+  validateSelfPinInputs(version, sha);
   return content
     .split("\n")
-    .map((line) => rewriteSelfPin(line, version, sha))
+    .map((line) => rewriteSelfPinValidated(line, version, sha))
     .join("\n");
 }
 
