@@ -44,5 +44,5 @@
     "verify:doc-pins": "tsx scripts/verify-doc-pins.ts",
     "verify:prose-style": "tsx scripts/verify-prose-style.ts"
   },
-  "version": "2.0.0"
+  "version": "2.1.0-rc.1"
 }
