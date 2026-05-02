@@ -282,6 +282,8 @@ jobs:
 
 When you adopt a release that contains [issue #44](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/44), bump the three `codex-ai-code-review-action` SHAs to that release and uncomment `fail-on-missing-chunks: "true"` to make the publish step fail closed when any chunk is missing.
 
+> **`review-reference-file` is PR-controlled.** If you pass `review-reference-file: .github/codex/review-reference.md` here, the file is read from the same `${{ github.event.pull_request.head.sha }}` checkout as the diff — meaning a PR can edit the reference and steer the review. The prepare step rejects symlinks, absolute paths, traversal, and oversized files (see [Constraints on `review-reference-file`](#constraints-on-review-reference-file)), but it does not pin the policy to the base branch. Treat workspace-mode references as policy that PR authors can edit until [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) ships an opt-in `review-reference-source: base` mode.
+
 ## Architecture
 
 The workflow is split into three jobs for security isolation:
@@ -315,7 +317,7 @@ upload artifacts ────────── ▶                             
 |-------|----------|---------|-------------|
 | `github-token` | No | `github.token` | GitHub token for fetching PR base commit |
 | `allow-users` | No | all users | Comma-separated list of GitHub usernames who can run this action |
-| `review-reference-file` | No | built-in | Path to custom review reference |
+| `review-reference-file` | No | built-in | Workspace-relative path to a custom review reference (regular file, no symlinks, ≤ 64 KiB). See [Customizing review rules per repository](#customizing-review-rules-per-repository). |
 | `max-chunk-bytes` | No | `204800` | Target max bytes per diff chunk (splits at file boundaries) |
 
 ### Prepare action outputs
@@ -375,6 +377,20 @@ To customize, create `.github/codex/review-reference.md` in your repository and 
 ```
 
 See [`defaults/review-reference.md`](defaults/review-reference.md) for the structure and examples.
+
+### Constraints on `review-reference-file`
+
+The path is read from the checked-out workspace. To close off file-disclosure attacks where a PR replaces the reference with a symlink to a runner-local secret, the prepare step rejects values that:
+
+- are empty, absolute (`/proc/self/environ`, `/tmp/...`, `C:\...`), contain a NUL byte, or contain a backslash;
+- normalize to the workspace root (`.`) or escape it (`../...`);
+- resolve through a symbolic link, either as the leaf or via any ancestor directory;
+- point to anything other than a regular file (a directory, FIFO, device);
+- exceed 64 KiB.
+
+If the value violates any of these rules, the prepare step fails closed with `Invalid review-reference-file: <reason>` before reading the file.
+
+> **Tamper-resistance caveat.** Because the file is checked out from `github.event.pull_request.head.sha`, a PR can still legitimately edit `.github/codex/review-reference.md` and steer the review prompt. The constraints above prevent a PR from reading arbitrary runner-local files; they do not pin the policy to the base branch. If you want the reference to be read from `base` regardless of PR contents, follow [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97).
 
 ## Adopting in enterprise environments
 
