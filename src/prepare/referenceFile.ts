@@ -50,59 +50,52 @@ export function resolveReviewReferenceContent(input: string, cwd: string): strin
     );
   }
 
-  const candidate = path.resolve(realCwd, normalized);
-
-  let lstats: fs.Stats;
-  try {
-    lstats = fs.lstatSync(candidate);
-  } catch (error) {
-    if (isErrnoException(error) && error.code === "ENOENT") {
+  const components = normalized.split("/");
+  let current = realCwd;
+  let leafStat: fs.Stats | undefined;
+  for (let i = 0; i < components.length; i++) {
+    current = path.join(current, components[i] ?? "");
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (error) {
+      if (isErrnoException(error) && error.code === "ENOENT") {
+        throw new ReviewReferenceFileError(
+          `file not found: '${trimmed}' (resolved to '${current}')`,
+        );
+      }
       throw new ReviewReferenceFileError(
-        `file not found: '${trimmed}' (resolved to '${candidate}')`,
+        `cannot stat '${trimmed}': ${describeError(error)}`,
       );
     }
-    throw new ReviewReferenceFileError(
-      `cannot stat '${trimmed}': ${describeError(error)}`,
-    );
+    if (stat.isSymbolicLink()) {
+      const isLeaf = i === components.length - 1;
+      throw new ReviewReferenceFileError(
+        isLeaf
+          ? `path '${trimmed}' is a symbolic link; symlinks are not allowed`
+          : `path '${trimmed}' resolves through a symbolic link`,
+      );
+    }
+    leafStat = stat;
   }
 
-  if (lstats.isSymbolicLink()) {
+  if (leafStat === undefined) {
     throw new ReviewReferenceFileError(
-      `path '${trimmed}' is a symbolic link; symlinks are not allowed`,
+      `path '${trimmed}' did not resolve to a file`,
     );
   }
-  if (!lstats.isFile()) {
+  if (!leafStat.isFile()) {
     throw new ReviewReferenceFileError(
       `path '${trimmed}' is not a regular file`,
     );
   }
-
-  let resolved: string;
-  try {
-    resolved = fs.realpathSync.native(candidate);
-  } catch (error) {
+  if (leafStat.size > REFERENCE_MAX_BYTES) {
     throw new ReviewReferenceFileError(
-      `cannot resolve real path for '${trimmed}': ${describeError(error)}`,
-    );
-  }
-  if (resolved !== candidate) {
-    throw new ReviewReferenceFileError(
-      `path '${trimmed}' resolves through a symbolic link`,
-    );
-  }
-  if (resolved !== realCwd && !resolved.startsWith(realCwd + path.sep)) {
-    throw new ReviewReferenceFileError(
-      `path '${trimmed}' resolves outside the workspace`,
+      `file '${trimmed}' is ${leafStat.size} bytes, exceeds ${REFERENCE_MAX_BYTES}-byte limit`,
     );
   }
 
-  if (lstats.size > REFERENCE_MAX_BYTES) {
-    throw new ReviewReferenceFileError(
-      `file '${trimmed}' is ${lstats.size} bytes, exceeds ${REFERENCE_MAX_BYTES}-byte limit`,
-    );
-  }
-
-  return fs.readFileSync(candidate, "utf8");
+  return fs.readFileSync(current, "utf8");
 }
 
 function describeError(error: unknown): string {

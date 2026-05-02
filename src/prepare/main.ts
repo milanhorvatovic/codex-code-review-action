@@ -10,7 +10,7 @@ import { assemblePrompt } from "../core/prompt.js";
 import {
   ReviewReferenceFileError,
   resolveReviewReferenceContent,
-} from "../core/referenceFile.js";
+} from "./referenceFile.js";
 import { getPullRequestContext } from "../github/context.js";
 import { buildDiff, fetchBaseSha } from "../github/git.js";
 

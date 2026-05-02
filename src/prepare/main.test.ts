@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ReviewReferenceFileError } from "../core/referenceFile.js";
+import { ReviewReferenceFileError } from "./referenceFile.js";
 
 const mockSetFailed = vi.fn();
 const mockSetOutput = vi.fn();
@@ -26,9 +26,9 @@ vi.mock("node:fs", () => ({
 
 const mockResolveReviewReferenceContent = vi.fn();
 
-vi.mock("../core/referenceFile.js", async () => {
-  const actual = await vi.importActual<typeof import("../core/referenceFile.js")>(
-    "../core/referenceFile.js",
+vi.mock("./referenceFile.js", async () => {
+  const actual = await vi.importActual<typeof import("./referenceFile.js")>(
+    "./referenceFile.js",
   );
   return {
     ...actual,

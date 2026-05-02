@@ -82,6 +82,12 @@ describe("resolveReviewReferenceContent", () => {
     ).toThrow(/workspace-relative/);
   });
 
+  it("rejects a Windows-style absolute path (drive letter, forward slashes)", () => {
+    expect(() =>
+      resolveReviewReferenceContent("C:/temp/reference.md", realWorkspace),
+    ).toThrow(/workspace-relative/);
+  });
+
   it("rejects a path that escapes the workspace via '..'", () => {
     expect(() =>
       resolveReviewReferenceContent("../reference.md", realWorkspace),
@@ -164,6 +170,16 @@ describe("resolveReviewReferenceContent", () => {
       resolveReviewReferenceContent("edge.md", realWorkspace).length,
     ).toBe(REFERENCE_MAX_BYTES);
   });
+
+  it.skipIf(process.platform === "linux")(
+    "accepts a case-mismatched path on case-insensitive filesystems",
+    () => {
+      writeFile("review-reference.md", "case-insensitive\n");
+      expect(
+        resolveReviewReferenceContent("REVIEW-REFERENCE.md", realWorkspace),
+      ).toBe("case-insensitive\n");
+    },
+  );
 
   it.skipIf(skipOnWindows)("resolves correctly when the cwd argument is itself a symlink", () => {
     writeFile(".github/codex/review-reference.md", "via-symlink\n");
