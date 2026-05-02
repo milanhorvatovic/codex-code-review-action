@@ -260,6 +260,29 @@ export function bumpPackageJsonVersion(content: string, newVersion: string): str
   return `${JSON.stringify(parsed, null, 2)}${trailing}`;
 }
 
+export function bumpPackageLockVersion(content: string, newVersion: string): string {
+  parseVersion(newVersion);
+  const trailing = content.endsWith("\n") ? "\n" : "";
+  const parsed = JSON.parse(content) as Record<string, unknown>;
+  if (!("version" in parsed)) {
+    throw new Error("package-lock.json has no top-level 'version' field");
+  }
+  const packages = parsed.packages;
+  if (typeof packages !== "object" || packages === null) {
+    throw new Error("package-lock.json has no 'packages' object");
+  }
+  const rootPackage = (packages as Record<string, unknown>)[""];
+  if (typeof rootPackage !== "object" || rootPackage === null) {
+    throw new Error("package-lock.json has no 'packages[\"\"]' entry");
+  }
+  if (!("version" in (rootPackage as Record<string, unknown>))) {
+    throw new Error("package-lock.json has no 'packages[\"\"].version' field");
+  }
+  parsed.version = newVersion;
+  (rootPackage as Record<string, unknown>).version = newVersion;
+  return `${JSON.stringify(parsed, null, 2)}${trailing}`;
+}
+
 export function selectLastNonPrereleaseTag(
   releases: Array<{ tagName: string; publishedAt: string; isPrerelease: boolean }>,
 ): { tagName: string; publishedAt: string } | undefined {
@@ -550,11 +573,14 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     const isPre = isPrereleaseVersion(targetVersion);
 
     const updatedPackageJson = bumpPackageJsonVersion(packageJson, targetVersion);
+    const packageLock = readFile("package-lock.json");
+    const updatedPackageLock = bumpPackageLockVersion(packageLock, targetVersion);
     const changelog = readFile("CHANGELOG.md");
     const updatedChangelog = applyChangelogUpdate(changelog, targetVersion, today, prs);
 
     if (dryRun) {
       stdoutWrite(unifiedDiff("package.json", packageJson, updatedPackageJson));
+      stdoutWrite(unifiedDiff("package-lock.json", packageLock, updatedPackageLock));
       stdoutWrite(unifiedDiff("CHANGELOG.md", changelog, updatedChangelog));
       stdoutWrite(`# Target version: ${targetVersion} (${isPre ? "pre-release" : "release"})\n`);
       return 0;
@@ -598,14 +624,15 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
 
     runGit(["checkout", "-B", branch, "origin/main"]);
     writeFile("package.json", updatedPackageJson);
+    writeFile("package-lock.json", updatedPackageLock);
     writeFile("CHANGELOG.md", updatedChangelog);
     runGit(["config", "user.name", botLogin]);
     runGit(["config", "user.email", botEmail]);
-    runGit(["add", "package.json", "CHANGELOG.md"]);
+    runGit(["add", "package.json", "package-lock.json", "CHANGELOG.md"]);
     const stagedDiff = runGit(["diff", "--cached", "--name-only"]).trim();
     if (stagedDiff === "") {
       stdoutWrite(
-        `No changes for v${targetVersion}: package.json and CHANGELOG.md on origin/main already match the computed output. Skipping commit and PR update.\n`,
+        `No changes for v${targetVersion}: package.json, package-lock.json, and CHANGELOG.md on origin/main already match the computed output. Skipping commit and PR update.\n`,
       );
       return 0;
     }
