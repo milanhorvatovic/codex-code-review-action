@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ReviewReferenceFileError } from "../core/referenceFile.js";
+
 const mockSetFailed = vi.fn();
 const mockSetOutput = vi.fn();
 const mockStartGroup = vi.fn();
@@ -18,15 +20,22 @@ vi.mock("@actions/core", () => ({
 const mockWriteFileSync = vi.fn();
 
 vi.mock("node:fs", () => ({
-  existsSync: () => false,
   mkdirSync: vi.fn(),
-  readFileSync: vi.fn(),
   writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
 }));
 
-vi.mock("node:path", () => ({
-  resolve: (p: string) => p,
-}));
+const mockResolveReviewReferenceContent = vi.fn();
+
+vi.mock("../core/referenceFile.js", async () => {
+  const actual = await vi.importActual<typeof import("../core/referenceFile.js")>(
+    "../core/referenceFile.js",
+  );
+  return {
+    ...actual,
+    resolveReviewReferenceContent: (...args: unknown[]) =>
+      mockResolveReviewReferenceContent(...args),
+  };
+});
 
 const mockFetchBaseSha = vi.fn();
 const mockBuildDiff = vi.fn();
@@ -43,13 +52,15 @@ vi.mock("../core/diff.js", () => ({
   splitDiff: (...args: unknown[]) => mockSplitDiff(...args),
 }));
 
+const mockAssemblePrompt = vi.fn();
+
 vi.mock("../core/prompt.js", () => ({
-  assemblePrompt: () => "test prompt",
+  assemblePrompt: (...args: unknown[]) => mockAssemblePrompt(...args),
 }));
 
 vi.mock("../config/defaults.js", () => ({
   defaultPrompt: "prompt",
-  defaultReference: "reference",
+  defaultReference: "default-reference",
   defaultSchema: { type: "object" },
 }));
 
@@ -97,11 +108,14 @@ describe("prepare/main error handling", () => {
     mockFetchBaseSha.mockReset();
     mockBuildDiff.mockReset();
     mockSplitDiff.mockReset();
+    mockAssemblePrompt.mockReset();
+    mockResolveReviewReferenceContent.mockReset();
     mockGetPrepareInputs.mockReset();
     mockGetPullRequestContext.mockReset();
 
     mockGetPrepareInputs.mockReturnValue(defaultInputs);
     mockGetPullRequestContext.mockReturnValue(defaultContext);
+    mockAssemblePrompt.mockReturnValue("test prompt");
   });
 
   afterEach(() => {
@@ -192,5 +206,90 @@ describe("prepare/main error handling", () => {
     });
 
     expect(mockSetOutput).toHaveBeenCalledWith("has-changes", "true");
+  });
+
+  it("uses the default reference when no review-reference-file input is set", async () => {
+    mockFetchBaseSha.mockResolvedValueOnce(undefined);
+    mockBuildDiff.mockResolvedValueOnce("diff content");
+    mockSplitDiff.mockReturnValueOnce(["chunk0"]);
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockAssemblePrompt).toHaveBeenCalled();
+    });
+
+    expect(mockResolveReviewReferenceContent).not.toHaveBeenCalled();
+    expect(mockAssemblePrompt.mock.calls[0]?.[0]).toMatchObject({
+      reference: "default-reference",
+    });
+  });
+
+  it("uses the resolved custom reference content for each prompt", async () => {
+    mockGetPrepareInputs.mockReturnValue({
+      ...defaultInputs,
+      reviewReferenceFile: ".github/codex/review-reference.md",
+    });
+    mockFetchBaseSha.mockResolvedValueOnce(undefined);
+    mockBuildDiff.mockResolvedValueOnce("diff content");
+    mockSplitDiff.mockReturnValueOnce(["chunk0", "chunk1"]);
+    mockResolveReviewReferenceContent.mockReturnValueOnce("custom-reference");
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockAssemblePrompt).toHaveBeenCalledTimes(2);
+    });
+
+    expect(mockResolveReviewReferenceContent).toHaveBeenCalledWith(
+      ".github/codex/review-reference.md",
+      expect.any(String),
+    );
+    for (const call of mockAssemblePrompt.mock.calls) {
+      expect(call[0]).toMatchObject({ reference: "custom-reference" });
+    }
+  });
+
+  it("calls setFailed when the reference resolver rejects the input", async () => {
+    mockGetPrepareInputs.mockReturnValue({
+      ...defaultInputs,
+      reviewReferenceFile: "/etc/passwd",
+    });
+    mockFetchBaseSha.mockResolvedValueOnce(undefined);
+    mockBuildDiff.mockResolvedValueOnce("diff content");
+    mockSplitDiff.mockReturnValueOnce(["chunk0"]);
+    mockResolveReviewReferenceContent.mockImplementationOnce(() => {
+      throw new ReviewReferenceFileError(
+        "path '/etc/passwd' must be workspace-relative, not absolute",
+      );
+    });
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockSetFailed).toHaveBeenCalled();
+    });
+
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      "Invalid review-reference-file: path '/etc/passwd' must be workspace-relative, not absolute",
+    );
+    expect(mockAssemblePrompt).not.toHaveBeenCalled();
+  });
+
+  it("re-throws non-ReviewReferenceFileError exceptions from the resolver", async () => {
+    mockGetPrepareInputs.mockReturnValue({
+      ...defaultInputs,
+      reviewReferenceFile: "ref.md",
+    });
+    mockFetchBaseSha.mockResolvedValueOnce(undefined);
+    mockBuildDiff.mockResolvedValueOnce("diff content");
+    mockSplitDiff.mockReturnValueOnce(["chunk0"]);
+    mockResolveReviewReferenceContent.mockImplementationOnce(() => {
+      throw new Error("unexpected boom");
+    });
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockSetFailed).toHaveBeenCalled();
+    });
+
+    expect(mockSetFailed).toHaveBeenCalledWith("unexpected boom");
   });
 });
