@@ -176,7 +176,7 @@ Auto-approval reviews carry the marker body `Auto-approved by the Dependabot Aut
 ### Automated release (default)
 
 1. Trigger `prepare-release.yaml` via the GitHub UI (`Actions → Prepare Release → Run workflow`). Optionally pass an explicit `version` (e.g. `2.1.0` or `2.1.0-rc.1`); leave empty to compute from the `release: <level>` labels of merged PRs since the last non-pre-release tag.
-2. The workflow opens a PR titled `release: v<X.Y.Z>` against `main` containing the `package.json` bump and the new `CHANGELOG.md` entry. Review it like any other PR. Re-running the workflow for the same target version updates the existing release branch and PR in place; the bot refuses to force-push if any non-bot commits are present on the release branch.
+2. The workflow opens a PR titled `release: v<X.Y.Z>` against `main` containing the `package.json` bump, the matching `package-lock.json` bump (top-level `version` and `packages[""].version` only — no dependency tree resolution), and the new `CHANGELOG.md` entry, all in the same commit. Review it like any other PR. Re-running the workflow for the same target version updates the existing release branch and PR in place; the bot refuses to force-push if any non-bot commits are present on the release branch.
 3. Squash-merge the release PR. The `release-on-merge.yaml` workflow tags the merge commit with `v<X.Y.Z>` and pushes the tag automatically.
 4. The tag push triggers `release.yaml`, which creates the GitHub Release with notes extracted from `CHANGELOG.md`, force-updates the major version tag (skipped for pre-releases), and opens a follow-up PR refreshing SHA-pinned self-references in `README.md` (skipped for pre-releases).
 5. Squash-merge the self-pin refresh PR.
@@ -187,7 +187,7 @@ Auto-approval reviews carry the marker body `Auto-approved by the Dependabot Aut
 
 Use this path when `prepare-release.yaml` is broken or an urgent hotfix needs cutting from a fresh local clone. Both flows produce identical output (a `v<X.Y.Z>` tag pointing at a commit on `main` with the right `package.json` version + `CHANGELOG.md` entry).
 
-1. Update `version` in `package.json`.
+1. Update `version` in `package.json`, then bump `package-lock.json` to the same version at both the top-level `version` and `packages[""].version`. Do not run `npm install --package-lock-only` or `npm version` for this — they re-resolve the dependency tree and would cause silent transitive bumps in a release-prep commit. A `jq`-based or hand edit of just those two lines is correct. The `tests.yaml` workflow rejects any PR where the two files disagree.
 2. Update `CHANGELOG.md` with the release date and any new entries.
    - **2b. Trust-boundary callout.** If the release contains any PRs labeled `trust-boundary`, add a dedicated subsection to the CHANGELOG entry:
 
