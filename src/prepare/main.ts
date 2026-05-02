@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import * as path from "node:path";
 
 import * as core from "@actions/core";
 
@@ -8,6 +7,10 @@ import { getPrepareInputs } from "../config/inputs.js";
 import { isAuthorAllowed } from "../core/allowlist.js";
 import { buildChunkMatrix, splitDiff } from "../core/diff.js";
 import { assemblePrompt } from "../core/prompt.js";
+import {
+  ReviewReferenceFileError,
+  resolveReviewReferenceContent,
+} from "./referenceFile.js";
 import { getPullRequestContext } from "../github/context.js";
 import { buildDiff, fetchBaseSha } from "../github/git.js";
 
@@ -75,11 +78,18 @@ async function run(): Promise<void> {
   const referenceFilePath = inputs.reviewReferenceFile.trim();
   let referenceContent = defaultReference;
   if (referenceFilePath) {
-    if (!fs.existsSync(referenceFilePath)) {
-      core.setFailed(`Review reference file not found: ${referenceFilePath} (resolved: ${path.resolve(referenceFilePath)}, cwd: ${process.cwd()})`);
-      return;
+    try {
+      referenceContent = resolveReviewReferenceContent(
+        referenceFilePath,
+        process.env.GITHUB_WORKSPACE ?? process.cwd(),
+      );
+    } catch (error) {
+      if (error instanceof ReviewReferenceFileError) {
+        core.setFailed(`Invalid review-reference-file: ${error.message}`);
+        return;
+      }
+      throw error;
     }
-    referenceContent = fs.readFileSync(referenceFilePath, "utf8");
   }
 
   core.startGroup("Writing prompt and schema files");
