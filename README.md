@@ -384,6 +384,7 @@ The path is read from the checked-out workspace. To close off file-disclosure at
 
 - are empty, absolute (`/proc/self/environ`, `/tmp/...`, `C:\...`), contain a NUL byte, or contain a backslash;
 - normalize to the workspace root (`.`) or escape it (`../...`);
+- target the runner's `.git` directory (any casing of the first component);
 - resolve through a symbolic link, either as the leaf or via any ancestor directory;
 - point to anything other than a regular file (a directory, FIFO, device);
 - exceed 64 KiB.

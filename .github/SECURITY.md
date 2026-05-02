@@ -27,14 +27,15 @@ This action processes untrusted input (PR diffs and metadata). It mitigates prom
 
 ### Safe `review-reference-file` values
 
-The `review-reference-file` input names a path inside the checked-out workspace, which on a `pull_request` run contains PR-controlled content. To prevent a PR from coercing the prepare step into reading runner-local files (`/proc/self/environ`, `.git/config`, etc.) and forwarding their contents to OpenAI in the prompt, the value must satisfy every rule below. Anything else fails closed before the file is read:
+The `review-reference-file` input names a path inside the checked-out workspace, which on a `pull_request` run contains PR-controlled content. To prevent a PR from coercing the prepare step into reading runner-local files outside the workspace (e.g. `/proc/self/environ`) or runner-managed git state (e.g. `.git/config`) and forwarding their contents to OpenAI in the prompt, the value must satisfy every rule below. Anything else fails closed before the file is read:
 
 - workspace-relative — absolute paths (POSIX or Windows-style), backslashes, and NUL bytes are rejected;
 - contained — the resolved path stays under `$GITHUB_WORKSPACE` after POSIX normalization (`../...` is rejected);
+- not under `.git` — paths whose first component is `.git` (any casing) are rejected, because the contents of the runner's `.git` directory are runtime state, not PR content;
 - a regular file — directories, FIFOs, devices, and any kind of symbolic link (leaf or ancestor directory) are rejected;
 - bounded — at most 64 KiB.
 
-A workspace-relative path that meets these rules (for example, `.github/codex/review-reference.md`) still represents PR-controlled content: a PR can legitimately edit the reference and steer the review prompt. Tamper-resistant policy reads from the base branch are tracked in [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97); until that ships, treat workspace-mode references as PR-authored policy.
+A workspace-relative path that meets these rules (for example, `.github/codex/review-reference.md`) still represents PR-controlled content: a PR can legitimately edit the reference and steer the review prompt, and any other workspace file the PR is allowed to commit can be referenced too. Tamper-resistant policy reads from the base branch are tracked in [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97); until that ships, treat workspace-mode references as PR-authored policy.
 
 Adopters on `<= v2.0.x` should either upgrade to a release that contains this hardening or stop passing `review-reference-file` until they do.
 

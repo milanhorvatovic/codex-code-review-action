@@ -40,6 +40,12 @@ export function resolveReviewReferenceContent(input: string, cwd: string): strin
       `path '${trimmed}' escapes the workspace`,
     );
   }
+  const firstComponent = normalized.split("/")[0] ?? "";
+  if (firstComponent.toLowerCase() === ".git") {
+    throw new ReviewReferenceFileError(
+      `path '${trimmed}' targets the .git directory; reading runner-managed git state is not allowed`,
+    );
+  }
 
   let realCwd: string;
   try {

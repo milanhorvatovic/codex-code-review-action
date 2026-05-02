@@ -12,6 +12,18 @@ import {
 
 const skipOnWindows = process.platform === "win32";
 
+function isFilesystemCaseInsensitive(): boolean {
+  const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), "case-probe-"));
+  try {
+    fs.writeFileSync(path.join(probeDir, "x"), "");
+    return fs.existsSync(path.join(probeDir, "X"));
+  } finally {
+    fs.rmSync(probeDir, { force: true, recursive: true });
+  }
+}
+
+const skipOnCaseSensitiveFs = !isFilesystemCaseInsensitive();
+
 describe("resolveReviewReferenceContent", () => {
   let workspace: string;
   let realWorkspace: string;
@@ -94,6 +106,18 @@ describe("resolveReviewReferenceContent", () => {
     ).toThrow(/escapes the workspace/);
   });
 
+  it("rejects paths that target the .git directory", () => {
+    expect(() =>
+      resolveReviewReferenceContent(".git/config", realWorkspace),
+    ).toThrow(/\.git directory/);
+  });
+
+  it("rejects .git path with mixed casing", () => {
+    expect(() =>
+      resolveReviewReferenceContent(".GIT/config", realWorkspace),
+    ).toThrow(/\.git directory/);
+  });
+
   it("rejects a path that normalizes to the workspace root", () => {
     expect(() => resolveReviewReferenceContent(".", realWorkspace)).toThrow(
       /workspace root/,
@@ -171,7 +195,7 @@ describe("resolveReviewReferenceContent", () => {
     ).toBe(REFERENCE_MAX_BYTES);
   });
 
-  it.skipIf(process.platform === "linux")(
+  it.skipIf(skipOnCaseSensitiveFs)(
     "accepts a case-mismatched path on case-insensitive filesystems",
     () => {
       writeFile("review-reference.md", "case-insensitive\n");
