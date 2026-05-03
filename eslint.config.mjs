@@ -3,13 +3,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: [
-      "coverage/",
-      "dist/",
-      "node_modules/",
-      "scripts/*.mjs",
-      "skills/codex-review/__fixtures__/**",
-    ],
+    ignores: ["coverage/", "dist/", "node_modules/", "scripts/*.mjs"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strict,

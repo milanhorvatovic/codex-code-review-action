@@ -1,0 +1,22 @@
+name: Tests (skills)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04 # ships Python 3.12 system-wide; avoids the actions/setup-python pin maintenance
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Show Python version
+        run: python3 --version
+
+      - name: Run skill unit tests
+        working-directory: skills/codex-review
+        run: python3 -m unittest discover -p "test_*.py" -v

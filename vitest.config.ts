@@ -5,12 +5,11 @@ export default defineConfig({
     coverage: {
       exclude: [
         "**/*.test.ts",
-        "skills/codex-review/__fixtures__/**",
         "src/**/main.ts",
         "src/config/defaults.ts",
         "src/types/**",
       ],
-      include: ["skills/codex-review/**/*.ts", "src/**/*.ts"],
+      include: ["src/**/*.ts"],
       provider: "v8",
       reporter: ["text", "json-summary"],
       reportsDirectory: "coverage",
