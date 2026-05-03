@@ -105,6 +105,8 @@ jobs:
 
 The subsections below describe how to wire this action into a workflow safely.
 
+If you are adopting this action in a private repository or for a team, work through [`docs/consumer-controls.md`](docs/consumer-controls.md) — a single auditable checklist that maps the controls below to specific workflow-file requirements a security reviewer can verify in one pass.
+
 ### Do not use `pull_request_target`
 
 > Always use `pull_request` as the trigger for this action. `pull_request_target` runs the workflow YAML from the base branch, but it executes in the base-repository context with access to repository secrets and broader token permissions. When a workflow handles untrusted pull request content, that combination creates a straightforward secret-exfiltration path for a malicious fork PR.
