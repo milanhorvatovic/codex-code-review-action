@@ -597,10 +597,21 @@ A security team can run through this list before approving adoption:
 
 ## Setup
 
-1. Add `OPENAI_API_KEY` as a repository secret (Settings > Secrets and variables > Actions)
-2. Create the workflow file as shown in [Minimal quick start](#minimal-quick-start)
-3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules
-4. Open a pull request — the review appears automatically
+The recommended setup matches the [Production workflow example](#production-workflow-example) — environment-scoped secret, SHA-pinned action references, same-repo gating, allowlist. The repository-secret path is kept only for the [Minimal quick start](#minimal-quick-start) so first-time evaluators have a one-step path; do not adopt it for a team or private repository.
+
+### Production / private repository (recommended)
+
+1. Configure the `codex-review` GitHub Environment and add `OPENAI_API_KEY` as an **environment secret** as described in [One-time repo setup](#one-time-repo-setup). Remove any repo-scoped copy of `OPENAI_API_KEY` once the environment-scoped secret is confirmed working — repo-scoped secrets remain visible to jobs that declare an `environment:`, which silently defeats the scoping guardrail.
+2. Create the workflow file using the [Production workflow example](#production-workflow-example). Pin `prepare`, `review`, and `publish` to the same reviewed full SHA, gate every job on `github.event.pull_request.head.repo.full_name == github.repository`, and set `allow-users` to the maintainers who may trigger reviews.
+3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules. Note the trust trade-off: in the default `workspace` mode the file is read from the PR head and a same-repo PR can edit it to steer the prompt. The workspace-safety constraints described in [Constraints on `review-reference-file`](#constraints-on-review-reference-file) close file-disclosure attacks but do not pin policy to the base branch. If you need policy locked against PR edits, follow [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) and adopt `review-reference-source: base` once it ships.
+4. Open a pull request — the review appears automatically.
+
+### Minimal quick start (evaluation only)
+
+1. Add `OPENAI_API_KEY` as a repository secret (Settings > Secrets and variables > Actions). This makes the secret visible to every workflow in the repo, so use it for evaluation only — switch to the environment-scoped path above before opening the workflow to other contributors.
+2. Create the workflow file as shown in [Minimal quick start](#minimal-quick-start).
+3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules (same trust trade-off as above).
+4. Open a pull request — the review appears automatically.
 
 ## Development
 
