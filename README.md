@@ -282,7 +282,12 @@ jobs:
 
 When you adopt a release that contains [issue #44](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/44), bump the three `codex-ai-code-review-action` SHAs to that release and uncomment `fail-on-missing-chunks: "true"` to make the publish step fail closed when any chunk is missing.
 
-> **`review-reference-file` is PR-controlled.** If you pass `review-reference-file: .github/codex/review-reference.md` here, the file is read from the same `${{ github.event.pull_request.head.sha }}` checkout as the diff — meaning a PR can edit the reference and steer the review. The prepare step rejects symlinks, absolute paths, traversal, and oversized files (see [Constraints on `review-reference-file`](#constraints-on-review-reference-file)), but it does not pin the policy to the base branch. Treat workspace-mode references as policy that PR authors can edit until [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) ships an opt-in `review-reference-source: base` mode.
+> **`review-reference-file` is PR-controlled in workspace mode.** Two separate guarantees apply, and they are not the same thing:
+>
+> - **Workspace-safety constraints (always on).** The prepare step rejects empty values, absolute paths, NUL/backslash, traversal, paths that resolve through a symlink leaf or ancestor, non-regular files, the runner's `.git` directory, and files over 64 KiB before any read. See [Constraints on `review-reference-file`](#constraints-on-review-reference-file). These constraints close file-disclosure attacks (a PR cannot point the input at `/proc/self/environ` or a runner-local secret).
+> - **Tamper resistance (opt-in, future).** The constraints above do not pin policy to the base branch. The reference file is checked out from `${{ github.event.pull_request.head.sha }}`, so a same-repo PR can legitimately edit `.github/codex/review-reference.md` and steer the review prompt. An opt-in `review-reference-source: base` mode that reads the file from the base SHA is tracked in [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) and is the recommended setting for repositories that need policy locked against PR edits.
+>
+> Treat workspace-mode references as policy that same-repo PR authors can edit until base mode ships.
 
 ## Architecture
 
