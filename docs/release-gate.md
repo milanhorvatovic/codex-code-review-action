@@ -28,7 +28,13 @@ npm run verify:doc-pins
 npm run verify:prose-style
 ```
 
-`npm audit` is advisory — a non-zero exit does not automatically block the tag, but every advisory must be triaged (fix, accept with documented rationale, or defer with a tracked issue) before sign-off.
+`npm audit` is advisory — a non-zero exit does not automatically block the tag, but every advisory must be triaged (fix, accept with documented rationale, or defer with a tracked issue) before sign-off. Capture the machine-readable form alongside the human-readable run for the evidence zip:
+
+```bash
+npm audit --json > audit.json
+```
+
+`audit.json` is the file referenced by [Archiving the gate](#archiving-the-gate) below.
 
 ## Dist reproducibility
 
@@ -79,16 +85,19 @@ If a release introduces no items beyond the templated checks, record one row wit
 
 ## Sign-off convention
 
-Every line in this gate ends in one of two states by tag time:
+Every line in this gate ends in one of two states:
 
-- **Verified by:** `<maintainer> — <YYYY-MM-DD>` — the maintainer ran the check against the merge candidate and confirms the expected behavior.
+- **Verified by:** `<maintainer> — <YYYY-MM-DD>` — the maintainer ran the check against the merge candidate (pre-merge items) or against the published release (post-tag items) and confirms the expected behavior.
 - **Waived:** `<rationale>` — the check does not apply to this release. The rationale must name the issue or PR that owns the deferred work and the target release for follow-up. A waiver without a tracked follow-up is not acceptable.
 
-The acceptance bar for the tag: every gate item is verified or waived, every waiver names its follow-up, and the maintainer cutting the tag has signed off on the rollup.
+Acceptance bars:
+
+- **Before tagging.** Every pre-merge gate item (Required validation, Dist reproducibility, Manual security regression checks, Conditional base-mode checks, Release-specific items, Trust-boundary cross-reference) is verified or waived; every waiver names its follow-up; the maintainer cutting the tag has signed off on the rollup.
+- **After tagging.** The post-tag item ([Archiving the gate](#archiving-the-gate)) is verified once `release.yaml` has created the GitHub Release and the evidence zip has been uploaded. The release is not considered complete until this final item is signed off in the release PR thread or evidence record.
 
 ## Trust-boundary cross-reference
 
-If the release contains any PR labeled `trust-boundary`, the CHANGELOG must include the dedicated `### ⚠️ Trust boundary change` callout per the [Release process / Trust-boundary changes](../CONTRIBUTING.md#trust-boundary-changes) rule in `CONTRIBUTING.md`. The release PR's CHANGELOG diff is the source of truth — the gate does not re-list the trust-boundary policy here, only confirms it was applied.
+If the release contains any PR labeled `trust-boundary` that also contributes a release level (i.e. not `release: skip`), the CHANGELOG must include the dedicated `### ⚠️ Trust boundary change` callout per the [Release process / Trust-boundary changes](../CONTRIBUTING.md#trust-boundary-changes) rule in `CONTRIBUTING.md`. Skipped PRs do not appear in CHANGELOG entries, so a `trust-boundary` label on a `release: skip` PR (e.g. release-prep or internal infra) does not by itself trigger the callout requirement. The release PR's CHANGELOG diff is the source of truth — the gate does not re-list the trust-boundary policy here, only confirms it was applied.
 
 ## Archiving the gate
 

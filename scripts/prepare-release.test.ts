@@ -8,6 +8,7 @@ import {
   categorizePullRequest,
   computeVersionBump,
   consolidateRcSections,
+  existingBodyHasMaintainerSignoff,
   extractTrustBoundaryImpact,
   formatPullRequestEntry,
   parseTargetVersion,
@@ -627,6 +628,7 @@ describe("buildPrBody", () => {
     expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
     expect(body).toContain("- [ ] Release-specific items table");
     expect(body).toContain("- [ ] Trust-boundary CHANGELOG callout");
+    expect(body).toContain("contributing a release level (i.e. not `release: skip`)");
     expect(body).toContain("- [ ] Gate evidence zip attached to the GitHub Release");
 
     const preMergeIndex = body.indexOf("**Pre-merge:**");
@@ -634,6 +636,49 @@ describe("buildPrBody", () => {
     const evidenceZipIndex = body.indexOf("Gate evidence zip");
     expect(postTagIndex).toBeGreaterThan(preMergeIndex);
     expect(evidenceZipIndex).toBeGreaterThan(postTagIndex);
+  });
+});
+
+describe("existingBodyHasMaintainerSignoff", () => {
+  it("returns false for null, undefined, or empty bodies", () => {
+    expect(existingBodyHasMaintainerSignoff(null)).toBe(false);
+    expect(existingBodyHasMaintainerSignoff(undefined)).toBe(false);
+    expect(existingBodyHasMaintainerSignoff("")).toBe(false);
+  });
+
+  it("returns false for a freshly generated bot body (template labels live inside backticks)", () => {
+    const body = buildPrBody({
+      version: "2.1.0",
+      isPrerelease: false,
+      prs: [],
+      baseTag: "v2.0.0",
+    });
+    expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
+  });
+
+  it("returns true once the maintainer adds a Verified by line", () => {
+    const body = `${buildPrBody({
+      version: "2.1.0",
+      isPrerelease: false,
+      prs: [],
+      baseTag: "v2.0.0",
+    })}\n\nVerified by: Maintainer — 2026-05-04`;
+    expect(existingBodyHasMaintainerSignoff(body)).toBe(true);
+  });
+
+  it("returns true once the maintainer adds a Waived line", () => {
+    const body = `${buildPrBody({
+      version: "2.1.0",
+      isPrerelease: false,
+      prs: [],
+      baseTag: "v2.0.0",
+    })}\n\nWaived: deferred to v2.2 per #97`;
+    expect(existingBodyHasMaintainerSignoff(body)).toBe(true);
+  });
+
+  it("ignores Verified by / Waived occurrences inside fenced code blocks", () => {
+    const body = "```\nVerified by: example — 2026-01-01\n```\n";
+    expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
   });
 });
 

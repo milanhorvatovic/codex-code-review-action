@@ -330,6 +330,20 @@ export function resolveTargetVersion(args: {
   return targetVersion;
 }
 
+// Heuristic for "the maintainer has begun filling in the gate sign-off
+// checklist". Returns true if the body contains a `Verified by:` or `Waived:`
+// label outside of backtick-quoted spans (the bot's template includes those
+// labels inside backticks as instruction examples). Used by `runCli` to skip
+// `gh pr edit --body` reruns once sign-off has begun, so re-running
+// `prepare-release.yaml` for the same version does not erase maintainer fills.
+export function existingBodyHasMaintainerSignoff(body: string | null | undefined): boolean {
+  if (body === null || body === undefined || body === "") return false;
+  const stripped = body
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`]*`/g, "");
+  return /\b(?:Verified by|Waived):/.test(stripped);
+}
+
 export function buildPrBody(args: {
   version: string;
   isPrerelease: boolean;
@@ -373,7 +387,7 @@ export function buildPrBody(args: {
     "- [ ] Manual security regression checks for `review-reference-file` are confirmed against the merge candidate.",
     "- [ ] Conditional `review-reference-source: base` checks are run, or waived with a rationale.",
     "- [ ] Release-specific items table is filled with cross-references to owning PRs/issues, and each row resolved to `Verified by:` or `Waived:` (see [Release-specific items](docs/release-gate.md#release-specific-items)).",
-    "- [ ] Trust-boundary CHANGELOG callout is present if any merged PR is labeled `trust-boundary`.",
+    "- [ ] Trust-boundary CHANGELOG callout is present if any merged PR contributing a release level (i.e. not `release: skip`) is labeled `trust-boundary`. (Skipped PRs do not appear in CHANGELOG entries, so they cannot trigger the callout requirement.)",
     "",
     "**Post-tag:**",
     "",
@@ -696,8 +710,24 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       stdoutWrite(`Opened release PR for v${targetVersion} on branch ${branch}.\n`);
     } else {
       const number = firstOpenPr.number;
-      runGh(["pr", "edit", String(number), "--body", prBody]);
-      stdoutWrite(`Updated existing release PR #${number} for v${targetVersion} on branch ${branch}.\n`);
+      const existingBodyJson = runGh([
+        "pr",
+        "view",
+        String(number),
+        "--json",
+        "body",
+      ]);
+      const existingBody = (JSON.parse(existingBodyJson) as { body: string | null }).body;
+      if (existingBodyHasMaintainerSignoff(existingBody)) {
+        stdoutWrite(
+          `Release PR #${number} for v${targetVersion} contains maintainer sign-off lines (\`Verified by:\` / \`Waived:\`); preserving body unchanged. Reset the gate sign-off section if you want the bot to refresh the auto-generated header.\n`,
+        );
+      } else {
+        runGh(["pr", "edit", String(number), "--body", prBody]);
+        stdoutWrite(
+          `Updated existing release PR #${number} for v${targetVersion} on branch ${branch}.\n`,
+        );
+      }
     }
     return 0;
   } catch (err) {
