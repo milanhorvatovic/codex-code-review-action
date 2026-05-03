@@ -331,17 +331,23 @@ export function resolveTargetVersion(args: {
 }
 
 // Heuristic for "the maintainer has begun filling in the gate sign-off
-// checklist". Returns true if a line in the body starts with `Verified by:` or
-// `Waived:` (optionally preceded by a list bullet and/or checkbox) AND the
-// label is followed by a non-placeholder value. Backtick-quoted spans are
-// stripped first so the bot's template instruction examples do not match.
+// checklist". Returns true if any line in the body matches one of two
+// signals after backtick-quoted spans are stripped:
 //
-// Anchoring to line start (rather than substring search) avoids false
-// positives from PR titles that happen to contain those labels mid-line, and
-// requiring a non-`<` non-whitespace character after the colon avoids matches
-// against the gate doc's own template placeholders (`Verified by: <maintainer>
-// — <YYYY-MM-DD>`) when a maintainer pastes the gate prose into the PR body
-// before filling in concrete values.
+//   1. A checked task-list row (`- [x] ...` or `- [X] ...`). The bot's
+//      template only emits unchecked `- [ ]` boxes, so any checked row
+//      indicates a maintainer flipped a box.
+//   2. A line starting with `Verified by:` or `Waived:` (optionally preceded
+//      by a list bullet and/or checkbox) followed by a non-placeholder
+//      value (the `[^<\s]` look-ahead rejects the gate template's
+//      `Verified by: <maintainer> — <YYYY-MM-DD>` example phrasing).
+//
+// Anchoring to line start avoids false positives from PR titles that happen
+// to contain those labels mid-line. Stripping backticks avoids matches
+// against the bot's instruction prose (which references the labels inside
+// backticks). The two signals together cover both styles of maintainer
+// progress: ticking checkboxes and writing explicit Verified-by /
+// Waived lines.
 //
 // Used by `planPrBodyRefresh` to choose between (a) writing the full fresh
 // template (when no maintainer fills exist, so reruns pick up checklist /
@@ -351,7 +357,7 @@ export function resolveTargetVersion(args: {
 // — the heading was renamed or sign-off was pasted into a legacy body, so
 // surgical-merge would risk dropping fills).
 const SIGNOFF_LINE_PATTERN =
-  /^\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?)?(?:Verified by|Waived):\s*[^<\s]/m;
+  /^\s*(?:[-*]\s+\[[xX]\]\s+|(?:[-*]\s+(?:\[[ xX]\]\s+)?)?(?:Verified by|Waived):\s*[^<\s])/m;
 
 export function existingBodyHasMaintainerSignoff(body: string | null | undefined): boolean {
   if (body === null || body === undefined || body === "") return false;

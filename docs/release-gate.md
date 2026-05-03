@@ -6,12 +6,18 @@ The CI pipeline already runs every check that can be automated. This gate is the
 
 ## How to use this gate
 
-1. Open the release PR (the one created by `prepare-release.yaml`, titled `release: v<X.Y.Z>`).
-2. Walk this page top to bottom against the merge candidate (the release branch's HEAD before the squash-merge). Every pre-merge item must end up either checked off (with a verified-by line) or explicitly waived (with a rationale). The post-tag item under [Archiving the gate](#archiving-the-gate) is completed after `release.yaml` creates the GitHub Release.
-3. Record the filled-in version of this gate in the release PR description so reviewers can see the sign-off before approving the squash-merge.
+The gate applies to both release paths documented in [`CONTRIBUTING.md`](../CONTRIBUTING.md#release-process). Pick the working surface that matches the path you are using:
+
+1. **Pick the working surface for the filled gate.**
+   - **Automated path (default).** Open the release PR created by `prepare-release.yaml`, titled `release: v<X.Y.Z>`. Its body is composed by `scripts/prepare-release.ts` and already includes a sign-off checklist that points back at this page; the release PR description is the working surface.
+   - **Manual path (fallback).** Create a local working copy of this page on the release branch (for example `release-gate-v<X.Y.Z>.md`) before merging the release commit. The local file is the working surface and ships in the evidence zip after tagging.
+2. Walk this page top to bottom against the merge candidate (the release branch's HEAD before the squash-merge or before the local merge to `main`). Every pre-merge item must end up either checked off (with a verified-by line) or explicitly waived (with a rationale). The post-tag item under [Archiving the gate](#archiving-the-gate) is completed after `release.yaml` creates the GitHub Release.
+3. Record the filled-in gate on the working surface picked in step 1 so the sign-off is visible before merging:
+   - **Automated path:** in the release PR description, alongside the auto-generated header.
+   - **Manual path:** in the local working copy. Add it to the release commit if you want it on `main`, or hold it as a working-tree file that goes straight into the evidence zip.
 4. After the tag pushes and the GitHub Release is created, package the filled gate plus any supporting evidence into a zip and upload it to the release as an asset. See [Archiving the gate](#archiving-the-gate).
 
-The release PR body template (composed by `scripts/prepare-release.ts`) includes a sign-off checklist that points back at this page; filling that checklist in place is the recommended path. The checklist is hard-coded in `buildPrBody` rather than generated from this document — when the gate's section structure changes, update both files in the same PR.
+The release PR body's checklist on the automated path is hard-coded in `buildPrBody` rather than generated from this document — when the gate's section structure changes, update both files in the same PR. On the manual path the maintainer copies this page directly, so the checklist always matches the doc.
 
 ## Required validation
 

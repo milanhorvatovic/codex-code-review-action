@@ -797,6 +797,26 @@ describe("existingBodyHasMaintainerSignoff", () => {
       existingBodyHasMaintainerSignoff("- [x] Verified by: Maintainer — 2026-05-04"),
     ).toBe(true);
   });
+
+  it("matches checked task-list rows so flipping a checkbox counts as sign-off in progress", () => {
+    expect(
+      existingBodyHasMaintainerSignoff("- [x] Required validation block runs cleanly"),
+    ).toBe(true);
+    expect(
+      existingBodyHasMaintainerSignoff("- [X] Dist reproducibility check is clean"),
+    ).toBe(true);
+  });
+
+  it("does not match unchecked task-list rows from a freshly generated body", () => {
+    const body = buildPrBody({
+      version: "2.1.0",
+      isPrerelease: false,
+      prs: [],
+      baseTag: "v2.0.0",
+    });
+    expect(body).toContain("- [ ] Required validation block runs cleanly");
+    expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
+  });
 });
 
 describe("runCli (dry-run integration)", () => {
