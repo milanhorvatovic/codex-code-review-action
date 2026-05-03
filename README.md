@@ -549,7 +549,7 @@ jobs:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
           retain-findings: "false"
-          # fail-on-missing-chunks: "true"
+          # fail-on-missing-chunks: "true" # available in the next tagged release; uncomment after bumping the SHAs above
 ```
 
 #### Differences from the Production workflow example
