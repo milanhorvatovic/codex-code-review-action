@@ -343,9 +343,13 @@ export function resolveTargetVersion(args: {
 // — <YYYY-MM-DD>`) when a maintainer pastes the gate prose into the PR body
 // before filling in concrete values.
 //
-// Used by `runCli` to skip `gh pr edit --body` once sign-off has begun, so
-// re-running `prepare-release.yaml` for the same version does not erase
-// maintainer fills.
+// Used by `planPrBodyRefresh` to choose between (a) writing the full fresh
+// template (when no maintainer fills exist, so reruns pick up checklist /
+// template updates), (b) refreshing only the auto-header and preserving the
+// sign-off section verbatim (the marker-present case), and (c) skipping the
+// body edit entirely when fills exist but the marker is missing (defensive
+// — the heading was renamed or sign-off was pasted into a legacy body, so
+// surgical-merge would risk dropping fills).
 const SIGNOFF_LINE_PATTERN =
   /^\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?)?(?:Verified by|Waived):\s*[^<\s]/m;
 
@@ -358,7 +362,7 @@ export function existingBodyHasMaintainerSignoff(body: string | null | undefined
 }
 
 // Stable marker that delimits the auto-generated header from the gate
-// sign-off section. `refreshPrBody` splits the existing PR body at this
+// sign-off section. `planPrBodyRefresh` splits the existing PR body at this
 // heading so reruns can refresh the auto-header (PR list, since-line,
 // pre-release flag) while preserving any maintainer-edited sign-off
 // content below the heading.
@@ -430,27 +434,61 @@ export function buildPrBody(args: {
   return `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`;
 }
 
-// Returns a refreshed PR body that always carries the freshly computed
-// auto-header (so reruns reflect new merged PRs / CHANGELOG changes), and
-// preserves the gate sign-off section verbatim from `existingBody` when the
-// `## Release gate sign-off` marker is found. If the marker is missing
-// (legacy body, or maintainer renamed the heading), the function falls back
-// to the freshly templated sign-off section.
-export function refreshPrBody(args: {
-  version: string;
-  isPrerelease: boolean;
-  prs: PullRequest[];
-  baseTag: string | undefined;
-}, existingBody: string | null | undefined): string {
+export type PrBodyRefreshPlan =
+  | { mode: "fresh"; body: string }
+  | { mode: "merge"; body: string }
+  | { mode: "skip"; reason: string };
+
+// Decides what to do with a release PR body on a `prepare-release.yaml` rerun:
+//
+// - `fresh` — write the full freshly generated template (auto-header +
+//   sign-off scaffold). Used when the existing body has no maintainer
+//   sign-off, so reruns pick up later checklist / template updates.
+// - `merge` — refresh the auto-header (so the PR list, since-line,
+//   pre-release flag, etc. reflect the latest merge candidate) but preserve
+//   the sign-off section verbatim from `## Release gate sign-off` onward.
+//   Used when sign-off has begun and the marker heading is intact.
+// - `skip` — do not edit the body. Used when sign-off has begun but the
+//   marker heading is missing (renamed by the maintainer, or sign-off
+//   pasted into a legacy body). A surgical merge cannot find the boundary,
+//   and replacing with a fresh template would erase the fills, so the bot
+//   refuses to touch the body and asks the maintainer to restore the
+//   marker if they want the auto-header refreshed.
+export function planPrBodyRefresh(
+  args: {
+    version: string;
+    isPrerelease: boolean;
+    prs: PullRequest[];
+    baseTag: string | undefined;
+  },
+  existingBody: string | null | undefined,
+): PrBodyRefreshPlan {
   const freshHeader = buildAutoHeaderSection(args);
+  const fullFreshBody = `${freshHeader}\n\n${buildSignoffSection()}`;
+
   if (existingBody === null || existingBody === undefined || existingBody === "") {
-    return `${freshHeader}\n\n${buildSignoffSection()}`;
+    return { mode: "fresh", body: fullFreshBody };
   }
-  const idx = existingBody.indexOf(SIGNOFF_SECTION_HEADER);
-  if (idx === -1) {
-    return `${freshHeader}\n\n${buildSignoffSection()}`;
+
+  const hasSignoff = existingBodyHasMaintainerSignoff(existingBody);
+  const markerIdx = existingBody.indexOf(SIGNOFF_SECTION_HEADER);
+
+  if (!hasSignoff) {
+    return { mode: "fresh", body: fullFreshBody };
   }
-  return `${freshHeader}\n\n${existingBody.slice(idx)}`;
+
+  if (markerIdx === -1) {
+    return {
+      mode: "skip",
+      reason:
+        "PR body contains maintainer sign-off (`Verified by:` / `Waived:` line) but no `## Release gate sign-off` marker. Restore the marker heading if you want the bot to refresh the auto-generated header on reruns; otherwise the body is preserved verbatim.",
+    };
+  }
+
+  return {
+    mode: "merge",
+    body: `${freshHeader}\n\n${existingBody.slice(markerIdx)}`,
+  };
 }
 
 export type GhRunner = (args: string[]) => string;
@@ -775,16 +813,25 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
         "body",
       ]);
       const existingBody = (JSON.parse(existingBodyJson) as { body: string | null }).body;
-      const refreshedBody = refreshPrBody(prBodyArgs, existingBody);
-      runGh(["pr", "edit", String(number), "--body", refreshedBody]);
-      if (existingBodyHasMaintainerSignoff(existingBody)) {
-        stdoutWrite(
-          `Refreshed auto-generated header on release PR #${number} for v${targetVersion}; preserved gate sign-off section verbatim. If the included-PRs list or CHANGELOG content changed, re-verify the gate before approving the squash-merge.\n`,
-        );
-      } else {
-        stdoutWrite(
-          `Updated existing release PR #${number} for v${targetVersion} on branch ${branch}.\n`,
-        );
+      const plan = planPrBodyRefresh(prBodyArgs, existingBody);
+      switch (plan.mode) {
+        case "fresh":
+          runGh(["pr", "edit", String(number), "--body", plan.body]);
+          stdoutWrite(
+            `Updated existing release PR #${number} for v${targetVersion} on branch ${branch}.\n`,
+          );
+          break;
+        case "merge":
+          runGh(["pr", "edit", String(number), "--body", plan.body]);
+          stdoutWrite(
+            `Refreshed auto-generated header on release PR #${number} for v${targetVersion}; preserved gate sign-off section verbatim. If the included-PRs list or CHANGELOG content changed, re-verify the gate before approving the squash-merge.\n`,
+          );
+          break;
+        case "skip":
+          stdoutWrite(
+            `Skipping body update on release PR #${number} for v${targetVersion}: ${plan.reason}\n`,
+          );
+          break;
       }
     }
     return 0;

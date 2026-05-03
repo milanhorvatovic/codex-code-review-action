@@ -14,7 +14,7 @@ import {
   extractTrustBoundaryImpact,
   formatPullRequestEntry,
   parseTargetVersion,
-  refreshPrBody,
+  planPrBodyRefresh,
   releaseLevelOf,
   renderChangelogEntry,
   resolveTargetVersion,
@@ -643,33 +643,27 @@ describe("buildPrBody", () => {
   });
 });
 
-describe("refreshPrBody", () => {
+describe("planPrBodyRefresh", () => {
   const args = {
     version: "2.1.0",
     isPrerelease: false,
     prs: [makePr({ number: 1, title: "F", labels: [{ name: "release: minor" }] })],
     baseTag: "v2.0.0",
   };
+  const fullFresh = `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`;
 
-  it("falls back to the full template when the existing body is missing", () => {
-    expect(refreshPrBody(args, null)).toBe(
-      `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`,
-    );
-    expect(refreshPrBody(args, undefined)).toBe(
-      `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`,
-    );
-    expect(refreshPrBody(args, "")).toBe(
-      `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`,
-    );
+  it("returns mode=fresh with the full template when the existing body is missing", () => {
+    expect(planPrBodyRefresh(args, null)).toEqual({ mode: "fresh", body: fullFresh });
+    expect(planPrBodyRefresh(args, undefined)).toEqual({ mode: "fresh", body: fullFresh });
+    expect(planPrBodyRefresh(args, "")).toEqual({ mode: "fresh", body: fullFresh });
   });
 
-  it("falls back to the full template when the marker is missing in the existing body", () => {
-    expect(refreshPrBody(args, "Legacy body without the marker")).toBe(
-      `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`,
-    );
+  it("returns mode=fresh when the existing body has no maintainer sign-off so reruns pick up template updates", () => {
+    const stale = "Some stale auto-header.\n\n## Release gate sign-off\n\n- [ ] Required validation block runs cleanly.\n";
+    expect(planPrBodyRefresh(args, stale)).toEqual({ mode: "fresh", body: fullFresh });
   });
 
-  it("preserves the maintainer-edited sign-off section verbatim while refreshing the auto-header", () => {
+  it("returns mode=merge when sign-off is present and the marker is intact", () => {
     const filledSignoff = [
       SIGNOFF_SECTION_HEADER,
       "",
@@ -678,14 +672,16 @@ describe("refreshPrBody", () => {
       "Custom note from the maintainer.",
     ].join("\n");
     const previousBody = `Stale auto-header from a previous run.\n\n${filledSignoff}`;
-    const refreshed = refreshPrBody(args, previousBody);
-    expect(refreshed.startsWith(buildAutoHeaderSection(args))).toBe(true);
-    expect(refreshed).toContain("Verified by: Maintainer — 2026-05-04");
-    expect(refreshed).toContain("Custom note from the maintainer.");
-    expect(refreshed).not.toContain("Stale auto-header");
+    const plan = planPrBodyRefresh(args, previousBody);
+    expect(plan.mode).toBe("merge");
+    if (plan.mode !== "merge") throw new Error("unreachable");
+    expect(plan.body.startsWith(buildAutoHeaderSection(args))).toBe(true);
+    expect(plan.body).toContain("Verified by: Maintainer — 2026-05-04");
+    expect(plan.body).toContain("Custom note from the maintainer.");
+    expect(plan.body).not.toContain("Stale auto-header");
   });
 
-  it("regenerates the auto-header on every call so reruns reflect new included PRs", () => {
+  it("regenerates the auto-header on every merge so reruns reflect newly merged PRs", () => {
     const argsWithMore = {
       ...args,
       prs: [
@@ -695,9 +691,25 @@ describe("refreshPrBody", () => {
     };
     const filledSignoff = `${SIGNOFF_SECTION_HEADER}\n\nVerified by: Maintainer — 2026-05-04`;
     const previousBody = `${buildAutoHeaderSection(args)}\n\n${filledSignoff}`;
-    const refreshed = refreshPrBody(argsWithMore, previousBody);
-    expect(refreshed).toContain("**PRs included (2)");
-    expect(refreshed).toContain("Verified by: Maintainer — 2026-05-04");
+    const plan = planPrBodyRefresh(argsWithMore, previousBody);
+    expect(plan.mode).toBe("merge");
+    if (plan.mode !== "merge") throw new Error("unreachable");
+    expect(plan.body).toContain("**PRs included (2)");
+    expect(plan.body).toContain("Verified by: Maintainer — 2026-05-04");
+  });
+
+  it("returns mode=skip when sign-off is present but the marker heading is missing (defensive)", () => {
+    const previousBody = [
+      "Some legacy auto-header.",
+      "",
+      "## Renamed Heading",
+      "",
+      "Verified by: Maintainer — 2026-05-04",
+    ].join("\n");
+    const plan = planPrBodyRefresh(args, previousBody);
+    expect(plan.mode).toBe("skip");
+    if (plan.mode !== "skip") throw new Error("unreachable");
+    expect(plan.reason).toContain("`## Release gate sign-off` marker");
   });
 });
 
@@ -1039,5 +1051,22 @@ describe("runCli (rerun body-refresh integration)", () => {
     expect(editBody).toContain("Maintainer note retained on rerun.");
     expect(stdout).toContain("Refreshed auto-generated header on release PR #42");
     expect(stdout).toContain("re-verify the gate before approving");
+  });
+
+  it("skips the body update when sign-off is present but the marker heading is missing", () => {
+    const filledBody = [
+      "Stale prior auto-header.",
+      "",
+      "## Renamed gate heading",
+      "",
+      "Verified by: Maintainer — 2026-05-04",
+    ].join("\n");
+    const { exit, ghCalls, stdout, stderr } = runRerunScenario(filledBody);
+    expect(exit).toBe(0);
+    expect(stderr).toBe("");
+    const editCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "edit");
+    expect(editCall).toBeUndefined();
+    expect(stdout).toContain("Skipping body update on release PR #42");
+    expect(stdout).toContain("`## Release gate sign-off` marker");
   });
 });
