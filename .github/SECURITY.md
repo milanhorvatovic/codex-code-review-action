@@ -25,6 +25,8 @@ We will acknowledge receipt within 48 hours and aim to release a fix within 7 da
 
 This action processes untrusted input (PR diffs and metadata). It mitigates prompt injection via backtick neutralization, dynamic fencing, and untrusted-data labeling.
 
+For consumers wiring this action into a workflow, the auditable checklist of required workflow-file controls — SHA pinning, `pull_request` trigger, same-repo gating, OpenAI key scoping, per-job permissions, retention defaults, fail-on-missing-chunks, and the `review-reference-file` rule — lives in [`docs/consumer-controls.md`](../docs/consumer-controls.md). Use that page for adoption-readiness audits; this file remains the home for the action's own runtime defenses.
+
 ### Safe `review-reference-file` values
 
 The `review-reference-file` input names a path inside the checked-out workspace, which on a `pull_request` run contains PR-controlled content. To prevent a PR from coercing the prepare step into reading runner-local files outside the workspace (e.g. `/proc/self/environ`) or runner-managed git state (e.g. `.git/config`) and forwarding their contents to OpenAI in the prompt, the value must satisfy every rule below. Anything else fails closed before the file is read:
