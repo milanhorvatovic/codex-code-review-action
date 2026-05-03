@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyChangelogUpdate,
+  buildAutoHeaderSection,
+  buildSignoffSection,
   bumpPackageJsonVersion,
   bumpPackageLockVersion,
   buildPrBody,
@@ -12,11 +14,13 @@ import {
   extractTrustBoundaryImpact,
   formatPullRequestEntry,
   parseTargetVersion,
+  refreshPrBody,
   releaseLevelOf,
   renderChangelogEntry,
   resolveTargetVersion,
   runCli,
   selectLastNonPrereleaseTag,
+  SIGNOFF_SECTION_HEADER,
   tagCommitTimestamp,
   type PullRequest,
 } from "./prepare-release.js";
@@ -639,6 +643,64 @@ describe("buildPrBody", () => {
   });
 });
 
+describe("refreshPrBody", () => {
+  const args = {
+    version: "2.1.0",
+    isPrerelease: false,
+    prs: [makePr({ number: 1, title: "F", labels: [{ name: "release: minor" }] })],
+    baseTag: "v2.0.0",
+  };
+
+  it("falls back to the full template when the existing body is missing", () => {
+    expect(refreshPrBody(args, null)).toBe(
+      `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`,
+    );
+    expect(refreshPrBody(args, undefined)).toBe(
+      `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`,
+    );
+    expect(refreshPrBody(args, "")).toBe(
+      `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`,
+    );
+  });
+
+  it("falls back to the full template when the marker is missing in the existing body", () => {
+    expect(refreshPrBody(args, "Legacy body without the marker")).toBe(
+      `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`,
+    );
+  });
+
+  it("preserves the maintainer-edited sign-off section verbatim while refreshing the auto-header", () => {
+    const filledSignoff = [
+      SIGNOFF_SECTION_HEADER,
+      "",
+      "Verified by: Maintainer — 2026-05-04",
+      "",
+      "Custom note from the maintainer.",
+    ].join("\n");
+    const previousBody = `Stale auto-header from a previous run.\n\n${filledSignoff}`;
+    const refreshed = refreshPrBody(args, previousBody);
+    expect(refreshed.startsWith(buildAutoHeaderSection(args))).toBe(true);
+    expect(refreshed).toContain("Verified by: Maintainer — 2026-05-04");
+    expect(refreshed).toContain("Custom note from the maintainer.");
+    expect(refreshed).not.toContain("Stale auto-header");
+  });
+
+  it("regenerates the auto-header on every call so reruns reflect new included PRs", () => {
+    const argsWithMore = {
+      ...args,
+      prs: [
+        makePr({ number: 1, title: "F1", labels: [{ name: "release: minor" }] }),
+        makePr({ number: 2, title: "F2", labels: [{ name: "release: patch" }] }),
+      ],
+    };
+    const filledSignoff = `${SIGNOFF_SECTION_HEADER}\n\nVerified by: Maintainer — 2026-05-04`;
+    const previousBody = `${buildAutoHeaderSection(args)}\n\n${filledSignoff}`;
+    const refreshed = refreshPrBody(argsWithMore, previousBody);
+    expect(refreshed).toContain("**PRs included (2)");
+    expect(refreshed).toContain("Verified by: Maintainer — 2026-05-04");
+  });
+});
+
 describe("existingBodyHasMaintainerSignoff", () => {
   it("returns false for null, undefined, or empty bodies", () => {
     expect(existingBodyHasMaintainerSignoff(null)).toBe(false);
@@ -853,9 +915,9 @@ describe("runCli (dry-run integration)", () => {
   });
 });
 
-describe("runCli (rerun body-preservation integration)", () => {
+describe("runCli (rerun body-refresh integration)", () => {
   function runRerunScenario(existingBody: string | null) {
-    const ghCalls: string[] = [];
+    const ghCalls: Array<{ args: string[] }> = [];
     const stdout: string[] = [];
     const stderr: string[] = [];
 
@@ -878,7 +940,6 @@ describe("runCli (rerun body-preservation integration)", () => {
         ]),
       [`pr list --head ${branch} --state open --json number`]: JSON.stringify([{ number: 42 }]),
       "pr view 42 --json body": JSON.stringify({ body: existingBody }),
-      "pr edit 42 --body": "",
     };
 
     const exit = runCli({
@@ -905,9 +966,9 @@ describe("runCli (rerun body-preservation integration)", () => {
       },
       writeFile: () => undefined,
       runGh: (args) => {
-        ghCalls.push(`gh ${args.join(" ")}`);
+        ghCalls.push({ args: [...args] });
         if (args[0] === "pr" && args[1] === "edit") {
-          return ghRoutes["pr edit 42 --body"] ?? "";
+          return "";
         }
         const key = args.join(" ");
         const value = ghRoutes[key];
@@ -934,33 +995,49 @@ describe("runCli (rerun body-preservation integration)", () => {
       stderrWrite: (chunk) => stderr.push(chunk),
     });
 
-    return { exit, ghCalls, stdout: stdout.join(""), stderr: stderr.join("") };
+    const editCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "edit");
+    return {
+      exit,
+      ghCalls,
+      stdout: stdout.join(""),
+      stderr: stderr.join(""),
+      editBody: editCall?.args[editCall.args.indexOf("--body") + 1],
+    };
   }
 
-  it("calls pr edit --body when the existing PR body has no maintainer sign-off", () => {
-    const { exit, ghCalls, stdout, stderr } = runRerunScenario(
+  it("refreshes the auto-header on the existing PR when no maintainer sign-off is present", () => {
+    const { exit, editBody, stdout, stderr } = runRerunScenario(
       "Release prepared by `scripts/prepare-release.ts` for v2.1.0.\n\n(no sign-off yet)",
     );
     expect(exit).toBe(0);
     expect(stderr).toBe("");
-    const editCall = ghCalls.find((c) => c.startsWith("gh pr edit 42"));
-    expect(editCall).toBeDefined();
+    expect(editBody).toBeDefined();
+    expect(editBody).toContain("Release prepared by `scripts/prepare-release.ts` for v2.1.0.");
+    expect(editBody).toContain("**PRs included (1)");
+    expect(editBody).toContain("## Release gate sign-off");
     expect(stdout).toContain("Updated existing release PR #42");
   });
 
-  it("skips pr edit --body when the existing PR body contains a Verified by sign-off line", () => {
+  it("refreshes the auto-header but preserves the gate sign-off section verbatim when sign-off is present", () => {
     const filledBody = [
-      "Release prepared by `scripts/prepare-release.ts` for v2.1.0.",
+      "Stale prior auto-header — should be refreshed.",
       "",
-      "## Release gate sign-off",
+      SIGNOFF_SECTION_HEADER,
       "",
       "Verified by: Maintainer — 2026-05-04",
+      "",
+      "Maintainer note retained on rerun.",
     ].join("\n");
-    const { exit, ghCalls, stdout, stderr } = runRerunScenario(filledBody);
+    const { exit, editBody, stdout, stderr } = runRerunScenario(filledBody);
     expect(exit).toBe(0);
     expect(stderr).toBe("");
-    const editCall = ghCalls.find((c) => c.startsWith("gh pr edit 42"));
-    expect(editCall).toBeUndefined();
-    expect(stdout).toContain("preserving body unchanged");
+    expect(editBody).toBeDefined();
+    expect(editBody).not.toContain("Stale prior auto-header");
+    expect(editBody).toContain("Release prepared by `scripts/prepare-release.ts` for v2.1.0.");
+    expect(editBody).toContain("**PRs included (1)");
+    expect(editBody).toContain("Verified by: Maintainer — 2026-05-04");
+    expect(editBody).toContain("Maintainer note retained on rerun.");
+    expect(stdout).toContain("Refreshed auto-generated header on release PR #42");
+    expect(stdout).toContain("re-verify the gate before approving");
   });
 });

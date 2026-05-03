@@ -357,7 +357,14 @@ export function existingBodyHasMaintainerSignoff(body: string | null | undefined
   return SIGNOFF_LINE_PATTERN.test(stripped);
 }
 
-export function buildPrBody(args: {
+// Stable marker that delimits the auto-generated header from the gate
+// sign-off section. `refreshPrBody` splits the existing PR body at this
+// heading so reruns can refresh the auto-header (PR list, since-line,
+// pre-release flag) while preserving any maintainer-edited sign-off
+// content below the heading.
+export const SIGNOFF_SECTION_HEADER = "## Release gate sign-off";
+
+export function buildAutoHeaderSection(args: {
   version: string;
   isPrerelease: boolean;
   prs: PullRequest[];
@@ -388,8 +395,13 @@ export function buildPrBody(args: {
     `**Pre-release:** ${isPrerelease ? "yes (major tag will not move; self-pin refresh skipped)" : "no"}`,
     "",
     "Merge this PR to trigger `release-on-merge.yaml`, which tags the merge commit and pushes the tag.",
-    "",
-    "## Release gate sign-off",
+  ];
+  return lines.join("\n");
+}
+
+export function buildSignoffSection(): string {
+  const lines: string[] = [
+    SIGNOFF_SECTION_HEADER,
     "",
     "Walk [`docs/release-gate.md`](docs/release-gate.md) against the merge candidate (the release branch's HEAD before the squash-merge). Resolve each pre-merge box below to a `Verified by: <maintainer> — <YYYY-MM-DD>` line or a `Waived: <rationale referencing tracked follow-up>` line before approving the squash-merge. The post-tag box is completed after `release.yaml` creates the GitHub Release.",
     "",
@@ -407,6 +419,38 @@ export function buildPrBody(args: {
     "- [ ] Gate evidence zip attached to the GitHub Release after the tag pushes (see [Archiving the gate](docs/release-gate.md#archiving-the-gate)).",
   ];
   return lines.join("\n");
+}
+
+export function buildPrBody(args: {
+  version: string;
+  isPrerelease: boolean;
+  prs: PullRequest[];
+  baseTag: string | undefined;
+}): string {
+  return `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`;
+}
+
+// Returns a refreshed PR body that always carries the freshly computed
+// auto-header (so reruns reflect new merged PRs / CHANGELOG changes), and
+// preserves the gate sign-off section verbatim from `existingBody` when the
+// `## Release gate sign-off` marker is found. If the marker is missing
+// (legacy body, or maintainer renamed the heading), the function falls back
+// to the freshly templated sign-off section.
+export function refreshPrBody(args: {
+  version: string;
+  isPrerelease: boolean;
+  prs: PullRequest[];
+  baseTag: string | undefined;
+}, existingBody: string | null | undefined): string {
+  const freshHeader = buildAutoHeaderSection(args);
+  if (existingBody === null || existingBody === undefined || existingBody === "") {
+    return `${freshHeader}\n\n${buildSignoffSection()}`;
+  }
+  const idx = existingBody.indexOf(SIGNOFF_SECTION_HEADER);
+  if (idx === -1) {
+    return `${freshHeader}\n\n${buildSignoffSection()}`;
+  }
+  return `${freshHeader}\n\n${existingBody.slice(idx)}`;
 }
 
 export type GhRunner = (args: string[]) => string;
@@ -687,12 +731,12 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       runGit(["push", `--force-with-lease=${branch}:${remoteSha}`, "origin", branch]);
     }
 
-    const prBody = buildPrBody({
+    const prBodyArgs = {
       version: targetVersion,
       isPrerelease: isPre,
       prs,
       baseTag: baseRelease?.tagName,
-    });
+    } as const;
     const existingPr = runGh([
       "pr",
       "list",
@@ -718,7 +762,7 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
         "--label",
         "release: skip",
         "--body",
-        prBody,
+        buildPrBody(prBodyArgs),
       ]);
       stdoutWrite(`Opened release PR for v${targetVersion} on branch ${branch}.\n`);
     } else {
@@ -731,12 +775,13 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
         "body",
       ]);
       const existingBody = (JSON.parse(existingBodyJson) as { body: string | null }).body;
+      const refreshedBody = refreshPrBody(prBodyArgs, existingBody);
+      runGh(["pr", "edit", String(number), "--body", refreshedBody]);
       if (existingBodyHasMaintainerSignoff(existingBody)) {
         stdoutWrite(
-          `Release PR #${number} for v${targetVersion} contains maintainer sign-off lines (\`Verified by:\` / \`Waived:\`); preserving body unchanged. Reset the gate sign-off section if you want the bot to refresh the auto-generated header.\n`,
+          `Refreshed auto-generated header on release PR #${number} for v${targetVersion}; preserved gate sign-off section verbatim. If the included-PRs list or CHANGELOG content changed, re-verify the gate before approving the squash-merge.\n`,
         );
       } else {
-        runGh(["pr", "edit", String(number), "--body", prBody]);
         stdoutWrite(
           `Updated existing release PR #${number} for v${targetVersion} on branch ${branch}.\n`,
         );
