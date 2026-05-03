@@ -1,5 +1,5 @@
 ---
-compatibility: Requires Node 24+, git, and the GitHub CLI (gh) on PATH for pin resolution.
+compatibility: Requires Python 3.12+, git, and the GitHub CLI (gh) on PATH for pin resolution. No third-party packages — stdlib only.
 description: >
   Adopt and operate the milanhorvatovic/codex-ai-code-review-action GitHub
   Action. Routes to capabilities for generating a hardened workflow file plus a
@@ -36,7 +36,7 @@ Read only the capability that matches the task. Do not load both unless the task
 
 - `references/invariants.md` — the 9 consumer-controls items encoded as machine-checkable predicates with stable IDs `CC-01..CC-09`. Both capabilities walk this list before emitting any workflow YAML.
 - `references/pin-resolution.md` — the runtime contract for resolving the latest reviewed SHA and tag for the action's three sub-actions via `gh api`. No static pin table is shipped.
-- `lib/` — TypeScript primitives consumed by the capabilities' deterministic glue scripts (`detect.ts`, `schema-mapper.ts`, `invariants.ts`, `reference-layerer.ts`, `workflow-templates.ts`, `pin-resolver.ts`, plus per-finding diagnoses under `lib/diagnoses/`).
+- `lib/` — Python 3.12 stdlib-only primitives consumed by the capabilities' deterministic glue scripts (`detect.py`, `schema_mapper.py`, `invariants/`, `reference_layerer.py`, `workflow_templates.py`, `pin_resolver.py`, `findings_loader.py`, plus per-finding diagnoses under `lib/diagnoses/`). No `pip install` required.
 - `__fixtures__/` — input fixtures under `repos/` and conformant `findings.json` examples under `findings-examples/`, exercised by golden tests and used as the demonstration corpus when the capability is run during development.
 
 ## Trust boundary

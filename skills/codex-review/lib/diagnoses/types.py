@@ -1,0 +1,30 @@
+"""Shared dataclasses and type aliases for the diagnosis modules."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Callable, Literal
+
+from ..findings_loader import Findings
+
+type DiagnosisKind = Literal["low-confidence", "noisy-p3", "truncation"]
+type RecommendationTarget = Literal["reference-file", "workflow"]
+
+
+@dataclass(frozen=True)
+class Recommendation:
+    contributing_findings: tuple[str, ...]
+    diff: str
+    kind: DiagnosisKind
+    rationale: str
+    target: RecommendationTarget
+
+
+@dataclass(frozen=True)
+class Diagnosis:
+    kind: DiagnosisKind
+    recommendations: tuple[Recommendation, ...]
+    triggered: bool
+
+
+type DiagnosisFn = Callable[[Findings], Diagnosis]

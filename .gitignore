@@ -10,6 +10,11 @@ coverage/
 # Build artifacts
 *.tsbuildinfo
 
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
 # Secrets
 .env
 .env.*

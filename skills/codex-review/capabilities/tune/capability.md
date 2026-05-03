@@ -21,11 +21,11 @@ Diagnose a published review and emit a per-finding rationale plus a unified diff
 
 ## Instructions
 
-1. Load the input findings via `lib/findings-loader.ts`. Validate against `defaults/review-output-schema.json`. Refuse to proceed on any schema violation; surface the offending field path.
+1. Load the input findings via `lib/findings_loader.py`. Validate against `defaults/review-output-schema.json`. Refuse to proceed on any schema violation; surface the offending field path.
 2. Run each diagnosis under `lib/diagnoses/`:
-   - `low-confidence.ts` — when `overall_confidence_score < 0.9`, surface the findings whose `confidence_score` clusters in the 0.5–0.7 band; recommend a reference-file edit OR an `effort: high` / `model:` bump, never both at once.
-   - `noisy-p3.ts` — when more than 6 P3 findings appear, recommend raising `min-confidence` to a percentile boundary that would prune them, plus optional reference-file pruning anchors for the P3 categories that dominate.
-   - `truncation.ts` — when `summary` contains the literal "Incomplete review" banner phrase, recommend a `max-chunk-bytes` change (lower it; the banner means a chunk job failed or was missing).
+   - `low_confidence.py` — when `overall_confidence_score < 0.9`, surface the findings whose `confidence_score` clusters in the 0.5–0.7 band; recommend a reference-file edit OR an `effort: high` / `model:` bump, never both at once.
+   - `noisy_p3.py` — when more than 6 P3 findings appear, recommend raising `min-confidence` to a percentile boundary that would prune them, plus optional reference-file pruning anchors for the P3 categories that dominate.
+   - `truncation.py` — when `summary` contains the literal "Incomplete review" banner phrase, recommend a `max-chunk-bytes` change (lower it; the banner means a chunk job failed or was missing).
 3. For each diagnosis hit, emit a `Recommendation` record: the affected file (reference or workflow), the unified diff, and a per-finding rationale block listing every `finding.title` that contributed to the recommendation.
 4. Render the consolidated output: a markdown report with one `## Recommendation` section per hit, each containing a fenced `diff` block and a bulleted rationale. Include a footer summarizing the verdict, the finding count, and the diagnoses that did and did not fire.
 5. The integrator decides whether to apply each diff. The capability never writes to the consumer's working tree.
