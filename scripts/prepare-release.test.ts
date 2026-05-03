@@ -622,6 +622,7 @@ describe("buildPrBody", () => {
     expect(body).toContain("- [ ] Dist reproducibility check is clean");
     expect(body).toContain("- [ ] Manual security regression checks");
     expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
+    expect(body).toContain("- [ ] Release-specific items table");
     expect(body).toContain("- [ ] Trust-boundary CHANGELOG callout");
     expect(body).toContain("- [ ] Gate evidence zip");
   });

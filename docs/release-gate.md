@@ -61,6 +61,23 @@ Run these only if the release contains the `review-reference-source: base` mode 
 
 Both checks should be exercised in a scratch PR against the merge commit before sign-off, and the result captured in the gate evidence zip.
 
+## Release-specific items
+
+Beyond the templated sections above, every release introduces a set of release-specific items the maintainer must verify against the merge commit. Typical categories:
+
+- Security or trust-boundary changes that need cross-referencing to the PR that landed them.
+- Behavior or schema changes that need a manual check beyond what CI runs.
+- Coordinated changes spanning several PRs whose individual reviews did not capture the cumulative effect.
+- Post-tag automation outcomes (for example, the self-pin refresh PR opened by `release.yaml`) that need confirmation once the tag pushes and the follow-up PR lands.
+
+For each release, populate the table below in the filled gate snapshot. The meta-issue tracking the release is the source for what should be on the list — the snapshot is the durable signed-off record. Cross-reference each item to the work that owns it (PR number, issue, or workflow file). Resolve every row to a `Verified by:` or `Waived:` line per the [Sign-off convention](#sign-off-convention).
+
+| # | Item | Owning work | State |
+|---|---|---|---|
+| 1 | _short description of the release-specific item_ | _PR # / issue # / workflow file_ | _`Verified by: <maintainer> — <YYYY-MM-DD>` or `Waived: <rationale + tracked follow-up>`_ |
+
+If a release introduces no items beyond the templated checks, record one row with `_None — release contains only routine maintenance._` and a verified-by line so the section is not left ambiguously empty.
+
 ## Sign-off convention
 
 Every line in this gate ends in one of two states by tag time:

@@ -370,6 +370,7 @@ export function buildPrBody(args: {
     "- [ ] Dist reproducibility check is clean (`npm run build && git diff --exit-code -- dist package.json package-lock.json`).",
     "- [ ] Manual security regression checks for `review-reference-file` are confirmed against the merge candidate.",
     "- [ ] Conditional `review-reference-source: base` checks are run, or waived with a rationale.",
+    "- [ ] Release-specific items table is filled with cross-references to owning PRs/issues, and each row resolved to `Verified by:` or `Waived:` (see [Release-specific items](docs/release-gate.md#release-specific-items)).",
     "- [ ] Trust-boundary CHANGELOG callout is present if any merged PR is labeled `trust-boundary`.",
     "- [ ] Gate evidence zip will be attached to the GitHub Release after the tag pushes (see [Archiving the gate](docs/release-gate.md#archiving-the-gate)).",
   ];
