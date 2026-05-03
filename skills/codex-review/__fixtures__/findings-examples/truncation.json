@@ -1,0 +1,49 @@
+{
+  "changes": [
+    "Added a new validation path in src/publish/validator.ts",
+    "Hardened error handling around the GitHub API client"
+  ],
+  "effort": "high",
+  "files": [
+    {
+      "description": "New validation path with retry and backoff.",
+      "path": "src/publish/validator.ts"
+    },
+    {
+      "description": "Tests for the new validation path.",
+      "path": "src/publish/validator.test.ts"
+    },
+    {
+      "description": "Refactored GitHub client error handling.",
+      "path": "src/github/client.ts"
+    }
+  ],
+  "findings": [
+    {
+      "body": "The retry loop multiplies backoff by 2 on every iteration but never caps the maximum delay. A pathological 5xx storm could push the delay into hours; clamp to a sane ceiling.",
+      "confidence_score": 0.91,
+      "line": 73,
+      "path": "src/publish/validator.ts",
+      "priority": 1,
+      "reasoning": "Exponential backoff without a cap is a known footgun. The diff shows the multiplier and initial delay but no max-delay constant. Effect: a long-running outage stalls the publish step for hours instead of failing closed.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Retry backoff lacks a maximum-delay cap"
+    },
+    {
+      "body": "When the API client raises `RequestError` with status 422, the retry path treats it as transient and retries forever (until the cap above). 422 is permanent — surface and abort.",
+      "confidence_score": 0.88,
+      "line": 109,
+      "path": "src/github/client.ts",
+      "priority": 1,
+      "reasoning": "Status 422 is GitHub's validation error; retrying does not help. The new code does not differentiate between 5xx and 4xx in the retry classifier.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "422 misclassified as transient"
+    }
+  ],
+  "model": "gpt-5",
+  "overall_confidence_score": 0.78,
+  "overall_correctness": "patch is correct",
+  "summary": "Incomplete review — one or more chunks did not produce output and were merged without their findings. The visible diff covers two correctness issues in retry/backoff handling, but the remainder of the patch was not analyzed by Codex on this run. Re-run after lowering max-chunk-bytes."
+}

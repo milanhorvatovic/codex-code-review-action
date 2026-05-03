@@ -1,0 +1,44 @@
+name: "Codex Review — Prepare"
+description: "Build diff, split into chunks, and assemble prompts for Codex review. Produces .codex/ artifacts for the review and publish steps."
+
+branding:
+  color: "blue"
+  icon: "git-branch"
+
+inputs:
+  allow-users:
+    description: "Comma-separated list of GitHub usernames who can run this action. Empty = all users allowed."
+    required: false
+    default: ""
+
+  github-token:
+    description: "GitHub token for fetching PR base commit. Only needs contents: read permission."
+    required: false
+    default: ${{ github.token }}
+
+  max-chunk-bytes:
+    description: "Target maximum bytes per diff chunk. Splitting occurs at file boundaries, so a chunk may exceed this size if a single file's diff is larger. Must be a positive integer; invalid or non-positive values fall back to the default."
+    required: false
+    default: "204800"
+
+  review-reference-file:
+    description: "Path to a custom review reference markdown file. Uses the built-in default if empty."
+    required: false
+    default: ""
+
+outputs:
+  chunk-count:
+    description: "Number of diff chunks produced."
+
+  chunk-matrix:
+    description: "JSON-encoded chunk metadata for matrix strategy."
+
+  has-changes:
+    description: "Whether the PR diff contains changes (true/false)."
+
+  skipped:
+    description: "Whether the review was skipped (true/false)."
+
+runs:
+  main: "../dist/prepare/main.js"
+  using: "node24"

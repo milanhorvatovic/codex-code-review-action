@@ -1,0 +1,45 @@
+{
+  "changes": [
+    "Refactored chunk allocation in src/prepare/chunker.ts",
+    "Tightened diff-size accounting around binary-file boundaries"
+  ],
+  "effort": "medium",
+  "files": [
+    {
+      "description": "Adjusted chunk-byte budget calculation; introduced a new helper for binary detection.",
+      "path": "src/prepare/chunker.ts"
+    },
+    {
+      "description": "Added unit tests for the binary-detection helper.",
+      "path": "src/prepare/chunker.test.ts"
+    }
+  ],
+  "findings": [
+    {
+      "body": "The new helper detects binary files by reading the first 8 KB and checking for a NUL byte. This works for most real-world binaries but misses UTF-16 text and produces false positives on minified JS containing raw NUL escapes. Consider relying on `git diff --numstat` (which already classifies binary files) instead of reimplementing the heuristic.",
+      "confidence_score": 0.62,
+      "line": 87,
+      "path": "src/prepare/chunker.ts",
+      "priority": 2,
+      "reasoning": "The intent is to skip binary files from the chunk budget. The current implementation's NUL-byte check has known failure modes. git itself maintains a binary classification we could read from --numstat output without reimplementing it. The recommendation is sound but the existing implementation is not demonstrably broken for the inputs the action sees.",
+      "start_line": 80,
+      "suggestion": null,
+      "title": "Binary detection heuristic may misclassify minified JS"
+    },
+    {
+      "body": "When `MAX_CHUNK_BYTES` is unset and the env var fallback returns `\"\"`, the parsed value is `0`, not the documented default. The downstream comparison `chunkSize > 0` then short-circuits and emits a single mega-chunk. Validate with `Number.isFinite()` and clamp.",
+      "confidence_score": 0.58,
+      "line": 142,
+      "path": "src/prepare/chunker.ts",
+      "priority": 1,
+      "reasoning": "This is a NaN-propagation pattern flagged in defaults/review-reference.md. The default-fallback codepath is not exercised by the existing tests. The recommendation is valid but I have not traced every caller of the chunker to confirm whether MAX_CHUNK_BYTES is always set upstream.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "MAX_CHUNK_BYTES empty-string fallback bypasses default"
+    }
+  ],
+  "model": "gpt-5",
+  "overall_confidence_score": 0.86,
+  "overall_correctness": "patch is correct",
+  "summary": "The PR refactors chunk allocation and adds binary-file detection. The behavior is plausible but two findings raise correctness concerns I could not fully trace from the diff alone."
+}

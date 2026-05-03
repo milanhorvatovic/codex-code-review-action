@@ -1,0 +1,151 @@
+{
+  "changes": [
+    "Renamed several internal variables for consistency",
+    "Added JSDoc on three exported helpers"
+  ],
+  "effort": "medium",
+  "files": [
+    {
+      "description": "Variable renames; JSDoc on exported functions.",
+      "path": "src/core/findings.ts"
+    }
+  ],
+  "findings": [
+    {
+      "body": "Variable name `f` is opaque; consider `finding`.",
+      "confidence_score": 0.55,
+      "line": 12,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Style preference; not a correctness issue.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Opaque variable name `f`"
+    },
+    {
+      "body": "JSDoc summary should end with a period.",
+      "confidence_score": 0.58,
+      "line": 24,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Convention; cosmetic.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Missing trailing period in JSDoc"
+    },
+    {
+      "body": "Could use a const assertion here.",
+      "confidence_score": 0.6,
+      "line": 31,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Minor type narrowing; no behavior change.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Const assertion would tighten the type"
+    },
+    {
+      "body": "Trailing whitespace on this line.",
+      "confidence_score": 0.62,
+      "line": 38,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Linter would catch this.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Trailing whitespace"
+    },
+    {
+      "body": "Prefer template literals over string concatenation.",
+      "confidence_score": 0.55,
+      "line": 45,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Style preference.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "String concatenation could be a template literal"
+    },
+    {
+      "body": "Consider extracting this magic number into a constant.",
+      "confidence_score": 0.65,
+      "line": 52,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Mild readability concern.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Magic number 100"
+    },
+    {
+      "body": "Comment could be clearer.",
+      "confidence_score": 0.57,
+      "line": 60,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Subjective.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Vague comment"
+    },
+    {
+      "body": "Function name could be more descriptive.",
+      "confidence_score": 0.6,
+      "line": 68,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Style preference.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Generic function name `doIt`"
+    },
+    {
+      "body": "Empty line could be removed.",
+      "confidence_score": 0.52,
+      "line": 75,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Cosmetic.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Extra empty line"
+    },
+    {
+      "body": "Could be inline-able.",
+      "confidence_score": 0.58,
+      "line": 82,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Minor.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Variable used only once"
+    },
+    {
+      "body": "Imports could be sorted.",
+      "confidence_score": 0.63,
+      "line": 1,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "Linter rule.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Import order"
+    },
+    {
+      "body": "Missing return type annotation on a private function.",
+      "confidence_score": 0.66,
+      "line": 90,
+      "path": "src/core/findings.ts",
+      "priority": 3,
+      "reasoning": "TypeScript can infer; mild preference.",
+      "start_line": null,
+      "suggestion": null,
+      "title": "Missing return type annotation"
+    }
+  ],
+  "model": "gpt-5",
+  "overall_confidence_score": 0.94,
+  "overall_correctness": "patch is correct",
+  "summary": "Cosmetic refactor with no behavior change. Twelve P3 findings of subjective style preference are surfaced; consider raising min-confidence to suppress them."
+}

@@ -1,0 +1,68 @@
+name: "Codex Review — Publish"
+description: "Merge chunk reviews and publish as a GitHub PR review with inline comments. Requires .codex/ artifacts from the prepare and review steps. Artifacts must be downloaded with merge-multiple: true so chunk outputs land directly under .codex/. Partial reviews (when chunks are missing) are published with an 'Incomplete review' banner; set fail-on-missing-chunks: true to additionally fail the step after publishing."
+
+branding:
+  color: "green"
+  icon: "message-square"
+
+inputs:
+  expected-chunks:
+    description: "Expected number of chunk review outputs. When set, a warning is logged and an 'Incomplete review' banner is rendered in the published review body if some chunks are missing. Pair with `fail-on-missing-chunks: true` to additionally fail the step after publishing the partial review. Empty = skip validation."
+    required: false
+    default: ""
+
+  fail-on-missing-chunks:
+    description: "After publishing, fail the publish step if any `expected-chunks` were missing from the review artifacts. Partial reviews are always published with an 'Incomplete review' banner regardless of this setting. Default false."
+    required: false
+    default: "false"
+
+  github-token:
+    description: "GitHub token for posting PR reviews. Requires pull-requests: write permission."
+    required: true
+
+  max-comments:
+    description: "Maximum number of inline review comments posted on the PR. Omit for unlimited. When set, must be a non-negative integer."
+    required: false
+    default: ""
+
+  min-confidence:
+    description: "Minimum confidence score (0.0-1.0) for a finding to appear as an inline comment."
+    required: false
+    default: "0"
+
+  model:
+    description: "Model name shown in the review footer. Overridden by the model field in the review output when available."
+    required: false
+    default: ""
+
+  retain-findings:
+    description: "Upload merged review findings as a long-lived artifact for auditing or analytics."
+    required: false
+    default: "false"
+
+  retain-findings-days:
+    description: "Number of days to retain the findings artifact. Only applies when retain-findings is true. Must be a positive integer; invalid or non-positive values fail the action. Values greater than 90 are clamped to 90."
+    required: false
+    default: "90"
+
+  review-effort:
+    description: "Effort label shown in the review footer (e.g. medium, high)."
+    required: false
+    default: ""
+
+outputs:
+  findings-count:
+    description: "Total number of findings in the merged review."
+
+  published:
+    description: "Whether the review was published (true/false)."
+
+  review-file:
+    description: "Path to the merged review output JSON file."
+
+  verdict:
+    description: "Overall correctness verdict."
+
+runs:
+  main: "../dist/publish/main.js"
+  using: "node24"

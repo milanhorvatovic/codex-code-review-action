@@ -36,11 +36,11 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "extract:changelog": "tsx scripts/extract-changelog-section.ts",
-    "lint": "eslint src/ scripts/ skills/",
+    "lint": "eslint src/ scripts/",
     "prepare:release": "tsx scripts/prepare-release.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts && tsc --noEmit -p skills/codex-review",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
     "verify:doc-pins": "tsx scripts/verify-doc-pins.ts",
     "verify:prose-style": "tsx scripts/verify-prose-style.ts"
   },
