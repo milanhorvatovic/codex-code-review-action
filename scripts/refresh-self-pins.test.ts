@@ -318,4 +318,19 @@ describe("runCli", () => {
     expect(runCli(makeDeps(stub, ["2.1.0", "abcd"]))).toBe(1);
     expect(stub.stderr.join("")).toContain("40-character hex");
   });
+
+  it("does not write any target when a later read fails", () => {
+    const stub: Stub = {
+      files: {
+        [README_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`,
+        // WORKFLOW_PATH intentionally absent so reading it throws after README has been refreshed.
+      },
+      writes: [],
+      stdout: [],
+      stderr: [],
+    };
+    expect(runCli(makeDeps(stub, ["2.1.0", NEW_SHA]))).toBe(1);
+    expect(stub.writes).toHaveLength(0);
+    expect(stub.stderr.join("")).toContain(`no fixture for ${WORKFLOW_PATH}`);
+  });
 });

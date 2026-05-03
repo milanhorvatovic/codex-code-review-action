@@ -49,7 +49,7 @@ The three-job architecture splits responsibilities by permission scope:
 
 If you believe any of these defenses can be bypassed, please report it using the process above.
 
-### Self-hosted dogfood workflow
+### Dogfood (self-review) workflow
 
 This repository runs the action against its own pull requests via [`.github/workflows/codex-review.yaml`](workflows/codex-review.yaml). The dogfood mirrors the [Production workflow example](../README.md#production-workflow-example) so the documented hardened pattern is exercised end to end on a real PR-shaped event before adopters copy it. Operationally:
 

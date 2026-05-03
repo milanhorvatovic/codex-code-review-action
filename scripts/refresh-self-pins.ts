@@ -141,7 +141,7 @@ export function runCli(deps: RunCliDeps = {}): number {
   const sha = argv[1];
 
   try {
-    const changedPaths: string[] = [];
+    const pendingWrites: Array<{ path: string; content: string }> = [];
     const unchangedPaths: string[] = [];
     for (const target of SELF_PIN_TARGETS) {
       const original = readSource(target.path);
@@ -150,15 +150,19 @@ export function runCli(deps: RunCliDeps = {}): number {
         unchangedPaths.push(target.path);
         continue;
       }
-      writeSource(target.path, updated);
-      changedPaths.push(target.path);
+      pendingWrites.push({ path: target.path, content: updated });
     }
-    if (changedPaths.length === 0) {
+    if (pendingWrites.length === 0) {
       stdoutWrite("All self-pin targets already up to date; no changes written.\n");
       return 0;
     }
+    for (const write of pendingWrites) {
+      writeSource(write.path, write.content);
+    }
     stdoutWrite(
-      `Refreshed self-pin SHAs to ${sha} (v${version}) in: ${changedPaths.join(", ")}.\n`,
+      `Refreshed self-pin SHAs to ${sha} (v${version}) in: ${pendingWrites
+        .map((w) => w.path)
+        .join(", ")}.\n`,
     );
     if (unchangedPaths.length > 0) {
       stdoutWrite(`Already up to date: ${unchangedPaths.join(", ")}.\n`);

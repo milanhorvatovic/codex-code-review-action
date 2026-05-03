@@ -1,16 +1,15 @@
 name: Codex code review (dogfood)
 
 # Mirrors the Production workflow example documented in README.md so this
-# repository's own PRs exercise the hardened pattern end to end. Substitutions
-# from the README example: allow-users is bound to the maintainer; the three
-# self-action SHAs are pinned to a v2.1.0-pre commit on main; fail-on-missing
-# -chunks ships uncommented because the pinned SHA already includes the input;
+# repository's own PRs exercise the hardened pattern end to end.
+# Substitutions from the README example: allow-users is bound to the
+# maintainer; the three self-action SHAs are pinned to a reviewed commit on
+# main and refreshed to the latest release tag by
+# scripts/refresh-self-pins.ts after each release; `fail-on-missing-chunks`
+# ships uncommented because the pinned SHA already includes the input;
 # retain-findings is quoted to match docs/consumer-controls.md item 7.
-#
-# Refresh on release: scripts/refresh-self-pins.ts rewrites the three SHAs and
-# the v2.1.0-pre tag comments to the v2.1.0 release SHA. paths-ignore on dist
-# is a partial mitigation for token cost on Dependabot bumps; diff-level path
-# exclusion is tracked in issue #106.
+# paths-ignore on dist is a partial mitigation for token cost on Dependabot
+# bumps; diff-level path exclusion is tracked in issue #106.
 
 on:
   pull_request:
@@ -43,7 +42,6 @@ jobs:
           persist-credentials: false
 
       - id: prepare
-        # SHA corresponds to tag v2.1.0-pre — refreshed to v2.1.0 by scripts/refresh-self-pins.ts after the release tag is published.
         uses: milanhorvatovic/codex-ai-code-review-action/prepare@0fc55cdd3d5cf9841c9ba58822354f67b6c63293 # v2.1.0-pre
         with:
           allow-users: milanhorvatovic # bounds OpenAI cost while the dogfood is being proven out; revisit after one release cycle
