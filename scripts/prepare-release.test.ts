@@ -680,6 +680,49 @@ describe("existingBodyHasMaintainerSignoff", () => {
     const body = "```\nVerified by: example — 2026-01-01\n```\n";
     expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
   });
+
+  it("does not match a PR title containing Waived: or Verified by:", () => {
+    const body = `${buildPrBody({
+      version: "2.1.0",
+      isPrerelease: false,
+      prs: [
+        makePr({
+          number: 100,
+          title: "Waived: update release docs",
+          labels: [{ name: "release: patch" }],
+        }),
+        makePr({
+          number: 101,
+          title: "Verified by: rename module",
+          labels: [{ name: "release: minor" }],
+        }),
+      ],
+      baseTag: "v2.0.0",
+    })}`;
+    expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
+  });
+
+  it("does not match the gate doc template prose when pasted unfilled", () => {
+    const pastedTemplate = [
+      "## Sign-off convention",
+      "",
+      "- **Verified by:** `<maintainer> — <YYYY-MM-DD>` — the maintainer ran the check.",
+      "- **Waived:** `<rationale>` — the check does not apply to this release.",
+      "",
+      "Verified by: <maintainer> — <YYYY-MM-DD>",
+      "Waived: <rationale referencing tracked follow-up>",
+    ].join("\n");
+    expect(existingBodyHasMaintainerSignoff(pastedTemplate)).toBe(false);
+  });
+
+  it("matches a list-item style fill (- Verified by: ... or - [x] Verified by: ...)", () => {
+    expect(
+      existingBodyHasMaintainerSignoff("- Verified by: Maintainer — 2026-05-04"),
+    ).toBe(true);
+    expect(
+      existingBodyHasMaintainerSignoff("- [x] Verified by: Maintainer — 2026-05-04"),
+    ).toBe(true);
+  });
 });
 
 describe("runCli (dry-run integration)", () => {
@@ -807,5 +850,117 @@ describe("runCli (dry-run integration)", () => {
     });
     expect(exit).toBe(1);
     expect(stderr.join("")).toMatch(/missing a release-level label/);
+  });
+});
+
+describe("runCli (rerun body-preservation integration)", () => {
+  function runRerunScenario(existingBody: string | null) {
+    const ghCalls: string[] = [];
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+
+    const branch = "release/v2.1.0";
+    const baseRef = "abc1234";
+
+    const ghRoutes: Record<string, string> = {
+      "release list --limit 100 --json tagName,publishedAt,isPrerelease": JSON.stringify([
+        { tagName: "v2.0.0", publishedAt: "2026-04-07T00:00:00Z", isPrerelease: false },
+      ]),
+      "pr list --state merged --base main --search merged:>2026-04-07T00:00:00Z base:main --json number,title,body,labels,url --limit 1000":
+        JSON.stringify([
+          {
+            number: 100,
+            title: "Add feature",
+            body: "",
+            labels: [{ name: "release: minor" }],
+            url: "https://github.com/o/r/pull/100",
+          },
+        ]),
+      [`pr list --head ${branch} --state open --json number`]: JSON.stringify([{ number: 42 }]),
+      "pr view 42 --json body": JSON.stringify({ body: existingBody }),
+      "pr edit 42 --body": "",
+    };
+
+    const exit = runCli({
+      argv: [],
+      env: { RELEASE_APP_BOT_USER_ID: "999000" },
+      readFile: (path) => {
+        if (path === "package.json")
+          return `${JSON.stringify({ name: "x", version: "2.0.0" }, null, 2)}\n`;
+        if (path === "package-lock.json")
+          return `${JSON.stringify(
+            {
+              name: "x",
+              version: "2.0.0",
+              lockfileVersion: 3,
+              requires: true,
+              packages: { "": { name: "x", version: "2.0.0" } },
+            },
+            null,
+            2,
+          )}\n`;
+        if (path === "CHANGELOG.md")
+          return "# Changelog\n\n## [2.0.0] - 2026-04-07\n\n- prior\n";
+        throw new Error(`unexpected read: ${path}`);
+      },
+      writeFile: () => undefined,
+      runGh: (args) => {
+        ghCalls.push(`gh ${args.join(" ")}`);
+        if (args[0] === "pr" && args[1] === "edit") {
+          return ghRoutes["pr edit 42 --body"] ?? "";
+        }
+        const key = args.join(" ");
+        const value = ghRoutes[key];
+        if (value === undefined) throw new Error(`unrouted gh: ${key}`);
+        return value;
+      },
+      runGit: (args) => {
+        if (args[0] === "ls-remote" && args[1] === "--tags") {
+          return `${baseRef}\trefs/tags/v2.0.0\n`;
+        }
+        if (args[0] === "ls-remote" && args[1] === "--heads") {
+          return "";
+        }
+        if (args[0] === "log" && args.includes("--format=%cI")) {
+          return "2026-04-07T00:00:00Z\n";
+        }
+        if (args[0] === "diff" && args.includes("--cached")) {
+          return "package.json\npackage-lock.json\nCHANGELOG.md\n";
+        }
+        return "";
+      },
+      today: () => "2026-05-01",
+      stdoutWrite: (chunk) => stdout.push(chunk),
+      stderrWrite: (chunk) => stderr.push(chunk),
+    });
+
+    return { exit, ghCalls, stdout: stdout.join(""), stderr: stderr.join("") };
+  }
+
+  it("calls pr edit --body when the existing PR body has no maintainer sign-off", () => {
+    const { exit, ghCalls, stdout, stderr } = runRerunScenario(
+      "Release prepared by `scripts/prepare-release.ts` for v2.1.0.\n\n(no sign-off yet)",
+    );
+    expect(exit).toBe(0);
+    expect(stderr).toBe("");
+    const editCall = ghCalls.find((c) => c.startsWith("gh pr edit 42"));
+    expect(editCall).toBeDefined();
+    expect(stdout).toContain("Updated existing release PR #42");
+  });
+
+  it("skips pr edit --body when the existing PR body contains a Verified by sign-off line", () => {
+    const filledBody = [
+      "Release prepared by `scripts/prepare-release.ts` for v2.1.0.",
+      "",
+      "## Release gate sign-off",
+      "",
+      "Verified by: Maintainer — 2026-05-04",
+    ].join("\n");
+    const { exit, ghCalls, stdout, stderr } = runRerunScenario(filledBody);
+    expect(exit).toBe(0);
+    expect(stderr).toBe("");
+    const editCall = ghCalls.find((c) => c.startsWith("gh pr edit 42"));
+    expect(editCall).toBeUndefined();
+    expect(stdout).toContain("preserving body unchanged");
   });
 });

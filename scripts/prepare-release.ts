@@ -331,17 +331,30 @@ export function resolveTargetVersion(args: {
 }
 
 // Heuristic for "the maintainer has begun filling in the gate sign-off
-// checklist". Returns true if the body contains a `Verified by:` or `Waived:`
-// label outside of backtick-quoted spans (the bot's template includes those
-// labels inside backticks as instruction examples). Used by `runCli` to skip
-// `gh pr edit --body` reruns once sign-off has begun, so re-running
-// `prepare-release.yaml` for the same version does not erase maintainer fills.
+// checklist". Returns true if a line in the body starts with `Verified by:` or
+// `Waived:` (optionally preceded by a list bullet and/or checkbox) AND the
+// label is followed by a non-placeholder value. Backtick-quoted spans are
+// stripped first so the bot's template instruction examples do not match.
+//
+// Anchoring to line start (rather than substring search) avoids false
+// positives from PR titles that happen to contain those labels mid-line, and
+// requiring a non-`<` non-whitespace character after the colon avoids matches
+// against the gate doc's own template placeholders (`Verified by: <maintainer>
+// — <YYYY-MM-DD>`) when a maintainer pastes the gate prose into the PR body
+// before filling in concrete values.
+//
+// Used by `runCli` to skip `gh pr edit --body` once sign-off has begun, so
+// re-running `prepare-release.yaml` for the same version does not erase
+// maintainer fills.
+const SIGNOFF_LINE_PATTERN =
+  /^\s*(?:[-*]\s+(?:\[[ xX]\]\s+)?)?(?:Verified by|Waived):\s*[^<\s]/m;
+
 export function existingBodyHasMaintainerSignoff(body: string | null | undefined): boolean {
   if (body === null || body === undefined || body === "") return false;
   const stripped = body
     .replace(/```[\s\S]*?```/g, "")
     .replace(/`[^`]*`/g, "");
-  return /\b(?:Verified by|Waived):/.test(stripped);
+  return SIGNOFF_LINE_PATTERN.test(stripped);
 }
 
 export function buildPrBody(args: {
