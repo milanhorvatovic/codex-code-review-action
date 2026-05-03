@@ -576,7 +576,11 @@ The wrapper threads four `prepare` outputs (`skipped`, `has-changes`, `chunk-cou
 
 #### Extending the wrapper's input surface
 
-The example above only exposes the OpenAI API key via `workflow_call.secrets`. If product repos need to tune `allow-users`, `review-reference-file`, `max-chunk-bytes`, `min-confidence`, or other per-repo knobs, add them to `on.workflow_call.inputs:` in the wrapper and thread them down into the matching `with:` blocks. Keep the input surface minimal — every input exposed becomes a policy decision the wrapper has to enforce.
+The example above only exposes the OpenAI API key via `workflow_call.secrets`. The wrapper is the org's policy boundary, so the default surface is deliberately tiny — every input exposed becomes a policy decision the wrapper has to enforce. Use these categories when deciding whether to add an input:
+
+- **Safe to expose for product repos.** Operational tuning that does not change trust boundaries: `allow-users`, `max-chunk-bytes`, `min-confidence`, `max-comments`, `model`, `effort`, `review-effort`. Add these to `on.workflow_call.inputs:` and thread them into the matching `with:` blocks.
+- **Expose only with `review-reference-source: base`.** Reference-policy knobs (`review-reference-file`, `review-reference-source`) decide what the model treats as review policy. In workspace mode the policy file is read from the PR head, so any same-repo PR can rewrite it (see [the production-example callout above](#production-workflow-example) and [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97)). If product repos need a custom reference, expose both inputs together and set `review-reference-source: base` in the wrapper's defaults so the wrapper — not the consumer's PR authors — controls policy provenance.
+- **Do not expose by default.** Data-destination and retention knobs (`retain-findings`, `retain-findings-days`), permission scoping, the OpenAI key surface beyond the existing `workflow_call.secrets.openai-api-key`, and the same-repo / draft / fork gates. These belong to the wrapper repo's centralised policy; exposing them lets product repos opt out of the controls the wrapper exists to enforce.
 
 ### Enterprise adoption checklist
 
