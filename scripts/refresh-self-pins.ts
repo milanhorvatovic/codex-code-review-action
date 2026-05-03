@@ -83,6 +83,18 @@ export function refreshReadme(content: string, version: string, sha: string): st
   return next;
 }
 
+export function refreshWorkflow(content: string, version: string, sha: string): string {
+  return rewriteAllSelfPins(content, version, sha);
+}
+
+export const SELF_PIN_TARGETS: ReadonlyArray<{
+  path: string;
+  refresh: (content: string, version: string, sha: string) => string;
+}> = [
+  { path: "README.md", refresh: refreshReadme },
+  { path: ".github/workflows/codex-review.yaml", refresh: refreshWorkflow },
+];
+
 export type RunCliDeps = {
   argv?: string[];
   readSource?: (path: string) => string;
@@ -129,14 +141,28 @@ export function runCli(deps: RunCliDeps = {}): number {
   const sha = argv[1];
 
   try {
-    const original = readSource("README.md");
-    const updated = refreshReadme(original, version, sha);
-    if (updated === original) {
-      stdoutWrite("README.md already up to date; no changes written.\n");
+    const changedPaths: string[] = [];
+    const unchangedPaths: string[] = [];
+    for (const target of SELF_PIN_TARGETS) {
+      const original = readSource(target.path);
+      const updated = target.refresh(original, version, sha);
+      if (updated === original) {
+        unchangedPaths.push(target.path);
+        continue;
+      }
+      writeSource(target.path, updated);
+      changedPaths.push(target.path);
+    }
+    if (changedPaths.length === 0) {
+      stdoutWrite("All self-pin targets already up to date; no changes written.\n");
       return 0;
     }
-    writeSource("README.md", updated);
-    stdoutWrite(`Refreshed self-pin SHAs to ${sha} (v${version}).\n`);
+    stdoutWrite(
+      `Refreshed self-pin SHAs to ${sha} (v${version}) in: ${changedPaths.join(", ")}.\n`,
+    );
+    if (unchangedPaths.length > 0) {
+      stdoutWrite(`Already up to date: ${unchangedPaths.join(", ")}.\n`);
+    }
     return 0;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

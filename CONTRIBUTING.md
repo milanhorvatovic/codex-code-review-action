@@ -60,6 +60,8 @@ New code should include tests. Aim to maintain or improve coverage.
 4. Rebuild dist: `npm run build`
 5. Open a PR targeting `main`
 
+This repository dogfoods the action on its own pull requests via [`.github/workflows/codex-review.yaml`](.github/workflows/codex-review.yaml). Same-repo PRs from accounts on the workflow's `allow-users` allowlist receive an automated Codex review posted by the `publish` job; PRs from other authors and from forks are skipped before the workflow consumes any OpenAI credit. The review is advisory and does not block merging — human review remains authoritative.
+
 ### Conventions
 
 - Commits: `Co-authored-by` trailers are not added. Commit message bodies are not wrapped at a fixed column.

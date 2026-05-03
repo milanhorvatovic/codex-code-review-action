@@ -108,11 +108,18 @@ jobs:
           git fetch origin main "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || git fetch origin main
           git checkout -B "${BRANCH}" origin/main
           npx --no-install tsx scripts/refresh-self-pins.ts "${VERSION_NUM}" "${SHA}"
-          if git diff --quiet README.md; then
+          REFRESH_PATHS=(README.md .github/workflows/codex-review.yaml)
+          CHANGED_PATHS=()
+          for path in "${REFRESH_PATHS[@]}"; do
+            if ! git diff --quiet -- "${path}"; then
+              CHANGED_PATHS+=("${path}")
+            fi
+          done
+          if [ "${#CHANGED_PATHS[@]}" -eq 0 ]; then
             echo "No self-pin updates needed; skipping refresh PR."
             exit 0
           fi
-          git add README.md
+          git add -- "${CHANGED_PATHS[@]}"
           git commit -m "docs: refresh self-pin SHAs to v${VERSION_NUM}"
           if git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" >/dev/null; then
             REMOTE_SHA="$(git rev-parse "refs/remotes/origin/${BRANCH}")"
