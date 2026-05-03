@@ -559,7 +559,6 @@ jobs:
 3. **No `concurrency:` block in the wrapper.** Concurrency stays with the consumer because the consumer owns the trigger. Setting the same group on both layers is redundant and can cancel runs surprisingly.
 4. **No explicit `checkout` in `review` or `publish`.** The `review` composite action downloads the prepare artifact internally, and the `publish` job only needs the artifact contents, not the repo tree.
 5. **`environment: codex-review` resolves against the wrapper repo, not the consumer repo.** When a called workflow declares `environment:`, GitHub looks it up in the **repo that hosts the called workflow** (`<org>/codex-review-internal`).
-6. **`fail-on-missing-chunks` is left commented out.** Uncomment it after bumping the three sub-action SHAs to a release that includes this input.
 
 #### Environment setup deltas
 
