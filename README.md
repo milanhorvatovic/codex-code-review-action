@@ -424,7 +424,7 @@ Pin every `uses:` reference in the fork to an immutable SHA, including the trans
 
 ### 3. Create an org-owned reusable workflow
 
-Build a reusable workflow inside `<org>/codex-review-internal` that wraps the forked sub-actions. Product repos call this workflow; they do not reference the fork directly. The wrapper repo is where centralised trigger, secret, and environment policy lives.
+Build a reusable workflow inside `<org>/codex-review-internal` that wraps the forked sub-actions. Product repos call this workflow; they do not reference the fork directly. The wrapper repo is where centralized trigger, secret, and environment policy lives.
 
 ### 4. Restrict product repos to the internal version
 
@@ -580,7 +580,7 @@ The example above only exposes the OpenAI API key via `workflow_call.secrets`. T
 
 - **Safe to expose for product repos.** Operational tuning that does not change trust boundaries: `allow-users`, `max-chunk-bytes`, `min-confidence`, `max-comments`, `model`, `effort`, `review-effort`. Add these to `on.workflow_call.inputs:` and thread them into the matching `with:` blocks.
 - **Expose only with `review-reference-source: base`.** Reference-policy knobs (`review-reference-file`, `review-reference-source`) decide what the model treats as review policy. In workspace mode the policy file is read from the PR head, so any same-repo PR can rewrite it (see [the production-example callout above](#production-workflow-example) and [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97)). If product repos need a custom reference, expose both inputs together and set `review-reference-source: base` in the wrapper's defaults so the wrapper — not the consumer's PR authors — controls policy provenance.
-- **Do not expose by default.** Data-destination and retention knobs (`retain-findings`, `retain-findings-days`), permission scoping, the OpenAI key surface beyond the existing `workflow_call.secrets.openai-api-key`, and the same-repo / draft / fork gates. These belong to the wrapper repo's centralised policy; exposing them lets product repos opt out of the controls the wrapper exists to enforce.
+- **Do not expose by default.** Data-destination and retention knobs (`retain-findings`, `retain-findings-days`), permission scoping, the OpenAI key surface beyond the existing `workflow_call.secrets.openai-api-key`, and the same-repo / draft / fork gates. These belong to the wrapper repo's centralized policy; exposing them lets product repos opt out of the controls the wrapper exists to enforce.
 
 ### Enterprise adoption checklist
 
@@ -591,7 +591,7 @@ A security team can run through this list before approving adoption:
 - Transitive `openai/codex-action` pin reviewed and (if desired) re-pinned
 - Org-owned reusable workflow exists and wraps the fork
 - Product repos call only the reusable workflow
-- Centralised trigger, secret, and environment policy documented
+- Centralized trigger, secret, and environment policy documented
 - Upstream-update process defined (who reviews, how often, what triggers re-review)
 - Rollback plan documented (how to revert to the previous SHA)
 
