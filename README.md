@@ -23,6 +23,8 @@ This action reduces risk when wired safely (read-only `prepare` and `review`, wr
 
 ## Minimal quick start
 
+> **Note:** This is a minimal functional example, not a hardened production workflow. It pins the action with the mutable `@v2` tag and reads `OPENAI_API_KEY` as a repository secret — both fine for evaluation, neither acceptable for a team or private repository. Before adopting it for real use, read the [Trust model](#trust-model) and [Security guidance](#security-guidance) sections, then switch to the [Production workflow example](#production-workflow-example).
+
 Create `.github/workflows/codex-review.yaml` in your repository:
 
 ```yaml
@@ -55,7 +57,7 @@ jobs:
           persist-credentials: false
 
       - id: prepare
-        uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
+        uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2 # mutable tag for evaluation only — pin a SHA before production use, see [Pinning the action](#pinning-the-action)
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
@@ -75,7 +77,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.chunk-matrix) }}
     steps:
-      - uses: milanhorvatovic/codex-ai-code-review-action/review@v2
+      - uses: milanhorvatovic/codex-ai-code-review-action/review@v2 # mutable tag for evaluation only — pin a SHA before production use, see [Pinning the action](#pinning-the-action)
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           chunk: ${{ matrix.chunk }}
@@ -93,13 +95,11 @@ jobs:
           path: .codex/
           merge-multiple: true
 
-      - uses: milanhorvatovic/codex-ai-code-review-action/publish@v2
+      - uses: milanhorvatovic/codex-ai-code-review-action/publish@v2 # mutable tag for evaluation only — pin a SHA before production use, see [Pinning the action](#pinning-the-action)
         with:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
 ```
-
-> **Note:** This is a minimal functional example, not a hardened production workflow. Before using it for a team or private repository, review the [Trust model](#trust-model) and [Security guidance](#security-guidance) sections, and consider the [Production workflow example](#production-workflow-example).
 
 ## Security guidance
 
