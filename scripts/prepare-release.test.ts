@@ -608,6 +608,23 @@ describe("buildPrBody", () => {
     expect(body).toContain("Since repository inception.");
     expect(body).toContain("**Pre-release:** yes");
   });
+
+  it("includes the release-gate sign-off checklist", () => {
+    const body = buildPrBody({
+      version: "2.1.0",
+      isPrerelease: false,
+      prs: [],
+      baseTag: "v2.0.0",
+    });
+    expect(body).toContain("## Release gate sign-off");
+    expect(body).toContain("docs/release-gate.md");
+    expect(body).toContain("- [ ] Required validation suite passes");
+    expect(body).toContain("- [ ] Dist reproducibility check is clean");
+    expect(body).toContain("- [ ] Manual security regression checks");
+    expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
+    expect(body).toContain("- [ ] Trust-boundary CHANGELOG callout");
+    expect(body).toContain("- [ ] Gate evidence zip");
+  });
 });
 
 describe("runCli (dry-run integration)", () => {

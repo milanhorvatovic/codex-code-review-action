@@ -1,0 +1,98 @@
+# Release gate
+
+This page is the auditable rollup that decides whether a release tag is ready to be cut. It aggregates the validation, manual security checks, and sign-off discipline that every `v<X.Y.Z>` tag must satisfy before `release-on-merge.yaml` pushes the tag.
+
+The CI pipeline already runs every check that can be automated. This gate is the maintainer-side rollup that catches the subset that is not — manual security regression checks, judgment-call waivers, and the sign-off record that ends up attached to the GitHub Release as evidence.
+
+## How to use this gate
+
+1. Open the release PR (the one created by `prepare-release.yaml`, titled `release: v<X.Y.Z>`).
+2. Walk this page top to bottom against the merge commit. Every item must end up either checked off (with a verified-by line) or explicitly waived (with a rationale).
+3. Record the filled-in version of this gate in the release PR description so reviewers can see the sign-off before approving the squash-merge.
+4. After the tag pushes and the GitHub Release is created, package the filled gate plus any supporting evidence into a zip and upload it to the release as an asset. See [Archiving the gate](#archiving-the-gate).
+
+The release PR body template (composed by `scripts/prepare-release.ts`) auto-includes a checklist that points back at this page; filling that checklist in place is the recommended path.
+
+## Required validation
+
+Run the full validation suite against the merge commit, on the Node version pinned in `package.json` (`engines.node`). The same commands run in CI; this rerun is the maintainer's pre-tag confirmation that the merge commit (not just the PR head) is green.
+
+```bash
+npm ci
+npm run build
+npm run lint
+npm run typecheck
+npm test
+npm audit
+npm run verify:doc-pins
+npm run verify:prose-style
+```
+
+`npm audit` is advisory — a non-zero exit does not automatically block the tag, but every advisory must be triaged (fix, accept with documented rationale, or defer with a tracked issue) before sign-off.
+
+## Dist reproducibility
+
+The bundled `dist/` directory is committed to the repository so GitHub Actions can run the action without an install step. Confirm that `npm run build` against the merge commit does not change any tracked artifact:
+
+```bash
+npm run build
+git diff --exit-code -- dist package.json package-lock.json
+```
+
+A non-empty diff means the merge commit ships a stale bundle or a `package.json` / `package-lock.json` that the build would rewrite. Both are tag blockers — fix the source PR before tagging.
+
+## Manual security regression checks
+
+These three checks exercise the path-validation hardening landed in [`src/prepare/referenceFile.ts`](../src/prepare/referenceFile.ts) (PR [#98](https://github.com/milanhorvatovic/codex-ai-code-review-action/pull/98), closing issue [#89](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/89)). The unit suite in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) covers each one; running `npm test` against the merge commit confirms the protections still bite. The cases are listed here as an audit checklist, not as a separate test harness.
+
+- `review-reference-file: /proc/self/environ` is rejected with `must be workspace-relative, not absolute` before any read happens. The unit covers this in the `rejects an absolute path` case.
+- `review-reference-file: ../outside.md` is rejected with `escapes the workspace` before any read happens. The unit covers this in the `rejects a path that escapes the workspace` case.
+- A leaf path that is a symbolic link is rejected with `is a symbolic link; symlinks are not allowed`, and a symlink-via-intermediate-component that escapes the workspace is rejected with `escapes the workspace after symlink resolution`. The unit covers both in the leaf-symlink and intermediate-symlink cases. Together these close the file-disclosure path against runner-local files (the same threat model `/proc/self/environ` exists to surface).
+- Prompt artifacts produced by the `prepare` action against a benign reference file contain only the intended file content — no runner-local file contents leak in. Spot-check the merged review JSON when running the dogfood workflow against the merge commit.
+
+If any of the unit cases above are missing from the test suite or are skipped on the merge commit, the gate fails — re-add coverage before tagging.
+
+## Conditional base-mode checks
+
+Run these only if the release contains the `review-reference-source: base` mode (tracked in issue [#97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97)). Until that lands, mark the section waived with a one-line rationale ("`review-reference-source: base` not part of v<X.Y.Z>; deferred to <next-version>") and move on.
+
+- A PR that edits `.github/codex/review-reference.md` does not alter the policy applied to its own review when `review-reference-source: base` is set on the workflow. The base-mode read pulls the policy from the PR's base SHA, not the head SHA, so in-PR edits do not steer the prompt.
+- A missing base-branch reference path fails fast with a clear diagnostic when `review-reference-source: base` is set. The error must name the missing path and the base SHA so a maintainer can identify whether the file was renamed, deleted, or never existed at the resolved base.
+
+Both checks should be exercised in a scratch PR against the merge commit before sign-off, and the result captured in the gate evidence zip.
+
+## Sign-off convention
+
+Every line in this gate ends in one of two states by tag time:
+
+- **Verified by:** `<maintainer> — <YYYY-MM-DD>` — the maintainer ran the check against the merge commit and confirms the expected behavior.
+- **Waived:** `<rationale>` — the check does not apply to this release. The rationale must name the issue or PR that owns the deferred work and the target release for follow-up. A waiver without a tracked follow-up is not acceptable.
+
+The acceptance bar for the tag: every gate item is verified or waived, every waiver names its follow-up, and the maintainer cutting the tag has signed off on the rollup.
+
+## Trust-boundary cross-reference
+
+If the release contains any PR labeled `trust-boundary`, the CHANGELOG must include the dedicated `### ⚠️ Trust boundary change` callout per the [Release process / Trust-boundary changes](../CONTRIBUTING.md#trust-boundary-changes) rule in `CONTRIBUTING.md`. The release PR's CHANGELOG diff is the source of truth — the gate does not re-list the trust-boundary policy here, only confirms it was applied.
+
+## Archiving the gate
+
+The filled-in gate plus supporting evidence ships as a zip asset on the GitHub Release page, not as a tracked file in the repository. This keeps the working tree free of one-shot per-release artifacts while preserving an immutable audit record next to the release tarball that is downloaded.
+
+Recommended layout inside `release-gate-v<X.Y.Z>.zip`:
+
+```text
+release-gate-v<X.Y.Z>/
+  gate.md             # this page filled in for v<X.Y.Z>, with verified-by / waived lines
+  validation.log      # captured stdout/stderr from the Required validation block
+  dist-diff.txt       # captured output from the Dist reproducibility command
+  audit.json          # `npm audit --json` output, for traceable advisories
+  manual-checks.md    # short notes on the manual security regression checks (and base-mode checks if applicable)
+```
+
+After the tag pushes and the GitHub Release exists (created by `release.yaml`), upload the zip:
+
+```bash
+gh release upload v<X.Y.Z> release-gate-v<X.Y.Z>.zip
+```
+
+The zip is the durable record. If automation of this step proves useful after the first cycle, the upload can move into `release.yaml` — until then, it is a maintainer-driven step documented in the release process.

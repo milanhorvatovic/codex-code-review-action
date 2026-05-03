@@ -361,6 +361,17 @@ export function buildPrBody(args: {
     `**Pre-release:** ${isPrerelease ? "yes (major tag will not move; self-pin refresh skipped)" : "no"}`,
     "",
     "Merge this PR to trigger `release-on-merge.yaml`, which tags the merge commit and pushes the tag.",
+    "",
+    "## Release gate sign-off",
+    "",
+    "Walk [`docs/release-gate.md`](docs/release-gate.md) against the merge candidate before approving the squash-merge. Replace each box below with a `Verified by: <maintainer> — <YYYY-MM-DD>` line or a `Waived: <rationale referencing tracked follow-up>` line.",
+    "",
+    "- [ ] Required validation suite passes on the merge candidate (`npm ci` → `npm run verify:prose-style`).",
+    "- [ ] Dist reproducibility check is clean (`npm run build && git diff --exit-code -- dist package.json package-lock.json`).",
+    "- [ ] Manual security regression checks for `review-reference-file` are confirmed against the merge candidate.",
+    "- [ ] Conditional `review-reference-source: base` checks are run, or waived with a rationale.",
+    "- [ ] Trust-boundary CHANGELOG callout is present if any merged PR is labeled `trust-boundary`.",
+    "- [ ] Gate evidence zip will be attached to the GitHub Release after the tag pushes (see [Archiving the gate](docs/release-gate.md#archiving-the-gate)).",
   ];
   return lines.join("\n");
 }
