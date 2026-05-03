@@ -609,7 +609,7 @@ describe("buildPrBody", () => {
     expect(body).toContain("**Pre-release:** yes");
   });
 
-  it("includes the release-gate sign-off checklist", () => {
+  it("includes the release-gate sign-off checklist split into pre-merge and post-tag", () => {
     const body = buildPrBody({
       version: "2.1.0",
       isPrerelease: false,
@@ -618,13 +618,22 @@ describe("buildPrBody", () => {
     });
     expect(body).toContain("## Release gate sign-off");
     expect(body).toContain("docs/release-gate.md");
-    expect(body).toContain("- [ ] Required validation suite passes");
+    expect(body).toContain("**Pre-merge:**");
+    expect(body).toContain("**Post-tag:**");
+    expect(body).toContain("- [ ] Required validation block runs cleanly");
+    expect(body).toContain("`npm audit` advisories are triaged");
     expect(body).toContain("- [ ] Dist reproducibility check is clean");
     expect(body).toContain("- [ ] Manual security regression checks");
     expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
     expect(body).toContain("- [ ] Release-specific items table");
     expect(body).toContain("- [ ] Trust-boundary CHANGELOG callout");
-    expect(body).toContain("- [ ] Gate evidence zip");
+    expect(body).toContain("- [ ] Gate evidence zip attached to the GitHub Release");
+
+    const preMergeIndex = body.indexOf("**Pre-merge:**");
+    const postTagIndex = body.indexOf("**Post-tag:**");
+    const evidenceZipIndex = body.indexOf("Gate evidence zip");
+    expect(postTagIndex).toBeGreaterThan(preMergeIndex);
+    expect(evidenceZipIndex).toBeGreaterThan(postTagIndex);
   });
 });
 

@@ -364,15 +364,20 @@ export function buildPrBody(args: {
     "",
     "## Release gate sign-off",
     "",
-    "Walk [`docs/release-gate.md`](docs/release-gate.md) against the merge candidate before approving the squash-merge. Replace each box below with a `Verified by: <maintainer> — <YYYY-MM-DD>` line or a `Waived: <rationale referencing tracked follow-up>` line.",
+    "Walk [`docs/release-gate.md`](docs/release-gate.md) against the merge candidate (the release branch's HEAD before the squash-merge). Resolve each pre-merge box below to a `Verified by: <maintainer> — <YYYY-MM-DD>` line or a `Waived: <rationale referencing tracked follow-up>` line before approving the squash-merge. The post-tag box is completed after `release.yaml` creates the GitHub Release.",
     "",
-    "- [ ] Required validation suite passes on the merge candidate (`npm ci` → `npm run verify:prose-style`).",
+    "**Pre-merge:**",
+    "",
+    "- [ ] Required validation block runs cleanly on the merge candidate (`npm ci` → `npm run verify:prose-style`); any `npm audit` advisories are triaged per [Required validation](docs/release-gate.md#required-validation) (fix, accept with documented rationale, or defer with a tracked issue).",
     "- [ ] Dist reproducibility check is clean (`npm run build && git diff --exit-code -- dist package.json package-lock.json`).",
     "- [ ] Manual security regression checks for `review-reference-file` are confirmed against the merge candidate.",
     "- [ ] Conditional `review-reference-source: base` checks are run, or waived with a rationale.",
     "- [ ] Release-specific items table is filled with cross-references to owning PRs/issues, and each row resolved to `Verified by:` or `Waived:` (see [Release-specific items](docs/release-gate.md#release-specific-items)).",
     "- [ ] Trust-boundary CHANGELOG callout is present if any merged PR is labeled `trust-boundary`.",
-    "- [ ] Gate evidence zip will be attached to the GitHub Release after the tag pushes (see [Archiving the gate](docs/release-gate.md#archiving-the-gate)).",
+    "",
+    "**Post-tag:**",
+    "",
+    "- [ ] Gate evidence zip attached to the GitHub Release after the tag pushes (see [Archiving the gate](docs/release-gate.md#archiving-the-gate)).",
   ];
   return lines.join("\n");
 }

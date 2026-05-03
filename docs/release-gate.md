@@ -7,15 +7,15 @@ The CI pipeline already runs every check that can be automated. This gate is the
 ## How to use this gate
 
 1. Open the release PR (the one created by `prepare-release.yaml`, titled `release: v<X.Y.Z>`).
-2. Walk this page top to bottom against the merge commit. Every item must end up either checked off (with a verified-by line) or explicitly waived (with a rationale).
+2. Walk this page top to bottom against the merge candidate (the release branch's HEAD before the squash-merge). Every pre-merge item must end up either checked off (with a verified-by line) or explicitly waived (with a rationale). The post-tag item under [Archiving the gate](#archiving-the-gate) is completed after `release.yaml` creates the GitHub Release.
 3. Record the filled-in version of this gate in the release PR description so reviewers can see the sign-off before approving the squash-merge.
 4. After the tag pushes and the GitHub Release is created, package the filled gate plus any supporting evidence into a zip and upload it to the release as an asset. See [Archiving the gate](#archiving-the-gate).
 
-The release PR body template (composed by `scripts/prepare-release.ts`) auto-includes a checklist that points back at this page; filling that checklist in place is the recommended path.
+The release PR body template (composed by `scripts/prepare-release.ts`) includes a sign-off checklist that points back at this page; filling that checklist in place is the recommended path. The checklist is hard-coded in `buildPrBody` rather than generated from this document — when the gate's section structure changes, update both files in the same PR.
 
 ## Required validation
 
-Run the full validation suite against the merge commit, on the Node version pinned in `package.json` (`engines.node`). The same commands run in CI; this rerun is the maintainer's pre-tag confirmation that the merge commit (not just the PR head) is green.
+Run the full validation suite against the merge candidate (the release branch's HEAD before the squash-merge), on the Node version pinned in `package.json` (`engines.node`). The same commands run in CI; this rerun is the maintainer's pre-tag confirmation that the release branch — including the version-bump commit and CHANGELOG entry the release PR introduces — is green.
 
 ```bash
 npm ci
@@ -32,25 +32,24 @@ npm run verify:prose-style
 
 ## Dist reproducibility
 
-The bundled `dist/` directory is committed to the repository so GitHub Actions can run the action without an install step. Confirm that `npm run build` against the merge commit does not change any tracked artifact:
+The bundled `dist/` directory is committed to the repository so GitHub Actions can run the action without an install step. Confirm that `npm run build` against the merge candidate does not change any tracked artifact:
 
 ```bash
 npm run build
 git diff --exit-code -- dist package.json package-lock.json
 ```
 
-A non-empty diff means the merge commit ships a stale bundle or a `package.json` / `package-lock.json` that the build would rewrite. Both are tag blockers — fix the source PR before tagging.
+A non-empty diff means the merge candidate ships a stale bundle or a `package.json` / `package-lock.json` that the build would rewrite. Both are tag blockers — fix the source PR before tagging.
 
 ## Manual security regression checks
 
-These three checks exercise the path-validation hardening landed in [`src/prepare/referenceFile.ts`](../src/prepare/referenceFile.ts) (PR [#98](https://github.com/milanhorvatovic/codex-ai-code-review-action/pull/98), closing issue [#89](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/89)). The unit suite in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) covers each one; running `npm test` against the merge commit confirms the protections still bite. The cases are listed here as an audit checklist, not as a separate test harness.
+These three checks exercise the path-validation hardening landed in [`src/prepare/referenceFile.ts`](../src/prepare/referenceFile.ts) (PR [#98](https://github.com/milanhorvatovic/codex-ai-code-review-action/pull/98), closing issue [#89](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/89)). The unit suite in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) covers all three; running `npm test` against the merge candidate confirms the protections still bite. The cases are listed here as an audit checklist, not as a separate test harness.
 
 - `review-reference-file: /proc/self/environ` is rejected with `must be workspace-relative, not absolute` before any read happens. The unit covers this in the `rejects an absolute path` case.
 - `review-reference-file: ../outside.md` is rejected with `escapes the workspace` before any read happens. The unit covers this in the `rejects a path that escapes the workspace` case.
 - A leaf path that is a symbolic link is rejected with `is a symbolic link; symlinks are not allowed`, and a symlink-via-intermediate-component that escapes the workspace is rejected with `escapes the workspace after symlink resolution`. The unit covers both in the leaf-symlink and intermediate-symlink cases. Together these close the file-disclosure path against runner-local files (the same threat model `/proc/self/environ` exists to surface).
-- Prompt artifacts produced by the `prepare` action against a benign reference file contain only the intended file content — no runner-local file contents leak in. Spot-check the merged review JSON when running the dogfood workflow against the merge commit.
 
-If any of the unit cases above are missing from the test suite or are skipped on the merge commit, the gate fails — re-add coverage before tagging.
+If any of the unit cases above are missing from the test suite or are skipped on the merge candidate, the gate fails — re-add coverage before tagging.
 
 ## Conditional base-mode checks
 
@@ -59,11 +58,11 @@ Run these only if the release contains the `review-reference-source: base` mode 
 - A PR that edits `.github/codex/review-reference.md` does not alter the policy applied to its own review when `review-reference-source: base` is set on the workflow. The base-mode read pulls the policy from the PR's base SHA, not the head SHA, so in-PR edits do not steer the prompt.
 - A missing base-branch reference path fails fast with a clear diagnostic when `review-reference-source: base` is set. The error must name the missing path and the base SHA so a maintainer can identify whether the file was renamed, deleted, or never existed at the resolved base.
 
-Both checks should be exercised in a scratch PR against the merge commit before sign-off, and the result captured in the gate evidence zip.
+Both checks should be exercised in a scratch PR against the merge candidate before sign-off, and the result captured in the gate evidence zip.
 
 ## Release-specific items
 
-Beyond the templated sections above, every release introduces a set of release-specific items the maintainer must verify against the merge commit. Typical categories:
+Beyond the templated sections above, every release introduces a set of release-specific items the maintainer must verify against the merge candidate. Typical categories:
 
 - Security or trust-boundary changes that need cross-referencing to the PR that landed them.
 - Behavior or schema changes that need a manual check beyond what CI runs.
@@ -82,7 +81,7 @@ If a release introduces no items beyond the templated checks, record one row wit
 
 Every line in this gate ends in one of two states by tag time:
 
-- **Verified by:** `<maintainer> — <YYYY-MM-DD>` — the maintainer ran the check against the merge commit and confirms the expected behavior.
+- **Verified by:** `<maintainer> — <YYYY-MM-DD>` — the maintainer ran the check against the merge candidate and confirms the expected behavior.
 - **Waived:** `<rationale>` — the check does not apply to this release. The rationale must name the issue or PR that owns the deferred work and the target release for follow-up. A waiver without a tracked follow-up is not acceptable.
 
 The acceptance bar for the tag: every gate item is verified or waived, every waiver names its follow-up, and the maintainer cutting the tag has signed off on the rollup.
