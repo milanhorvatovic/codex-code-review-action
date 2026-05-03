@@ -157,14 +157,20 @@ export function runCli(deps: RunCliDeps = {}): number {
       return 0;
     }
     const writtenPaths: string[] = [];
+    let inFlightPath: string | undefined;
     try {
       for (const write of pendingWrites) {
+        inFlightPath = write.path;
         writeSource(write.path, write.updated);
         writtenPaths.push(write.path);
+        inFlightPath = undefined;
       }
     } catch (writeErr) {
-      // Best-effort rollback so a mid-write failure does not leave the working tree partially updated.
-      for (const path of writtenPaths) {
+      // Best-effort rollback so a mid-write failure does not leave the working tree partially
+      // updated. Includes the in-flight path so a write that throws after truncating the file
+      // also gets restored to its original content.
+      const toRollback = inFlightPath === undefined ? writtenPaths : [...writtenPaths, inFlightPath];
+      for (const path of toRollback) {
         const original = pendingWrites.find((w) => w.path === path)?.original;
         if (original === undefined) continue;
         try {

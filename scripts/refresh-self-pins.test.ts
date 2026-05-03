@@ -334,7 +334,7 @@ describe("runCli", () => {
     expect(stub.stderr.join("")).toContain(`no fixture for ${WORKFLOW_PATH}`);
   });
 
-  it("rolls back earlier writes when a later write throws", () => {
+  it("rolls back earlier writes and the in-flight file when a later write throws", () => {
     const readmeOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`;
     const workflowOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${OLD_SHA} # v2.1.0-pre`;
     const stub: Stub = {
@@ -352,6 +352,8 @@ describe("runCli", () => {
       },
       writeSource: (path: string, content: string) => {
         stub.writes.push({ path, content });
+        // Simulate a disk-full failure during the workflow's first write (new SHA content).
+        // The rollback write (original content) must still succeed so the file is restored.
         if (path === WORKFLOW_PATH && content.includes(NEW_SHA)) {
           throw new Error("simulated disk full");
         }
@@ -365,10 +367,46 @@ describe("runCli", () => {
     };
     expect(runCli(deps)).toBe(1);
     expect(stub.stderr.join("")).toContain("simulated disk full");
-    // Three write calls: README new content, workflow new content (throws), README rollback to original.
-    expect(stub.writes).toHaveLength(3);
+    // Four write calls: README new, WORKFLOW new (throws), README rollback, WORKFLOW rollback.
+    expect(stub.writes).toHaveLength(4);
     expect(stub.writes[0]).toEqual({ path: README_PATH, content: expect.stringContaining(NEW_SHA) });
     expect(stub.writes[1]?.path).toBe(WORKFLOW_PATH);
+    expect(stub.writes[1]?.content).toContain(NEW_SHA);
     expect(stub.writes[2]).toEqual({ path: README_PATH, content: readmeOriginal });
+    expect(stub.writes[3]).toEqual({ path: WORKFLOW_PATH, content: workflowOriginal });
+  });
+
+  it("surfaces the original write error when rollback writes also fail", () => {
+    const readmeOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`;
+    const workflowOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${OLD_SHA} # v2.1.0-pre`;
+    const stub: Stub = {
+      files: { [README_PATH]: readmeOriginal, [WORKFLOW_PATH]: workflowOriginal },
+      writes: [],
+      stdout: [],
+      stderr: [],
+    };
+    const deps = {
+      argv: ["2.1.0", NEW_SHA],
+      readSource: (path: string) => {
+        const content = stub.files[path];
+        if (content === undefined) throw new Error(`no fixture for ${path}`);
+        return content;
+      },
+      writeSource: (path: string, _content: string) => {
+        stub.writes.push({ path, content: _content });
+        // First write succeeds; every subsequent write (including rollback) throws.
+        if (stub.writes.length > 1) throw new Error(`write ${stub.writes.length} failed`);
+      },
+      stdoutWrite: (chunk: string) => {
+        stub.stdout.push(chunk);
+      },
+      stderrWrite: (chunk: string) => {
+        stub.stderr.push(chunk);
+      },
+    };
+    expect(runCli(deps)).toBe(1);
+    // The original write-2 failure is surfaced; rollback failures are silently swallowed.
+    expect(stub.stderr.join("")).toContain("write 2 failed");
+    expect(stub.stderr.join("")).not.toContain("write 3 failed");
   });
 });
