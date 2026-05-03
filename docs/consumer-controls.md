@@ -172,3 +172,9 @@ Wrapper consumers calling the org-internal reusable workflow inherit items 2, 3,
 ## Audit summary
 
 A consuming team's workflow is ready for production adoption when every item above is satisfied. If any item fails, fix it before adopting — the action does not provide security by default; the controls above are how the architecture is meant to be wired.
+
+## Automated audit via `codex-review:adopt`
+
+The `adopt` capability of the [`codex-review`](../skills/codex-review/) Claude Code skill emits an `ADOPTION.md` report that maps every emitted decision to one of `CC-01..CC-09` plus the bare-action detection rule (`CC-EXTRA-01-bare-action`). The capability refuses to write any artifact unless every applicable invariant in this checklist passes. The IDs are encoded in [`skills/codex-review/references/invariants.md`](../skills/codex-review/references/invariants.md); a unit test in the same directory asserts every `CC-NN` ID still has a matching numbered heading in this file, so renumbering or renaming items requires a coordinated change.
+
+Running the skill does not replace human review of the generated workflow. The audit list above remains the source of truth; the skill is a faster path to the same outcome.

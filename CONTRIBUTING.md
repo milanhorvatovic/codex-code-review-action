@@ -52,6 +52,19 @@ Coverage thresholds are enforced in `vitest.config.ts`:
 
 New code should include tests. Aim to maintain or improve coverage.
 
+## Developing a capability
+
+The bundled Claude Code skill at [`skills/codex-review/`](skills/codex-review/) is a router with a small primitives layer (`lib/`) and one capability per subdirectory under `capabilities/`. New capabilities follow the same conventions:
+
+1. **Compose primitives, do not duplicate them.** Detection, schema mapping, invariants assertion, reference-file layering, pin resolution, and findings parsing live under `skills/codex-review/lib/`. If a capability needs a fact those primitives do not yet expose, extend the relevant primitive — never inline detection logic in a capability's `run.ts`.
+2. **Split prompt from glue.** Each capability ships a `capability.md` that drives the LLM and a `run.ts` that performs deterministic work (file emission, validation, diff rendering). The split keeps emitted YAML byte-stable across model temperatures and lets vitest call `run.ts` directly without invoking Claude Code.
+3. **Walk the consumer-controls invariants before you write.** Any capability that emits or modifies a workflow file must call `assertWorkflow()` from `lib/invariants.ts` and refuse to write on failure. The invariant IDs (`CC-01..CC-09`, plus `CC-EXTRA-01-bare-action`) are encoded in [`skills/codex-review/references/invariants.md`](skills/codex-review/references/invariants.md) and cross-checked against [`docs/consumer-controls.md`](docs/consumer-controls.md) by `references/invariants.test.ts`.
+4. **Resolve the action pin at runtime.** Use `resolvePin()` from `lib/pin-resolver.ts`; it shells out to `gh api releases/latest`. Do not maintain a static pin table — `scripts/refresh-self-pins.ts` already covers `README.md` and the dogfood workflow, and adding another verifier would duplicate state.
+5. **Add a fixture before adding a capability.** Drop the consumer-side input files under `skills/codex-review/__fixtures__/repos/<name>/` (or a conformant `findings.json` under `__fixtures__/findings-examples/`) and exercise the capability against the fixture in a vitest spec. This is how golden tests stay portable across CI environments.
+6. **Run the standard CI gates locally.** `npm run build`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run verify:doc-pins`, and `npm run verify:prose-style` all run against the new tree once `package.json`, `eslint.config.mjs`, and `vitest.config.ts` have been extended (already done in the initial PR; new capabilities need no further wiring).
+
+The router skill itself does not write anything outside the consumer's working directory and uses only `git`, `gh`, and reads of the consumer's own repo. New capabilities must respect the same trust boundary.
+
 ## Pull request guidelines
 
 1. Create a feature branch from `main`
