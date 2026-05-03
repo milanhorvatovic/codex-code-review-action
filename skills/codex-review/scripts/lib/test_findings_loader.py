@@ -9,7 +9,7 @@ from pathlib import Path
 from .findings_loader import FindingsValidationError, parse_findings
 
 _HERE = Path(__file__).resolve().parent
-_FIXTURES = _HERE.parent / "__fixtures__" / "findings-examples"
+_FIXTURES = _HERE.parent.parent / "__fixtures__" / "findings-examples"
 
 
 def _load_text(name: str) -> str:

@@ -18,5 +18,11 @@ jobs:
         run: python3 --version
 
       - name: Run skill unit tests
-        working-directory: skills/codex-review
+        working-directory: skills/codex-review/scripts
         run: python3 -m unittest discover -p "test_*.py" -v
+
+      - name: Smoke-test entry-point CLIs
+        working-directory: skills/codex-review
+        run: |
+          python3 scripts/adopt.py --help > /dev/null
+          python3 scripts/tune.py --help > /dev/null

@@ -2,10 +2,16 @@
 
 Loads findings, runs every diagnosis, renders a markdown report with one
 fenced-diff Recommendation per fired diagnosis. Never writes to disk.
+
+Invoked from the capability prompt as:
+
+    python3 scripts/tune.py --findings-path /path/to/findings.json [--reference-path ...] [--workflow-path ...]
 """
 
 from __future__ import annotations
 
+import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -100,3 +106,47 @@ def run_tune(inputs: TuneInputs) -> TuneOutputs:
     diagnoses = run_all_diagnoses(findings)
     report = _render_report(findings, diagnoses)
     return TuneOutputs(diagnoses=diagnoses, findings=findings, report=report)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="tune.py",
+        description="Diagnose a saved findings.json and emit a markdown report with a unified diff per recommendation.",
+    )
+    parser.add_argument(
+        "--findings-path",
+        required=True,
+        help="Path to a saved findings.json artifact (typically from retain-findings: true).",
+    )
+    parser.add_argument(
+        "--reference-path",
+        default=None,
+        help="Path to the consumer's current .github/codex/review-reference.md (optional).",
+    )
+    parser.add_argument(
+        "--workflow-path",
+        default=None,
+        help="Path to the consumer's current workflow file (optional).",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    try:
+        out = run_tune(
+            TuneInputs(
+                findings_path=args.findings_path,
+                reference_path=args.reference_path,
+                workflow_path=args.workflow_path,
+            )
+        )
+    except TuneError as exc:
+        print(f"tune failed: {exc}", file=sys.stderr)
+        return 1
+    print(out.report)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

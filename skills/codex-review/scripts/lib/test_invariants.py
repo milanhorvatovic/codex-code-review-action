@@ -9,9 +9,8 @@ from .invariants import assert_workflow, format_report
 
 _HERE = Path(__file__).resolve().parent
 _FIXTURE_WORKFLOW = (
-    _HERE.parent
+    _HERE.parent.parent
     / "__fixtures__"
-    / "repos"
     / "codex-review-action"
     / ".github"
     / "workflows"

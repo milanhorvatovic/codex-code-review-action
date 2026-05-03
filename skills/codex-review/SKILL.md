@@ -36,8 +36,9 @@ Read only the capability that matches the task. Do not load both unless the task
 
 - `references/invariants.md` — the 9 consumer-controls items encoded as machine-checkable predicates with stable IDs `CC-01..CC-09`. Both capabilities walk this list before emitting any workflow YAML.
 - `references/pin-resolution.md` — the runtime contract for resolving the latest reviewed SHA and tag for the action's three sub-actions via `gh api`. No static pin table is shipped.
-- `lib/` — Python 3.12 stdlib-only primitives consumed by the capabilities' deterministic glue scripts (`detect.py`, `schema_mapper.py`, `invariants/`, `reference_layerer.py`, `workflow_templates.py`, `pin_resolver.py`, `findings_loader.py`, plus per-finding diagnoses under `lib/diagnoses/`). No `pip install` required.
-- `__fixtures__/` — input fixtures under `repos/` and conformant `findings.json` examples under `findings-examples/`, exercised by golden tests and used as the demonstration corpus when the capability is run during development.
+- `scripts/adopt.py`, `scripts/tune.py` — entry-point CLIs invoked by the capabilities. Each accepts `--help` and operates on explicit paths; no environment-variable inputs.
+- `scripts/lib/` — Python 3.12 stdlib-only internals consumed by the entry-point scripts (`detect.py`, `schema_mapper.py`, `invariants/`, `reference_layerer.py`, `workflow_templates.py`, `pin_resolver.py`, `findings_loader.py`, plus per-finding diagnoses under `scripts/lib/diagnoses/`). No `pip install` required.
+- `__fixtures__/` — a per-repo snapshot directory (`codex-review-action/`) plus conformant `findings.json` examples under `findings-examples/`, exercised by unit tests and used as the demonstration corpus when the entry scripts are run during development.
 
 ## Trust boundary
 

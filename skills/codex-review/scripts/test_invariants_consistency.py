@@ -12,9 +12,10 @@ import unittest
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
-_REPO_ROOT = _HERE.parent.parent.parent
+_SKILL_ROOT = _HERE.parent
+_REPO_ROOT = _SKILL_ROOT.parent.parent
 
-_INVARIANTS_PATH = _HERE / "invariants.md"
+_INVARIANTS_PATH = _SKILL_ROOT / "references" / "invariants.md"
 _CONSUMER_CONTROLS_PATH = _REPO_ROOT / "docs" / "consumer-controls.md"
 
 _ID_RE = re.compile(r"\| (CC-\d{2}) \|")

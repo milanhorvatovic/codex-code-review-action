@@ -11,7 +11,7 @@ from .noisy_p3 import noisy_p3_diagnosis
 from .truncation import truncation_diagnosis
 
 _HERE = Path(__file__).resolve().parent
-_FIXTURES = _HERE.parent.parent / "__fixtures__" / "findings-examples"
+_FIXTURES = _HERE.parent.parent.parent / "__fixtures__" / "findings-examples"
 
 
 def _load(name: str) -> Findings:

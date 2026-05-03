@@ -3,13 +3,21 @@
 Composes the workflow + starter reference-file + ADOPTION report. Refuses to
 write any artifact unless every CC-NN invariant passes against the emitted
 workflow.
+
+Invoked from the capability prompt as:
+
+    python3 scripts/adopt.py --target-repo /path/to/repo [--allow-users ...] [--write]
+
+The default is dry-run; pass --write to land the three artifacts in the
+target repository's working tree.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import argparse
+import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from lib.detect import DetectOptions, Language, detect, make_filesystem_reader
 from lib.invariants import assert_workflow, format_report
@@ -216,6 +224,58 @@ def run_adopt(inputs: AdoptInputs, gh: GhExec | None = None) -> AdoptOutputs:
     )
 
 
-# Mirror the field reference used in tests: keep field() import live.
-_ = field
-_ = Optional  # noqa: keep symbol reachable for tooling that introspects the module
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="adopt.py",
+        description="Generate a hardened codex-review workflow + starter review-reference + ADOPTION report.",
+    )
+    parser.add_argument(
+        "--target-repo",
+        default=".",
+        help="Path to the consumer's repository checkout (default: current directory).",
+    )
+    parser.add_argument(
+        "--allow-users",
+        default="",
+        help="Comma-separated GitHub usernames for the prepare allowlist. Empty allows all same-repo PR authors.",
+    )
+    parser.add_argument(
+        "--project-name",
+        default=None,
+        help="Project name shown in the starter reference file (default: target-repo's last path segment).",
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Write artifacts to the target repository's working tree. Default is dry-run.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    inputs = AdoptInputs(
+        allow_users=args.allow_users,
+        dry_run=not args.write,
+        project_name=args.project_name,
+        target_repo=args.target_repo,
+    )
+    try:
+        out = run_adopt(inputs)
+    except AdoptError as exc:
+        print(f"adopt failed: {exc}", file=sys.stderr)
+        return 1
+    if args.write:
+        print(f"Wrote {len(out.writes)} artifact(s) under {Path(args.target_repo).resolve()}.")
+    else:
+        print("# === Workflow ===")
+        print(out.workflow)
+        print("# === Starter reference ===")
+        print(out.reference_file)
+        print("# === ADOPTION report ===")
+        print(out.adoption_report)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

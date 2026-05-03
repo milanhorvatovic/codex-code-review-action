@@ -8,7 +8,7 @@ from pathlib import Path
 from .reference_layerer import LayerOptions, layer_reference, list_sections, pick_sections_for_languages
 
 _HERE = Path(__file__).resolve().parent
-_DEFAULTS_PATH = _HERE.parent.parent.parent / "defaults" / "review-reference.md"
+_DEFAULTS_PATH = _HERE.parent.parent.parent.parent / "defaults" / "review-reference.md"
 
 
 def _defaults() -> str:
