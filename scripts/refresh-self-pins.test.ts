@@ -83,6 +83,15 @@ describe("uncommentFailOnMissingChunks", () => {
     expect(result.split("\n")[1]).toBe(`          fail-on-missing-chunks: "true"`);
   });
 
+  it("uncomments the bare commented form (no trailing 'next tagged release' note)", () => {
+    const content = [
+      `          retain-findings: "false"`,
+      `          # fail-on-missing-chunks: "true"`,
+    ].join("\n");
+    const result = uncommentFailOnMissingChunks(content);
+    expect(result.split("\n")[1]).toBe(`          fail-on-missing-chunks: "true"`);
+  });
+
   it("leaves the file unchanged when the commented form is absent", () => {
     const content = `          fail-on-missing-chunks: "true"`;
     expect(uncommentFailOnMissingChunks(content)).toBe(content);

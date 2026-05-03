@@ -7,7 +7,7 @@ const SELF_PIN_PATTERN =
   /(milanhorvatovic\/codex-ai-code-review-action)(\/[\w./-]+?)?@[0-9a-f]{40}(?:[ \t]*#[ \t]*[\w.+-]+)?/g;
 
 const FAIL_ON_MISSING_COMMENTED =
-  /^(\s*)#\s*fail-on-missing-chunks:\s*"true"\s*#\s*available in the next tagged release;[^\n]*$/;
+  /^(\s*)#\s*fail-on-missing-chunks:\s*"true"\s*(?:#[^\n]*)?$/;
 
 const ISSUE_44_INTRO_LINE = /^When you adopt a release that contains \[issue #44\]/;
 

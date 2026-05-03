@@ -23,6 +23,8 @@ This action reduces risk when wired safely (read-only `prepare` and `review`, wr
 
 ## Minimal quick start
 
+> **Note:** This is a minimal functional example, not a hardened production workflow. It pins the action with the mutable `@v2` tag and reads `OPENAI_API_KEY` as a repository secret — both fine for evaluation, neither acceptable for a team or private repository. Before adopting it for real use, read the [Trust model](#trust-model) and [Security guidance](#security-guidance) sections, then switch to the [Production workflow example](#production-workflow-example).
+
 Create `.github/workflows/codex-review.yaml` in your repository:
 
 ```yaml
@@ -55,7 +57,7 @@ jobs:
           persist-credentials: false
 
       - id: prepare
-        uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
+        uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2 # mutable tag for evaluation only; pin a SHA before production use (see "Pinning the action" below)
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
@@ -75,7 +77,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.chunk-matrix) }}
     steps:
-      - uses: milanhorvatovic/codex-ai-code-review-action/review@v2
+      - uses: milanhorvatovic/codex-ai-code-review-action/review@v2 # mutable tag for evaluation only; pin a SHA before production use (see "Pinning the action" below)
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           chunk: ${{ matrix.chunk }}
@@ -93,13 +95,11 @@ jobs:
           path: .codex/
           merge-multiple: true
 
-      - uses: milanhorvatovic/codex-ai-code-review-action/publish@v2
+      - uses: milanhorvatovic/codex-ai-code-review-action/publish@v2 # mutable tag for evaluation only; pin a SHA before production use (see "Pinning the action" below)
         with:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
 ```
-
-> **Note:** This is a minimal functional example, not a hardened production workflow. Before using it for a team or private repository, review the [Trust model](#trust-model) and [Security guidance](#security-guidance) sections, and consider the [Production workflow example](#production-workflow-example).
 
 ## Security guidance
 
@@ -282,7 +282,12 @@ jobs:
 
 When you adopt a release that contains [issue #44](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/44), bump the three `codex-ai-code-review-action` SHAs to that release and uncomment `fail-on-missing-chunks: "true"` to make the publish step fail closed when any chunk is missing.
 
-> **`review-reference-file` is PR-controlled.** If you pass `review-reference-file: .github/codex/review-reference.md` here, the file is read from the same `${{ github.event.pull_request.head.sha }}` checkout as the diff — meaning a PR can edit the reference and steer the review. The prepare step rejects symlinks, absolute paths, traversal, and oversized files (see [Constraints on `review-reference-file`](#constraints-on-review-reference-file)), but it does not pin the policy to the base branch. Treat workspace-mode references as policy that PR authors can edit until [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) ships an opt-in `review-reference-source: base` mode.
+> **`review-reference-file` is PR-controlled in workspace mode.** Two separate guarantees apply, and they are not the same thing:
+>
+> - **Workspace-safety constraints (always on).** The prepare step rejects empty values, absolute paths, NUL/backslash, traversal, paths that resolve through a symlink leaf or ancestor, non-regular files, the runner's `.git` directory, and files over 64 KiB before any read. See [Constraints on `review-reference-file`](#constraints-on-review-reference-file). These constraints close file-disclosure attacks (a PR cannot point the input at `/proc/self/environ` or a runner-local secret).
+> - **Tamper resistance (opt-in, future).** The constraints above do not pin policy to the base branch. The reference file is checked out from `${{ github.event.pull_request.head.sha }}`, so a same-repo PR can legitimately edit `.github/codex/review-reference.md` and steer the review prompt. An opt-in `review-reference-source: base` mode that reads the file from the base SHA is tracked in [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) and is the recommended setting for repositories that need policy locked against PR edits.
+>
+> Treat workspace-mode references as policy that same-repo PR authors can edit until base mode ships.
 
 ## Architecture
 
@@ -419,7 +424,7 @@ Pin every `uses:` reference in the fork to an immutable SHA, including the trans
 
 ### 3. Create an org-owned reusable workflow
 
-Build a reusable workflow inside `<org>/codex-review-internal` that wraps the forked sub-actions. Product repos call this workflow; they do not reference the fork directly. The wrapper repo is where centralised trigger, secret, and environment policy lives.
+Build a reusable workflow inside `<org>/codex-review-internal` that wraps the forked sub-actions. Product repos call this workflow; they do not reference the fork directly. The wrapper repo is where centralized trigger, secret, and environment policy lives.
 
 ### 4. Restrict product repos to the internal version
 
@@ -544,7 +549,7 @@ jobs:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
           retain-findings: "false"
-          # fail-on-missing-chunks: "true"
+          # fail-on-missing-chunks: "true" # available in the next tagged release; uncomment after bumping the SHAs above
 ```
 
 #### Differences from the Production workflow example
@@ -554,7 +559,6 @@ jobs:
 3. **No `concurrency:` block in the wrapper.** Concurrency stays with the consumer because the consumer owns the trigger. Setting the same group on both layers is redundant and can cancel runs surprisingly.
 4. **No explicit `checkout` in `review` or `publish`.** The `review` composite action downloads the prepare artifact internally, and the `publish` job only needs the artifact contents, not the repo tree.
 5. **`environment: codex-review` resolves against the wrapper repo, not the consumer repo.** When a called workflow declares `environment:`, GitHub looks it up in the **repo that hosts the called workflow** (`<org>/codex-review-internal`).
-6. **`fail-on-missing-chunks` is left commented out.** Uncomment it after bumping the three sub-action SHAs to a release that includes this input.
 
 #### Environment setup deltas
 
@@ -571,7 +575,11 @@ The wrapper threads four `prepare` outputs (`skipped`, `has-changes`, `chunk-cou
 
 #### Extending the wrapper's input surface
 
-The example above only exposes the OpenAI API key via `workflow_call.secrets`. If product repos need to tune `allow-users`, `review-reference-file`, `max-chunk-bytes`, `min-confidence`, or other per-repo knobs, add them to `on.workflow_call.inputs:` in the wrapper and thread them down into the matching `with:` blocks. Keep the input surface minimal — every input exposed becomes a policy decision the wrapper has to enforce.
+The example above only exposes the OpenAI API key via `workflow_call.secrets`. The wrapper is the org's policy boundary, so the default surface is deliberately tiny — every input exposed becomes a policy decision the wrapper has to enforce. Use these categories when deciding whether to add an input:
+
+- **Safe to expose for product repos.** Operational tuning that does not change trust boundaries: `allow-users`, `max-chunk-bytes`, `min-confidence`, `max-comments`, `model`, `effort`, `review-effort`. Add these to `on.workflow_call.inputs:` and thread them into the matching `with:` blocks.
+- **Defer until `review-reference-source: base` ships.** Reference-policy knobs decide what the model treats as review policy. Today the only one available is `review-reference-file`, and in workspace mode the policy file is read from the PR head — so exposing it through the wrapper lets any same-repo PR in a product repo edit the policy and steer the prompt (see [the production-example callout above](#production-workflow-example)). The opt-in `review-reference-source: base` mode that pins policy to the base SHA is tracked in [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) and is not yet available. Until it lands, do not expose `review-reference-file` from the wrapper without an explicit trust decision; once #97 ships, expose both inputs together and set `review-reference-source: base` in the wrapper's defaults. That pins the *source* of the policy file to the consumer repo's base SHA, so an in-flight PR can no longer edit `.github/codex/review-reference.md` and have those edits apply to its own review. Note: policy *content* still lives in the consumer repo and is controlled by whoever can land changes to base — base mode protects against in-PR edits, not against trusted maintainers merging policy changes through normal review. The wrapper centralizes the mode choice (product repos cannot opt back to workspace), not the policy text.
+- **Do not expose by default.** Data-destination and retention knobs (`retain-findings`, `retain-findings-days`), permission scoping, the OpenAI key surface beyond the existing `workflow_call.secrets.openai-api-key`, and the same-repo / draft / fork gates. These belong to the wrapper repo's centralized policy; exposing them lets product repos opt out of the controls the wrapper exists to enforce.
 
 ### Enterprise adoption checklist
 
@@ -582,16 +590,27 @@ A security team can run through this list before approving adoption:
 - Transitive `openai/codex-action` pin reviewed and (if desired) re-pinned
 - Org-owned reusable workflow exists and wraps the fork
 - Product repos call only the reusable workflow
-- Centralised trigger, secret, and environment policy documented
+- Centralized trigger, secret, and environment policy documented
 - Upstream-update process defined (who reviews, how often, what triggers re-review)
 - Rollback plan documented (how to revert to the previous SHA)
 
 ## Setup
 
-1. Add `OPENAI_API_KEY` as a repository secret (Settings > Secrets and variables > Actions)
-2. Create the workflow file as shown in [Minimal quick start](#minimal-quick-start)
-3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules
-4. Open a pull request — the review appears automatically
+The recommended setup matches the [Production workflow example](#production-workflow-example) — environment-scoped secret, SHA-pinned action references, same-repo gating, allowlist. The repository-secret path is kept only for the [Minimal quick start](#minimal-quick-start) so first-time evaluators have a one-step path; do not adopt it for a team or private repository.
+
+### Production / private repository (recommended)
+
+1. Configure the `codex-review` GitHub Environment and add `OPENAI_API_KEY` as an **environment secret** as described in [One-time repo setup](#one-time-repo-setup). Remove any repo-scoped copy of `OPENAI_API_KEY` once the environment-scoped secret is confirmed working. The `review` job that declares `environment: codex-review` reads the environment-scoped secret regardless of whether a repo-scoped duplicate exists, so the duplicate is invisible to that specific job — but any other workflow or job in the repository that does not declare the environment can still read the repo-scoped copy, which silently defeats the scoping guardrail.
+2. Create the workflow file using the [Production workflow example](#production-workflow-example). Pin `prepare`, `review`, and `publish` to the same reviewed full SHA, gate every job on `github.event.pull_request.head.repo.full_name == github.repository`, and set `allow-users` to the maintainers who may trigger reviews.
+3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules. Note the trust trade-off: in the default `workspace` mode the file is read from the PR head and a same-repo PR can edit it to steer the prompt. The workspace-safety constraints described in [Constraints on `review-reference-file`](#constraints-on-review-reference-file) close file-disclosure attacks but do not pin policy to the base branch. If you need policy locked against PR edits, follow [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) and adopt `review-reference-source: base` once it ships.
+4. Open a pull request — the review appears automatically.
+
+### Minimal quick start (evaluation only)
+
+1. Add `OPENAI_API_KEY` as a repository secret (Settings > Secrets and variables > Actions). This makes the secret visible to every workflow in the repo, so use it for evaluation only — switch to the environment-scoped path above before opening the workflow to other contributors.
+2. Create the workflow file as shown in [Minimal quick start](#minimal-quick-start).
+3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules (same trust trade-off as above).
+4. Open a pull request — the review appears automatically.
 
 ## Development
 
