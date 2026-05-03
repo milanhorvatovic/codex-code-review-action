@@ -15,7 +15,7 @@ The release PR body template (composed by `scripts/prepare-release.ts`) includes
 
 ## Required validation
 
-Run the full validation suite against the merge candidate (the release branch's HEAD before the squash-merge), on the Node version pinned in `package.json` (`engines.node`). The same commands run in CI; this rerun is the maintainer's pre-tag confirmation that the release branch — including the version-bump commit and CHANGELOG entry the release PR introduces — is green.
+Run the full validation suite against the merge candidate (the release branch's HEAD before the squash-merge), on the Node version pinned in `package.json` (`engines.node`). CI runs the automatable checks (lint, typecheck, tests, `verify-dist`, `verify-doc-pins`, `verify-prose-style`); this rerun plus the maintainer-only `npm audit` step is the pre-tag confirmation that the release branch — including the version-bump commit and CHANGELOG entry the release PR introduces — is green.
 
 ```bash
 npm ci
@@ -47,7 +47,7 @@ These three checks exercise the path-validation hardening landed in [`src/prepar
 
 - `review-reference-file: /proc/self/environ` is rejected with `must be workspace-relative, not absolute` before any read happens. The unit covers this in the `rejects an absolute path` case.
 - `review-reference-file: ../outside.md` is rejected with `escapes the workspace` before any read happens. The unit covers this in the `rejects a path that escapes the workspace` case.
-- A leaf path that is a symbolic link is rejected with `is a symbolic link; symlinks are not allowed`, and a symlink-via-intermediate-component that escapes the workspace is rejected with `escapes the workspace after symlink resolution`. The unit covers both in the leaf-symlink and intermediate-symlink cases. Together these close the file-disclosure path against runner-local files (the same threat model `/proc/self/environ` exists to surface).
+- A leaf path that is a symbolic link is rejected with `is a symbolic link; symlinks are not allowed`, and an ancestor directory symbolic link is rejected with `resolves through a symbolic link`. The unit covers both in the `rejects a leaf symbolic link` and `rejects an ancestor directory symbolic link` cases. Together these close the file-disclosure path against runner-local files (the same threat model `/proc/self/environ` exists to surface).
 
 If any of the unit cases above are missing from the test suite or are skipped on the merge candidate, the gate fails — re-add coverage before tagging.
 
