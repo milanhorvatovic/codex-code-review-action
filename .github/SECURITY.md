@@ -74,3 +74,9 @@ GitHub App installation tokens expire automatically (one-hour default) and are s
 ### Why an App instead of `GITHUB_TOKEN`
 
 PRs opened by the default `GITHUB_TOKEN` do not trigger downstream workflows (a documented anti-recursion safeguard). Release automation requires that release PRs run their normal CI checks before merging, so the App identity is necessary. PATs are avoided because they tie automation to a person and have broader permission scopes than this use needs.
+
+### Tag-creation gating
+
+`release-on-merge.yaml` is split into a `validate` job and a `tag` job. `validate` runs without the App token (only `contents: read` on `pull_request.merge_commit_sha`) and executes `verify-dist`, `npm run lint`, `npm run typecheck`, `npm test`, the `verify-lockfile-version` composite, and the branch-ref / `package.json` / `CHANGELOG.md` consistency checks. `tag` declares `needs: validate`, mints the App token, and pushes `vX.Y.Z`; a defensive `git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}"` check at the top of the tag-push step short-circuits with `exit 0` when the tag already exists, so re-runs do not flap. Both jobs carry the same merged-PR / release-branch guard for defense in depth, and the workflow-level `release-tag` concurrency group continues to serialize the validate→tag sequence and queue concurrent release PRs.
+
+Keeping `validate` token-free means a future change to validation that processes PR-derived content cannot leak App credentials. `release.yaml` is unchanged and continues to run the same validation a second time on tag push as a redundant post-tag defense before the GitHub Release is published.

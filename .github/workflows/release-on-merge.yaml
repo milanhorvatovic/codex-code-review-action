@@ -13,24 +13,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  tag:
+  validate:
     if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'release/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
-        id: app-token
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
           ref: ${{ github.event.pull_request.merge_commit_sha }}
-          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-node-deps
+
+      - uses: ./.github/actions/verify-dist
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - uses: ./.github/actions/verify-lockfile-version
 
       - name: Validate version consistency
         env:
@@ -49,6 +57,26 @@ jobs:
             exit 1
           fi
 
+  tag:
+    needs: validate
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        id: app-token
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
       - name: Tag and push
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -56,11 +84,15 @@ jobs:
           BOT_USER_ID: ${{ vars.RELEASE_APP_BOT_USER_ID }}
         run: |
           set -euo pipefail
+          VERSION="${HEAD_REF#release/v}"
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${VERSION} already exists at origin; nothing to do."
+            exit 0
+          fi
           if [ -z "${BOT_USER_ID}" ]; then
             echo "::error::vars.RELEASE_APP_BOT_USER_ID is empty; refusing to tag with a malformed bot email."
             exit 1
           fi
-          VERSION="${HEAD_REF#release/v}"
           BOT_LOGIN="codex-review-action-release-bot[bot]"
           git config user.name "${BOT_LOGIN}"
           git config user.email "${BOT_USER_ID}+${BOT_LOGIN}@users.noreply.github.com"

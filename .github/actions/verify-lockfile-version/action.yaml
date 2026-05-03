@@ -1,0 +1,20 @@
+name: Verify package-lock.json version matches package.json
+description: Asserts package.json, top-level lockfile version, and lockfile root package version are in sync.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        PKG="$(jq -r .version package.json)"
+        LOCK_TOP="$(jq -r '.version // empty' package-lock.json)"
+        LOCK_ROOT_PKG="$(jq -r '.packages[""].version // empty' package-lock.json)"
+        if [ -z "${LOCK_TOP}" ] || [ -z "${LOCK_ROOT_PKG}" ]; then
+          echo "::error::package-lock.json is missing required version metadata (top='${LOCK_TOP}' root-pkg='${LOCK_ROOT_PKG}'); lockfileVersion 3 must include both."
+          exit 1
+        fi
+        if [ "${PKG}" != "${LOCK_TOP}" ] || [ "${PKG}" != "${LOCK_ROOT_PKG}" ]; then
+          echo "::error::package.json=${PKG} but package-lock.json reports top=${LOCK_TOP} root-pkg=${LOCK_ROOT_PKG}"
+          exit 1
+        fi

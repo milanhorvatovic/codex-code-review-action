@@ -177,7 +177,7 @@ Auto-approval reviews carry the marker body `Auto-approved by the Dependabot Aut
 
 1. Trigger `prepare-release.yaml` via the GitHub UI (`Actions → Prepare Release → Run workflow`). Optionally pass an explicit `version` (e.g. `2.1.0` or `2.1.0-rc.1`); leave empty to compute from the `release: <level>` labels of merged PRs since the last non-pre-release tag.
 2. The workflow opens a PR titled `release: v<X.Y.Z>` against `main` containing the `package.json` bump, the matching `package-lock.json` bump (top-level `version` and `packages[""].version` only — no dependency tree resolution), and the new `CHANGELOG.md` entry, all in the same commit. Review it like any other PR. Re-running the workflow for the same target version updates the existing release branch and PR in place; the bot refuses to force-push if any non-bot commits are present on the release branch.
-3. Squash-merge the release PR. The `release-on-merge.yaml` workflow tags the merge commit with `v<X.Y.Z>` and pushes the tag automatically.
+3. Squash-merge the release PR. The `release-on-merge.yaml` workflow validates the merge commit (lint, typecheck, tests, `verify-dist`, and consistency between the branch ref, `package.json`, `package-lock.json`, and the top `CHANGELOG.md` section), then tags it with `v<X.Y.Z>` and pushes the tag automatically. If validation fails, no tag is created.
 4. The tag push triggers `release.yaml`, which creates the GitHub Release with notes extracted from `CHANGELOG.md`, force-updates the major version tag (skipped for pre-releases), and opens a follow-up PR refreshing SHA-pinned self-references in `README.md` (skipped for pre-releases).
 5. Squash-merge the self-pin refresh PR.
 
