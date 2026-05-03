@@ -141,7 +141,7 @@ export function runCli(deps: RunCliDeps = {}): number {
   const sha = argv[1];
 
   try {
-    const pendingWrites: Array<{ path: string; content: string }> = [];
+    const pendingWrites: Array<{ path: string; original: string; updated: string }> = [];
     const unchangedPaths: string[] = [];
     for (const target of SELF_PIN_TARGETS) {
       const original = readSource(target.path);
@@ -150,14 +150,30 @@ export function runCli(deps: RunCliDeps = {}): number {
         unchangedPaths.push(target.path);
         continue;
       }
-      pendingWrites.push({ path: target.path, content: updated });
+      pendingWrites.push({ path: target.path, original, updated });
     }
     if (pendingWrites.length === 0) {
       stdoutWrite("All self-pin targets already up to date; no changes written.\n");
       return 0;
     }
-    for (const write of pendingWrites) {
-      writeSource(write.path, write.content);
+    const writtenPaths: string[] = [];
+    try {
+      for (const write of pendingWrites) {
+        writeSource(write.path, write.updated);
+        writtenPaths.push(write.path);
+      }
+    } catch (writeErr) {
+      // Best-effort rollback so a mid-write failure does not leave the working tree partially updated.
+      for (const path of writtenPaths) {
+        const original = pendingWrites.find((w) => w.path === path)?.original;
+        if (original === undefined) continue;
+        try {
+          writeSource(path, original);
+        } catch {
+          // Surface the original write error; rollback failures are secondary.
+        }
+      }
+      throw writeErr;
     }
     stdoutWrite(
       `Refreshed self-pin SHAs to ${sha} (v${version}) in: ${pendingWrites

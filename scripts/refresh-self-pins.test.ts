@@ -333,4 +333,42 @@ describe("runCli", () => {
     expect(stub.writes).toHaveLength(0);
     expect(stub.stderr.join("")).toContain(`no fixture for ${WORKFLOW_PATH}`);
   });
+
+  it("rolls back earlier writes when a later write throws", () => {
+    const readmeOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`;
+    const workflowOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${OLD_SHA} # v2.1.0-pre`;
+    const stub: Stub = {
+      files: { [README_PATH]: readmeOriginal, [WORKFLOW_PATH]: workflowOriginal },
+      writes: [],
+      stdout: [],
+      stderr: [],
+    };
+    const deps = {
+      argv: ["2.1.0", NEW_SHA],
+      readSource: (path: string) => {
+        const content = stub.files[path];
+        if (content === undefined) throw new Error(`no fixture for ${path}`);
+        return content;
+      },
+      writeSource: (path: string, content: string) => {
+        stub.writes.push({ path, content });
+        if (path === WORKFLOW_PATH && content.includes(NEW_SHA)) {
+          throw new Error("simulated disk full");
+        }
+      },
+      stdoutWrite: (chunk: string) => {
+        stub.stdout.push(chunk);
+      },
+      stderrWrite: (chunk: string) => {
+        stub.stderr.push(chunk);
+      },
+    };
+    expect(runCli(deps)).toBe(1);
+    expect(stub.stderr.join("")).toContain("simulated disk full");
+    // Three write calls: README new content, workflow new content (throws), README rollback to original.
+    expect(stub.writes).toHaveLength(3);
+    expect(stub.writes[0]).toEqual({ path: README_PATH, content: expect.stringContaining(NEW_SHA) });
+    expect(stub.writes[1]?.path).toBe(WORKFLOW_PATH);
+    expect(stub.writes[2]).toEqual({ path: README_PATH, content: readmeOriginal });
+  });
 });
