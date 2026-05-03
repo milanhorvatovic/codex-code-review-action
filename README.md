@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
 
       - id: prepare
-        uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2 # mutable tag for evaluation only — pin a SHA before production use, see [Pinning the action](#pinning-the-action)
+        uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2 # mutable tag for evaluation only; pin a SHA before production use (see "Pinning the action" below)
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
@@ -77,7 +77,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.chunk-matrix) }}
     steps:
-      - uses: milanhorvatovic/codex-ai-code-review-action/review@v2 # mutable tag for evaluation only — pin a SHA before production use, see [Pinning the action](#pinning-the-action)
+      - uses: milanhorvatovic/codex-ai-code-review-action/review@v2 # mutable tag for evaluation only; pin a SHA before production use (see "Pinning the action" below)
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           chunk: ${{ matrix.chunk }}
@@ -95,7 +95,7 @@ jobs:
           path: .codex/
           merge-multiple: true
 
-      - uses: milanhorvatovic/codex-ai-code-review-action/publish@v2 # mutable tag for evaluation only — pin a SHA before production use, see [Pinning the action](#pinning-the-action)
+      - uses: milanhorvatovic/codex-ai-code-review-action/publish@v2 # mutable tag for evaluation only; pin a SHA before production use (see "Pinning the action" below)
         with:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
