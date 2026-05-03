@@ -14,6 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Verify package-lock.json version matches package.json
+        run: |
+          set -euo pipefail
+          PKG="$(jq -r .version package.json)"
+          LOCK_TOP="$(jq -r '.version // empty' package-lock.json)"
+          LOCK_ROOT_PKG="$(jq -r '.packages[""].version // empty' package-lock.json)"
+          if [ -z "${LOCK_TOP}" ] || [ -z "${LOCK_ROOT_PKG}" ]; then
+            echo "::error::package-lock.json is missing required version metadata (top='${LOCK_TOP}' root-pkg='${LOCK_ROOT_PKG}'); lockfileVersion 3 must include both."
+            exit 1
+          fi
+          if [ "${PKG}" != "${LOCK_TOP}" ] || [ "${PKG}" != "${LOCK_ROOT_PKG}" ]; then
+            echo "::error::package.json=${PKG} but package-lock.json reports top=${LOCK_TOP} root-pkg=${LOCK_ROOT_PKG}"
+            exit 1
+          fi
+
       - uses: ./.github/actions/setup-node-deps
 
       - name: Lint

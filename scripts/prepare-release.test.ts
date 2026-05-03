@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyChangelogUpdate,
   bumpPackageJsonVersion,
+  bumpPackageLockVersion,
   buildPrBody,
   categorizePullRequest,
   computeVersionBump,
@@ -359,6 +360,106 @@ describe("bumpPackageJsonVersion", () => {
   });
 });
 
+describe("bumpPackageLockVersion", () => {
+  function makeLock(overrides?: {
+    version?: string | undefined;
+    rootPackageVersion?: string | undefined;
+    omitTopVersion?: boolean;
+    omitRootPackage?: boolean;
+    omitRootPackageVersion?: boolean;
+    extraPackages?: Record<string, unknown>;
+  }): string {
+    const opts = overrides ?? {};
+    const rootPackage: Record<string, unknown> = {
+      name: "x",
+      license: "MIT",
+    };
+    if (!opts.omitRootPackageVersion) {
+      rootPackage.version = opts.rootPackageVersion ?? "1.0.0";
+    }
+    const packages: Record<string, unknown> = {};
+    if (!opts.omitRootPackage) {
+      packages[""] = rootPackage;
+    }
+    if (opts.extraPackages) {
+      Object.assign(packages, opts.extraPackages);
+    }
+    const top: Record<string, unknown> = {
+      name: "x",
+      lockfileVersion: 3,
+      requires: true,
+      packages,
+    };
+    if (!opts.omitTopVersion) {
+      top.version = opts.version ?? "1.0.0";
+      const ordered: Record<string, unknown> = {
+        name: top.name,
+        version: top.version,
+        lockfileVersion: top.lockfileVersion,
+        requires: top.requires,
+        packages: top.packages,
+      };
+      return `${JSON.stringify(ordered, null, 2)}\n`;
+    }
+    return `${JSON.stringify(top, null, 2)}\n`;
+  }
+
+  it("rewrites the top-level version and packages[''].version", () => {
+    const result = bumpPackageLockVersion(makeLock(), "1.1.0");
+    const parsed = JSON.parse(result);
+    expect(parsed.version).toBe("1.1.0");
+    expect(parsed.packages[""].version).toBe("1.1.0");
+  });
+
+  it("preserves a trailing newline when the input has one", () => {
+    const result = bumpPackageLockVersion(makeLock(), "1.1.0");
+    expect(result.endsWith("\n")).toBe(true);
+  });
+
+  it("preserves no-trailing-newline when the input has none", () => {
+    const content = makeLock().replace(/\n$/, "");
+    const result = bumpPackageLockVersion(content, "1.1.0");
+    expect(result.endsWith("\n")).toBe(false);
+  });
+
+  it("leaves extra packages entries (e.g. node_modules/foo) untouched", () => {
+    const content = makeLock({
+      extraPackages: {
+        "node_modules/foo": { version: "9.9.9" },
+        "node_modules/bar": { version: "0.0.1" },
+      },
+    });
+    const result = bumpPackageLockVersion(content, "1.1.0");
+    const parsed = JSON.parse(result);
+    expect(parsed.packages["node_modules/foo"].version).toBe("9.9.9");
+    expect(parsed.packages["node_modules/bar"].version).toBe("0.0.1");
+  });
+
+  it("rejects an invalid target version", () => {
+    expect(() => bumpPackageLockVersion(makeLock(), "v1.1.0")).toThrow(
+      /Strip the leading 'v'/,
+    );
+  });
+
+  it("throws when the top-level version field is absent", () => {
+    expect(() => bumpPackageLockVersion(makeLock({ omitTopVersion: true }), "1.1.0")).toThrow(
+      /no top-level 'version' field/,
+    );
+  });
+
+  it("throws when packages[''] is absent", () => {
+    expect(() => bumpPackageLockVersion(makeLock({ omitRootPackage: true }), "1.1.0")).toThrow(
+      /no 'packages\[""\]' entry/,
+    );
+  });
+
+  it("throws when packages[''].version is absent", () => {
+    expect(() =>
+      bumpPackageLockVersion(makeLock({ omitRootPackageVersion: true }), "1.1.0"),
+    ).toThrow(/no 'packages\[""\]\.version' field/);
+  });
+});
+
 describe("tagCommitTimestamp", () => {
   it("returns the trimmed git log output", () => {
     const calls: string[][] = [];
@@ -538,6 +639,18 @@ describe("runCli (dry-run integration)", () => {
       readFile: (path) => {
         if (path === "package.json")
           return `${JSON.stringify({ name: "x", version: "2.0.0" }, null, 2)}\n`;
+        if (path === "package-lock.json")
+          return `${JSON.stringify(
+            {
+              name: "x",
+              version: "2.0.0",
+              lockfileVersion: 3,
+              requires: true,
+              packages: { "": { name: "x", version: "2.0.0" } },
+            },
+            null,
+            2,
+          )}\n`;
         if (path === "CHANGELOG.md")
           return "# Changelog\n\n## [2.0.0] - 2026-04-07\n\n- prior\n";
         throw new Error(`unexpected read: ${path}`);
@@ -576,6 +689,8 @@ describe("runCli (dry-run integration)", () => {
     expect(stderr.join("")).toBe("");
     const out = stdout.join("");
     expect(out).toContain('"version": "2.1.0"');
+    expect(out).toContain('"lockfileVersion": 3');
+    expect(out).toContain("package-lock.json");
     expect(out).toContain("## [2.1.0] - 2026-05-01");
     expect(out).toContain("Target version: 2.1.0 (release)");
   });
