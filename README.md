@@ -278,7 +278,7 @@ jobs:
         with:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
-          retain-findings: false # explicit for auditors; matches the action default
+          retain-findings: "false" # explicit for auditors; matches the action default
           # fail-on-missing-chunks: "true" # available in the next tagged release; uncomment after bumping the SHAs above
 ```
 

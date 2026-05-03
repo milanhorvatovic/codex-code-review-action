@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   refreshReadme,
+  refreshWorkflow,
   removeIssue44Paragraph,
   rewriteAllSelfPins,
   rewriteSelfPin,
@@ -178,6 +179,31 @@ describe("refreshReadme", () => {
   });
 });
 
+describe("refreshWorkflow", () => {
+  it("rewrites every self-reference SHA and tag comment in a workflow file", () => {
+    const content = [
+      `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${OLD_SHA} # v2.1.0-pre`,
+      `      uses: milanhorvatovic/codex-ai-code-review-action/review@${OLD_SHA} # v2.1.0-pre`,
+      `      uses: milanhorvatovic/codex-ai-code-review-action/publish@${OLD_SHA} # v2.1.0-pre`,
+    ].join("\n");
+    const result = refreshWorkflow(content, "2.1.0", NEW_SHA);
+    expect(result).not.toContain(OLD_SHA);
+    expect(result).not.toContain("v2.1.0-pre");
+    expect((result.match(new RegExp(NEW_SHA, "g")) ?? []).length).toBe(3);
+    expect((result.match(/# v2\.1\.0(?!-)/g) ?? []).length).toBe(3);
+  });
+
+  it("leaves third-party action references untouched", () => {
+    const content = `      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2`;
+    expect(refreshWorkflow(content, "2.1.0", NEW_SHA)).toBe(content);
+  });
+
+  it("returns the input unchanged when no self-pins are present", () => {
+    const content = "name: example\non: push\njobs: {}\n";
+    expect(refreshWorkflow(content, "2.1.0", NEW_SHA)).toBe(content);
+  });
+});
+
 describe("runCli", () => {
   type Stub = {
     files: Record<string, string>;
@@ -185,6 +211,9 @@ describe("runCli", () => {
     stdout: string[];
     stderr: string[];
   };
+
+  const README_PATH = "README.md";
+  const WORKFLOW_PATH = ".github/workflows/codex-review.yaml";
 
   function makeDeps(stub: Stub, argv: string[]) {
     return {
@@ -206,10 +235,28 @@ describe("runCli", () => {
     };
   }
 
-  it("returns 0 and writes README.md on success", () => {
+  it("returns 0 and writes both targets when both have outdated SHAs", () => {
     const stub: Stub = {
       files: {
-        "README.md": `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`,
+        [README_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`,
+        [WORKFLOW_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${OLD_SHA} # v2.1.0-pre`,
+      },
+      writes: [],
+      stdout: [],
+      stderr: [],
+    };
+    expect(runCli(makeDeps(stub, ["2.1.0", NEW_SHA]))).toBe(0);
+    expect(stub.writes.map((w) => w.path).sort()).toEqual([WORKFLOW_PATH, README_PATH].sort());
+    for (const w of stub.writes) {
+      expect(w.content).toContain(`@${NEW_SHA} # v2.1.0`);
+    }
+  });
+
+  it("writes only the workflow file when README is already up to date", () => {
+    const stub: Stub = {
+      files: {
+        [README_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action@${NEW_SHA} # v2.1.0`,
+        [WORKFLOW_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${OLD_SHA} # v2.1.0-pre`,
       },
       writes: [],
       stdout: [],
@@ -217,13 +264,31 @@ describe("runCli", () => {
     };
     expect(runCli(makeDeps(stub, ["2.1.0", NEW_SHA]))).toBe(0);
     expect(stub.writes).toHaveLength(1);
-    expect(stub.writes[0]?.content).toContain(`@${NEW_SHA} # v2.1.0`);
+    expect(stub.writes[0]?.path).toBe(WORKFLOW_PATH);
+    expect(stub.stdout.join("")).toContain("Already up to date: README.md");
   });
 
-  it("returns 0 without writing when no edits are required", () => {
+  it("writes only README when the workflow file is already up to date", () => {
     const stub: Stub = {
       files: {
-        "README.md": `      uses: milanhorvatovic/codex-ai-code-review-action@${NEW_SHA} # v2.1.0`,
+        [README_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`,
+        [WORKFLOW_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${NEW_SHA} # v2.1.0`,
+      },
+      writes: [],
+      stdout: [],
+      stderr: [],
+    };
+    expect(runCli(makeDeps(stub, ["2.1.0", NEW_SHA]))).toBe(0);
+    expect(stub.writes).toHaveLength(1);
+    expect(stub.writes[0]?.path).toBe(README_PATH);
+    expect(stub.stdout.join("")).toContain(`Already up to date: ${WORKFLOW_PATH}`);
+  });
+
+  it("returns 0 without writing when no edits are required across all targets", () => {
+    const stub: Stub = {
+      files: {
+        [README_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action@${NEW_SHA} # v2.1.0`,
+        [WORKFLOW_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${NEW_SHA} # v2.1.0`,
       },
       writes: [],
       stdout: [],
@@ -242,12 +307,106 @@ describe("runCli", () => {
 
   it("returns 1 on an invalid SHA", () => {
     const stub: Stub = {
-      files: { "README.md": "no pins here" },
+      files: {
+        [README_PATH]: "no pins here",
+        [WORKFLOW_PATH]: "no pins here either",
+      },
       writes: [],
       stdout: [],
       stderr: [],
     };
     expect(runCli(makeDeps(stub, ["2.1.0", "abcd"]))).toBe(1);
     expect(stub.stderr.join("")).toContain("40-character hex");
+  });
+
+  it("does not write any target when a later read fails", () => {
+    const stub: Stub = {
+      files: {
+        [README_PATH]: `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`,
+        // WORKFLOW_PATH intentionally absent so reading it throws after README has been refreshed.
+      },
+      writes: [],
+      stdout: [],
+      stderr: [],
+    };
+    expect(runCli(makeDeps(stub, ["2.1.0", NEW_SHA]))).toBe(1);
+    expect(stub.writes).toHaveLength(0);
+    expect(stub.stderr.join("")).toContain(`no fixture for ${WORKFLOW_PATH}`);
+  });
+
+  it("rolls back earlier writes and the in-flight file when a later write throws", () => {
+    const readmeOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`;
+    const workflowOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${OLD_SHA} # v2.1.0-pre`;
+    const stub: Stub = {
+      files: { [README_PATH]: readmeOriginal, [WORKFLOW_PATH]: workflowOriginal },
+      writes: [],
+      stdout: [],
+      stderr: [],
+    };
+    const deps = {
+      argv: ["2.1.0", NEW_SHA],
+      readSource: (path: string) => {
+        const content = stub.files[path];
+        if (content === undefined) throw new Error(`no fixture for ${path}`);
+        return content;
+      },
+      writeSource: (path: string, content: string) => {
+        stub.writes.push({ path, content });
+        // Simulate a disk-full failure during the workflow's first write (new SHA content).
+        // The rollback write (original content) must still succeed so the file is restored.
+        if (path === WORKFLOW_PATH && content.includes(NEW_SHA)) {
+          throw new Error("simulated disk full");
+        }
+      },
+      stdoutWrite: (chunk: string) => {
+        stub.stdout.push(chunk);
+      },
+      stderrWrite: (chunk: string) => {
+        stub.stderr.push(chunk);
+      },
+    };
+    expect(runCli(deps)).toBe(1);
+    expect(stub.stderr.join("")).toContain("simulated disk full");
+    // Four write calls: README new, WORKFLOW new (throws), README rollback, WORKFLOW rollback.
+    expect(stub.writes).toHaveLength(4);
+    expect(stub.writes[0]).toEqual({ path: README_PATH, content: expect.stringContaining(NEW_SHA) });
+    expect(stub.writes[1]?.path).toBe(WORKFLOW_PATH);
+    expect(stub.writes[1]?.content).toContain(NEW_SHA);
+    expect(stub.writes[2]).toEqual({ path: README_PATH, content: readmeOriginal });
+    expect(stub.writes[3]).toEqual({ path: WORKFLOW_PATH, content: workflowOriginal });
+  });
+
+  it("surfaces the original write error when rollback writes also fail", () => {
+    const readmeOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action@${OLD_SHA} # v2.0.0`;
+    const workflowOriginal = `      uses: milanhorvatovic/codex-ai-code-review-action/prepare@${OLD_SHA} # v2.1.0-pre`;
+    const stub: Stub = {
+      files: { [README_PATH]: readmeOriginal, [WORKFLOW_PATH]: workflowOriginal },
+      writes: [],
+      stdout: [],
+      stderr: [],
+    };
+    const deps = {
+      argv: ["2.1.0", NEW_SHA],
+      readSource: (path: string) => {
+        const content = stub.files[path];
+        if (content === undefined) throw new Error(`no fixture for ${path}`);
+        return content;
+      },
+      writeSource: (path: string, _content: string) => {
+        stub.writes.push({ path, content: _content });
+        // First write succeeds; every subsequent write (including rollback) throws.
+        if (stub.writes.length > 1) throw new Error(`write ${stub.writes.length} failed`);
+      },
+      stdoutWrite: (chunk: string) => {
+        stub.stdout.push(chunk);
+      },
+      stderrWrite: (chunk: string) => {
+        stub.stderr.push(chunk);
+      },
+    };
+    expect(runCli(deps)).toBe(1);
+    // The original write-2 failure is surfaced; rollback failures are silently swallowed.
+    expect(stub.stderr.join("")).toContain("write 2 failed");
+    expect(stub.stderr.join("")).not.toContain("write 3 failed");
   });
 });

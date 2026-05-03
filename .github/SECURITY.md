@@ -49,6 +49,15 @@ The three-job architecture splits responsibilities by permission scope:
 
 If you believe any of these defenses can be bypassed, please report it using the process above.
 
+### Dogfood (self-review) workflow
+
+This repository runs the action against its own pull requests via [`.github/workflows/codex-review.yaml`](workflows/codex-review.yaml). The dogfood mirrors the [Production workflow example](../README.md#production-workflow-example) so the documented hardened pattern is exercised end to end on a real PR-shaped event before adopters copy it. Operationally:
+
+- `OPENAI_API_KEY` is bound to the `codex-review` GitHub Environment as an environment secret, scoped to the `review` job only. No repo-scoped copy of the key is configured.
+- Every job carries `github.event.pull_request.head.repo.full_name == github.repository`, so fork PRs are skipped before any secret-touching step.
+- The `prepare` step's `allow-users` is bound to the maintainer to bound OpenAI cost while the dogfood is being proven out; this is revisited after one release cycle.
+- The three self-action references (`prepare`, `review`, `publish`) are SHA-pinned and refreshed by [`scripts/refresh-self-pins.ts`](../scripts/refresh-self-pins.ts) after each release tag, keeping the dogfood and the README example aligned.
+
 ## Release automation identity
 
 Release automation is performed by a dedicated GitHub App installed only on this repository. The App identity is `codex-review-action-release-bot[bot]` in audit logs and PR authorship.

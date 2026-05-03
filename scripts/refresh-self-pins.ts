@@ -83,6 +83,18 @@ export function refreshReadme(content: string, version: string, sha: string): st
   return next;
 }
 
+export function refreshWorkflow(content: string, version: string, sha: string): string {
+  return rewriteAllSelfPins(content, version, sha);
+}
+
+export const SELF_PIN_TARGETS: ReadonlyArray<{
+  path: string;
+  refresh: (content: string, version: string, sha: string) => string;
+}> = [
+  { path: "README.md", refresh: refreshReadme },
+  { path: ".github/workflows/codex-review.yaml", refresh: refreshWorkflow },
+];
+
 export type RunCliDeps = {
   argv?: string[];
   readSource?: (path: string) => string;
@@ -129,14 +141,54 @@ export function runCli(deps: RunCliDeps = {}): number {
   const sha = argv[1];
 
   try {
-    const original = readSource("README.md");
-    const updated = refreshReadme(original, version, sha);
-    if (updated === original) {
-      stdoutWrite("README.md already up to date; no changes written.\n");
+    const pendingWrites: Array<{ path: string; original: string; updated: string }> = [];
+    const unchangedPaths: string[] = [];
+    for (const target of SELF_PIN_TARGETS) {
+      const original = readSource(target.path);
+      const updated = target.refresh(original, version, sha);
+      if (updated === original) {
+        unchangedPaths.push(target.path);
+        continue;
+      }
+      pendingWrites.push({ path: target.path, original, updated });
+    }
+    if (pendingWrites.length === 0) {
+      stdoutWrite("All self-pin targets already up to date; no changes written.\n");
       return 0;
     }
-    writeSource("README.md", updated);
-    stdoutWrite(`Refreshed self-pin SHAs to ${sha} (v${version}).\n`);
+    const writtenPaths: string[] = [];
+    let inFlightPath: string | undefined;
+    try {
+      for (const write of pendingWrites) {
+        inFlightPath = write.path;
+        writeSource(write.path, write.updated);
+        writtenPaths.push(write.path);
+        inFlightPath = undefined;
+      }
+    } catch (writeErr) {
+      // Best-effort rollback so a mid-write failure does not leave the working tree partially
+      // updated. Includes the in-flight path so a write that throws after truncating the file
+      // also gets restored to its original content.
+      const toRollback = inFlightPath === undefined ? writtenPaths : [...writtenPaths, inFlightPath];
+      for (const path of toRollback) {
+        const original = pendingWrites.find((w) => w.path === path)?.original;
+        if (original === undefined) continue;
+        try {
+          writeSource(path, original);
+        } catch {
+          // Surface the original write error; rollback failures are secondary.
+        }
+      }
+      throw writeErr;
+    }
+    stdoutWrite(
+      `Refreshed self-pin SHAs to ${sha} (v${version}) in: ${pendingWrites
+        .map((w) => w.path)
+        .join(", ")}.\n`,
+    );
+    if (unchangedPaths.length > 0) {
+      stdoutWrite(`Already up to date: ${unchangedPaths.join(", ")}.\n`);
+    }
     return 0;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
