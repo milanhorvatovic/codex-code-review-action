@@ -42,22 +42,34 @@ def default_gh() -> GhExec:
     """Build a GhExec that shells out to the local `gh` binary."""
 
     def _exec(args: tuple[str, ...]) -> GhResult:
-        result = subprocess.run(  # noqa: S603 - args are explicit, no shell expansion
-            ["gh", *args],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(  # noqa: S603 - args are explicit, no shell expansion
+                ["gh", *args],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return GhResult(
+                code=127,
+                stderr="`gh` was not found on PATH. Install the GitHub CLI and run `gh auth status`.",
+                stdout="",
+            )
         return GhResult(code=result.returncode, stderr=result.stderr or "", stdout=result.stdout or "")
 
     return _exec
+
+
+def _response_body(result: GhResult) -> str:
+    return result.stderr.strip() or result.stdout.strip() or "(no response body)"
 
 
 def resolve_pin(gh: GhExec) -> PinResolution:
     tag_result = gh(("api", f"repos/{ACTION_REPO}/releases/latest", "--jq", ".tag_name"))
     if tag_result.code != 0:
         raise PinResolutionError(
-            f"gh api repos/{ACTION_REPO}/releases/latest exited {tag_result.code}: {tag_result.stderr.strip()}"
+            f"gh api repos/{ACTION_REPO}/releases/latest exited {tag_result.code}: {_response_body(tag_result)}\n"
+            "Run `gh auth status` to verify GitHub CLI authentication before retrying."
         )
     tag = tag_result.stdout.strip()
     if not tag:
@@ -70,7 +82,7 @@ def resolve_pin(gh: GhExec) -> PinResolution:
     sha_result = gh(("api", f"repos/{ACTION_REPO}/commits/{tag}", "--jq", ".sha"))
     if sha_result.code != 0:
         raise PinResolutionError(
-            f"gh api repos/{ACTION_REPO}/commits/{tag} exited {sha_result.code}: {sha_result.stderr.strip()}"
+            f"gh api repos/{ACTION_REPO}/commits/{tag} exited {sha_result.code}: {_response_body(sha_result)}"
         )
     sha = sha_result.stdout.strip()
     if not _SHA_PATTERN.match(sha):

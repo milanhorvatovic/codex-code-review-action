@@ -11,11 +11,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .pin_resolver import ACTION_REPO, GhExec
+from .pin_resolver import ACTION_REPO, GhExec, GhResult
 
 
 class BaselineFetchError(Exception):
     """Raised when the baseline review-reference cannot be obtained."""
+
+
+def _response_body(result: GhResult) -> str:
+    return result.stderr.strip() or result.stdout.strip() or "(no response body)"
 
 
 def fetch_baseline_from_action(gh: GhExec, sha: str) -> str:
@@ -31,7 +35,7 @@ def fetch_baseline_from_action(gh: GhExec, sha: str) -> str:
     if result.code != 0:
         raise BaselineFetchError(
             f"gh api repos/{ACTION_REPO}/contents/defaults/review-reference.md exited "
-            f"{result.code}: {result.stderr.strip()}"
+            f"{result.code}: {_response_body(result)}"
         )
     if not result.stdout.strip():
         raise BaselineFetchError(
@@ -47,4 +51,7 @@ def load_baseline_from_path(path: str | Path) -> str:
         raise BaselineFetchError(f"baseline path '{candidate}' does not exist")
     if not candidate.is_file():
         raise BaselineFetchError(f"baseline path '{candidate}' is not a regular file")
-    return candidate.read_text(encoding="utf-8")
+    try:
+        return candidate.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise BaselineFetchError(f"failed to read baseline path '{candidate}': {exc}") from exc

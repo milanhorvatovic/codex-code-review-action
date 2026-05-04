@@ -166,6 +166,13 @@ class FailureCaseTests(unittest.TestCase):
         )
         self.assertFalse(_outcome(assert_workflow(broken), "CC-EXTRA-01-bare-action").ok)
 
+    def test_bare_action_tag_fails(self) -> None:
+        broken = _BASE_WORKFLOW.replace(
+            "milanhorvatovic/codex-ai-code-review-action/prepare@1111111111111111111111111111111111111111",
+            "milanhorvatovic/codex-ai-code-review-action@v2",
+        )
+        self.assertFalse(_outcome(assert_workflow(broken), "CC-EXTRA-01-bare-action").ok)
+
 
 class FormatReportTests(unittest.TestCase):
     def test_one_line_per_outcome(self) -> None:

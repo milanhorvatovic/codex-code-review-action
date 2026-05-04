@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 from pathlib import Path
 
 from lib.pin_resolver import GhResult, PinResolution
 
-from adopt import AdoptInputs, run_adopt
+from adopt import AdoptError, AdoptInputs, run_adopt
 
 _HERE = Path(__file__).resolve().parent
 _FIXTURE_REPO = _HERE / "__fixtures__" / "codex-review-action"
@@ -103,6 +104,29 @@ class AdoptTests(unittest.TestCase):
                 "docs/codex-adoption.md",
             ],
         )
+
+    def test_rejects_output_paths_outside_target_repo(self) -> None:
+        with self.assertRaisesRegex(AdoptError, r"must not contain '\.\.'"):
+            run_adopt(_default_inputs(workflow_path="../codex-review.yaml"))
+        with self.assertRaisesRegex(AdoptError, "reference path must be repository-relative"):
+            run_adopt(_default_inputs(reference_path="/tmp/review-reference.md"))
+
+    def test_rejects_workflow_paths_outside_github_workflows(self) -> None:
+        with self.assertRaisesRegex(AdoptError, r"under \.github/workflows/"):
+            run_adopt(_default_inputs(workflow_path="docs/codex-review.yaml"))
+
+    def test_adoption_report_flags_bare_action_with_tag_pin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "legacy.yaml").write_text(
+                "jobs:\n  review:\n    steps:\n      - uses: milanhorvatovic/codex-ai-code-review-action@v2\n",
+                encoding="utf-8",
+            )
+            out = run_adopt(_default_inputs(target_repo=str(root)))
+        self.assertIn("Bare-action remediation", out.adoption_report)
+        self.assertIn("legacy.yaml", out.adoption_report)
 
     def test_adoption_report_documents_the_chosen_paths(self) -> None:
         out = run_adopt(

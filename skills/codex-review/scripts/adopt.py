@@ -22,9 +22,10 @@ See `--help` for the full flag list.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from lib.baseline_fetcher import (
     BaselineFetchError,
@@ -33,7 +34,7 @@ from lib.baseline_fetcher import (
 )
 from lib.detect import DetectOptions, Language, detect, make_filesystem_reader
 from lib.invariants import assert_workflow, format_report
-from lib.pin_resolver import GhExec, PinResolution, default_gh, resolve_pin
+from lib.pin_resolver import GhExec, PinResolution, PinResolutionError, default_gh, resolve_pin
 from lib.reference_layerer import LayerOptions, layer_reference
 from lib.workflow_templates import WorkflowTemplateOptions, render_hardened_workflow
 
@@ -44,6 +45,10 @@ DEFAULT_REPORT_PATH = "ADOPTION.md"
 
 class AdoptError(Exception):
     """Raised when adopt cannot complete (pin resolution failed, invariants failed, etc.)."""
+
+
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 
 
 @dataclass(frozen=True)
@@ -87,14 +92,49 @@ def _pick_project_name(target_repo: str, override: str | None) -> str:
     return parts[-1] if parts else "repo"
 
 
+def _normalize_repo_relative_path(raw_path: str, *, label: str) -> str:
+    raw = raw_path.strip()
+    if raw == "":
+        raise AdoptError(f"{label} must not be empty")
+    if "\x00" in raw:
+        raise AdoptError(f"{label} contains a NUL byte")
+    if Path(raw).is_absolute() or PureWindowsPath(raw).is_absolute():
+        raise AdoptError(f"{label} must be repository-relative; got absolute path '{raw_path}'")
+    normalized = PurePosixPath(raw.replace("\\", "/"))
+    if normalized == PurePosixPath("."):
+        raise AdoptError(f"{label} must name a file inside the repository")
+    if any(part == ".." for part in normalized.parts):
+        raise AdoptError(f"{label} must not contain '..' path segments: '{raw_path}'")
+    if raw.endswith(("/", "\\")):
+        raise AdoptError(f"{label} must name a file, not a directory: '{raw_path}'")
+    return normalized.as_posix()
+
+
+def _normalize_workflow_path(raw_path: str) -> str:
+    path = _normalize_repo_relative_path(raw_path, label="workflow path")
+    if not path.startswith(".github/workflows/"):
+        raise AdoptError("workflow path must live under .github/workflows/ so GitHub Actions can discover it")
+    if not path.endswith((".yaml", ".yml")):
+        raise AdoptError("workflow path must end with .yaml or .yml")
+    return path
+
+
+def _destination_inside_repo(target_repo: Path, relative_path: str) -> Path:
+    root = target_repo.resolve(strict=True)
+    destination = (root / relative_path).resolve(strict=False)
+    try:
+        destination.relative_to(root)
+    except ValueError as exc:
+        raise AdoptError(f"output path '{relative_path}' resolves outside the target repository") from exc
+    return destination
+
+
 def _detect_bare_action(target_repo: Path) -> _BareActionResult:
     workflows_dir = target_repo / ".github" / "workflows"
     if not workflows_dir.is_dir():
         return _BareActionResult(found=False)
     locations: list[str] = []
-    import re
-
-    pattern = re.compile(r"milanhorvatovic/codex-ai-code-review-action@[0-9a-f]{40}")
+    pattern = re.compile(r"milanhorvatovic/codex-ai-code-review-action@[^\s#'\"]+")
     for path in sorted(workflows_dir.iterdir()):
         if not path.is_file():
             continue
@@ -206,17 +246,28 @@ def _render_adoption_report(ctx: _ReportContext) -> str:
 def run_adopt(inputs: AdoptInputs, gh: GhExec | None = None) -> AdoptOutputs:
     target_repo_str = inputs.target_repo or str(Path.cwd())
     target_repo = Path(target_repo_str)
+    if not target_repo.is_dir():
+        raise AdoptError(f"target repo path '{target_repo}' does not exist or is not a directory")
+    workflow_path = _normalize_workflow_path(inputs.workflow_path)
+    reference_path = _normalize_repo_relative_path(inputs.reference_path, label="reference path")
+    report_path = _normalize_repo_relative_path(inputs.report_path, label="report path")
     gh_exec = gh or default_gh()
-    pin = inputs.pin if inputs.pin is not None else resolve_pin(gh_exec)
+    try:
+        pin = inputs.pin if inputs.pin is not None else resolve_pin(gh_exec)
+    except PinResolutionError as exc:
+        raise AdoptError(str(exc)) from exc
     project_name = _pick_project_name(target_repo_str, inputs.project_name)
 
     reader = make_filesystem_reader(str(target_repo))
     facts = detect(reader, DetectOptions())
     bare_action = _detect_bare_action(target_repo)
 
-    workflow = render_hardened_workflow(
-        WorkflowTemplateOptions(allow_users=inputs.allow_users, pin_sha=pin.sha, pin_tag=pin.tag)
-    )
+    try:
+        workflow = render_hardened_workflow(
+            WorkflowTemplateOptions(allow_users=inputs.allow_users, pin_sha=pin.sha, pin_tag=pin.tag)
+        )
+    except ValueError as exc:
+        raise AdoptError(str(exc)) from exc
     report = assert_workflow(workflow, action_version=pin.tag)
     if not report.ok:
         raise AdoptError(
@@ -243,21 +294,21 @@ def run_adopt(inputs: AdoptInputs, gh: GhExec | None = None) -> AdoptOutputs:
             invariants_report=invariants_report,
             pin=pin,
             project_name=project_name,
-            reference_path=inputs.reference_path,
-            report_path=inputs.report_path,
-            workflow_path=inputs.workflow_path,
+            reference_path=reference_path,
+            report_path=report_path,
+            workflow_path=workflow_path,
         )
     )
 
     writes = (
-        WriteEntry(content=workflow, path=inputs.workflow_path),
-        WriteEntry(content=reference_file, path=inputs.reference_path),
-        WriteEntry(content=adoption_report, path=inputs.report_path),
+        WriteEntry(content=workflow, path=workflow_path),
+        WriteEntry(content=reference_file, path=reference_path),
+        WriteEntry(content=adoption_report, path=report_path),
     )
 
     if not inputs.dry_run:
         for entry in writes:
-            destination = target_repo / entry.path
+            destination = _destination_inside_repo(target_repo, entry.path)
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(entry.content, encoding="utf-8")
 
@@ -323,8 +374,21 @@ def _build_parser() -> argparse.ArgumentParser:
             "Optional path to a locally-staged copy of the action's defaults/review-reference.md "
             "to layer against. When omitted (default), the script fetches the file from the action "
             "repo at the resolved release SHA via gh api. Useful for offline runs or when pinning "
-            "to a non-released SHA."
+            "with a pre-approved SHA/tag pair."
         ),
+    )
+    parser.add_argument(
+        "--pin-sha",
+        default=None,
+        help=(
+            "Optional reviewed 40-character SHA to use instead of resolving releases/latest via gh. "
+            "Must be passed together with --pin-tag."
+        ),
+    )
+    parser.add_argument(
+        "--pin-tag",
+        default=None,
+        help="Optional vX.Y.Z tag comment paired with --pin-sha for offline or pre-resolved runs.",
     )
     parser.add_argument(
         "--write",
@@ -336,9 +400,22 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    pin = None
+    if (args.pin_sha is None) != (args.pin_tag is None):
+        print("adopt failed: pass --pin-sha and --pin-tag together, or omit both", file=sys.stderr)
+        return 1
+    if args.pin_sha is not None and args.pin_tag is not None:
+        if not _SHA_RE.match(args.pin_sha):
+            print("adopt failed: --pin-sha must be a 40-character lowercase hex SHA", file=sys.stderr)
+            return 1
+        if not _TAG_RE.match(args.pin_tag):
+            print("adopt failed: --pin-tag must look like vX.Y.Z", file=sys.stderr)
+            return 1
+        pin = PinResolution(sha=args.pin_sha, tag=args.pin_tag)
     inputs = AdoptInputs(
         allow_users=args.allow_users,
         dry_run=not args.write,
+        pin=pin,
         project_name=args.project_name,
         reference_baseline_path=args.reference_baseline_path,
         reference_path=args.reference_path,
