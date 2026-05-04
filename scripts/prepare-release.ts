@@ -396,12 +396,17 @@ export function existingBodyHasMaintainerSignoff(body: string | null | undefined
 // otherwise be mistaken for the delimiter and corrupt the body on rerun.
 export const SIGNOFF_SECTION_HEADER = "## Release gate sign-off";
 
-// `\r?$` makes the line-end anchor CRLF-tolerant: PR bodies fetched from
-// GitHub can carry CRLF line endings (e.g. content pasted from a Windows
-// editor). Without the optional `\r` the heading would not match because
-// JavaScript's multiline `$` matches just before `\n`, leaving the `\r`
-// inside the matched line.
-const SIGNOFF_SECTION_HEADER_LINE_PATTERN = /^## Release gate sign-off\r?$/m;
+// Heading match is tolerant of:
+//   - Trailing horizontal whitespace (`[ \t]*`): GitHub-flavored Markdown
+//     treats `## Heading  ` as the same heading as `## Heading`, so an
+//     innocent reformat by a maintainer or editor must not break the
+//     marker.
+//   - CRLF line endings (`\r?$`): PR bodies fetched from GitHub can carry
+//     CRLF line endings (e.g. content pasted from a Windows editor).
+//     Without the optional `\r` the heading would not match because
+//     JavaScript's multiline `$` matches just before `\n`, leaving the
+//     `\r` inside the matched line.
+const SIGNOFF_SECTION_HEADER_LINE_PATTERN = /^## Release gate sign-off[ \t]*\r?$/m;
 
 export function findSignoffSectionStart(body: string): number {
   const match = SIGNOFF_SECTION_HEADER_LINE_PATTERN.exec(body);
@@ -469,9 +474,17 @@ export function buildAutoHeaderSection(args: {
 // the release branch), not the repository's default branch. Pinning the
 // audit link to the dispatch ref would 404 after the branch is deleted
 // post-merge — defeating the durable-audit-link goal documented in
-// `docs/release-gate.md`. Forks and internal mirrors whose default
-// branch is not `main` keep working as long as either fallback resolves
-// or the caller passes `branchOverride`.
+// `docs/release-gate.md`.
+//
+// SCOPE NOTE: only the gate-doc link is repository- and default-branch-
+// aware. The rest of `runCli` still hard-codes `origin/main` (for
+// `checkout -B branch origin/main`) and `--base main` (for `gh pr
+// create`), so forks or internal mirrors whose default branch is not
+// `main` would need a separate refactor to fully support a non-main
+// default branch end to end. Until that lands, the URL chain above is
+// helpful but not sufficient — fork users with non-main defaults should
+// either rebase to a `main`-named default or treat the script as
+// `main`-only.
 const DEFAULT_GATE_DOC_HOST = "https://github.com";
 const DEFAULT_GATE_DOC_REPO = "milanhorvatovic/codex-ai-code-review-action";
 const DEFAULT_GATE_DOC_BRANCH = "main";
