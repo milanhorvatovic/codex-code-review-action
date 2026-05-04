@@ -372,7 +372,19 @@ export function existingBodyHasMaintainerSignoff(body: string | null | undefined
 // heading so reruns can refresh the auto-header (PR list, since-line,
 // pre-release flag) while preserving any maintainer-edited sign-off
 // content below the heading.
+//
+// The split is line-anchored via `findSignoffSectionStart` rather than a
+// plain substring search: the auto-header includes PR titles (PR-author
+// controlled), and a title containing the literal heading text would
+// otherwise be mistaken for the delimiter and corrupt the body on rerun.
 export const SIGNOFF_SECTION_HEADER = "## Release gate sign-off";
+
+const SIGNOFF_SECTION_HEADER_LINE_PATTERN = /^## Release gate sign-off$/m;
+
+export function findSignoffSectionStart(body: string): number {
+  const match = SIGNOFF_SECTION_HEADER_LINE_PATTERN.exec(body);
+  return match ? match.index : -1;
+}
 
 export function buildAutoHeaderSection(args: {
   version: string;
@@ -447,13 +459,22 @@ export function buildSignoffSection(): string {
     `- [ ] Required validation block runs cleanly on the merge candidate (\`npm ci\` → \`npm run verify:prose-style\`); any \`npm audit\` advisories are triaged per [Required validation](${GATE_DOC_URL}#required-validation) (fix, accept with documented rationale, or defer with a tracked issue).`,
     "- [ ] Dist reproducibility check is clean (`npm run build && git diff --exit-code -- dist package.json package-lock.json`).",
     "- [ ] Manual security regression checks for `review-reference-file` are confirmed against the merge candidate.",
+    `- [ ] Prompt-artifact leakage check: the resolved \`reviewReference\` flowing into the assembled prompt comes only from the validated path-resolver, never raw runner-local content. Confirmed by \`src/prepare/referenceFile.test.ts\` (path validation) and \`src/prepare/main.test.ts\` ('uses the resolved custom reference content for each prompt'). Spot-check the prepare action's debug output on the merge candidate when \`retain-findings\` is temporarily enabled if direct artifact inspection is required.`,
     "- [ ] Conditional `review-reference-source: base` checks are run, or waived with a rationale.",
-    `- [ ] Release-specific items table is filled with cross-references to owning PRs/issues, and each row resolved to \`Verified by:\` or \`Waived:\` (see [Release-specific items](${GATE_DOC_URL}#release-specific-items)).`,
+    `- [ ] Release-specific items table is filled below this checklist with cross-references to owning PRs/issues, and each row resolved to \`Verified by:\` or \`Waived:\` (see [Release-specific items](${GATE_DOC_URL}#release-specific-items)).`,
     "- [ ] Trust-boundary CHANGELOG callout is present if any merged PR contributing a release level (i.e. not `release: skip`) is labeled `trust-boundary`. (Skipped PRs do not appear in CHANGELOG entries, so they cannot trigger the callout requirement.)",
     "",
     "**Post-tag:**",
     "",
     `- [ ] Gate evidence zip attached to the GitHub Release after the tag pushes (see [Archiving the gate](${GATE_DOC_URL}#archiving-the-gate)).`,
+    "",
+    "### Release-specific items",
+    "",
+    `Populate the table below per [docs/release-gate.md → Release-specific items](${GATE_DOC_URL}#release-specific-items). Add one row per release-specific item; resolve each State to \`Verified by:\` or \`Waived:\` per the sign-off convention. If the release has no items beyond the templated checks, replace the example row with \`_None — release contains only routine maintenance._\` and add a Verified-by line.`,
+    "",
+    "| # | Item | Owning work | State |",
+    "|---|---|---|---|",
+    "| 1 | _short description_ | _PR # / issue # / workflow file_ | _`Verified by: <maintainer> — <YYYY-MM-DD>` or `Waived: <rationale + tracked follow-up>`_ |",
   ];
   return lines.join("\n");
 }
@@ -494,7 +515,7 @@ export function existingBodyHasMaintainerEdits(
     return false;
   }
   if (existingBodyHasMaintainerSignoff(existingBody)) return true;
-  const idx = existingBody.indexOf(SIGNOFF_SECTION_HEADER);
+  const idx = findSignoffSectionStart(existingBody);
   if (idx === -1) return false;
   const signoffSection = existingBody.slice(idx);
   if (!signoffSection.includes(SIGNOFF_TEMPLATE_VERSION_MARKER)) {
@@ -550,7 +571,7 @@ export function planPrBodyRefresh(
   }
 
   const hasEdits = existingBodyHasMaintainerEdits(existingBody);
-  const markerIdx = existingBody.indexOf(SIGNOFF_SECTION_HEADER);
+  const markerIdx = findSignoffSectionStart(existingBody);
 
   if (!hasEdits) {
     return { mode: "fresh", body: fullFreshBody };
@@ -847,6 +868,11 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       stdoutWrite(
         `No file changes for v${targetVersion}: package.json, package-lock.json, and CHANGELOG.md on origin/main already match the computed output. Skipping commit/push; continuing to release PR body refresh so reruns can pick up template updates.\n`,
       );
+      if (remoteSha !== "") {
+        stdoutWrite(
+          `Warning: release branch ${branch} exists on origin (sha=${remoteSha}) but no commit was made this run. If the branch's diff against origin/main no longer reflects the intended release (e.g. main has advanced past the bumped state), close the existing release PR and delete the branch manually before re-running.\n`,
+        );
+      }
     }
 
     const prBodyArgs = {

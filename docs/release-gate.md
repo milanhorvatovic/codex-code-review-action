@@ -21,7 +21,7 @@ The release PR body's checklist on the automated path is hard-coded in `buildPrB
 
 ## Required validation
 
-Run the full validation suite against the merge candidate (the release branch's HEAD before the squash-merge), on the Node version pinned in `package.json` (`engines.node`). CI runs the automatable checks (lint, typecheck, tests, `verify-dist`, `verify-doc-pins`, `verify-prose-style`); this rerun plus the maintainer-only `npm audit` step is the pre-tag confirmation that the release branch — including the version-bump commit and CHANGELOG entry the release PR introduces — is green.
+Run the full validation suite against the merge candidate (the release branch's HEAD before the squash-merge), on the Node version pinned in `package.json` (`engines.node`). The release-tag automation (`release-on-merge.yaml`) re-validates the merge commit with `lint`, `typecheck`, tests, `verify-dist`, `verify-lockfile-version`, and the branch-vs-package-vs-CHANGELOG version-consistency check. `verify-doc-pins` and `verify-prose-style` run on every PR and push to `main` via their dedicated workflows but are not part of the release-tag job, so include them in this manual rerun to confirm the merge candidate's state. `npm audit` is maintainer-only and is the gate's advisory layer.
 
 ```bash
 npm ci
@@ -55,11 +55,12 @@ A non-empty diff means the merge candidate ships a stale bundle or a `package.js
 
 ## Manual security regression checks
 
-These three checks exercise the path-validation hardening landed in [`src/prepare/referenceFile.ts`](../src/prepare/referenceFile.ts) (PR [#98](https://github.com/milanhorvatovic/codex-ai-code-review-action/pull/98), closing issue [#89](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/89)). The unit suite in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) covers all three; running `npm test` against the merge candidate confirms the protections still bite. The cases are listed here as an audit checklist, not as a separate test harness.
+These checks exercise the path-validation hardening landed in [`src/prepare/referenceFile.ts`](../src/prepare/referenceFile.ts) (PR [#98](https://github.com/milanhorvatovic/codex-ai-code-review-action/pull/98), closing issue [#89](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/89)) plus the prompt-artifact composition path. The unit suites in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) and [`src/prepare/main.test.ts`](../src/prepare/main.test.ts) cover them; running `npm test` against the merge candidate confirms the protections still bite. The cases are listed here as an audit checklist, not as a separate test harness.
 
 - `review-reference-file: /proc/self/environ` is rejected with `must be workspace-relative, not absolute` before any read happens. The unit covers this in the `rejects an absolute path` case.
 - `review-reference-file: ../outside.md` is rejected with `escapes the workspace` before any read happens. The unit covers this in the `rejects a path that escapes the workspace` case.
 - A leaf path that is a symbolic link is rejected with `is a symbolic link; symlinks are not allowed`, and an ancestor directory symbolic link is rejected with `resolves through a symbolic link`. The unit covers both in the `rejects a leaf symbolic link` and `rejects an ancestor directory symbolic link` cases. Together these close the file-disclosure path against runner-local files (the same threat model `/proc/self/environ` exists to surface).
+- Prompt artifacts produced by the `prepare` action against a benign reference file contain only the resolved (validated) reference content — no runner-local file contents leak in. The unit suite covers this path in [`src/prepare/main.test.ts`](../src/prepare/main.test.ts) (`uses the resolved custom reference content for each prompt`) by asserting that the assembled prompt receives the resolver's output, not the raw input. Direct artifact inspection is not part of the dogfood workflow because [`docs/consumer-controls.md`](consumer-controls.md) item 7 fixes `retain-findings: "false"` by default; if a maintainer needs to eyeball the assembled prompt, run a scratch workflow with `retain-findings: "true"` against the merge candidate and confirm only the validated content is present.
 
 If any of the unit cases above are missing from the test suite or are skipped on the merge candidate, the gate fails — re-add coverage before tagging.
 

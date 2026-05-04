@@ -13,6 +13,7 @@ import {
   existingBodyHasMaintainerEdits,
   existingBodyHasMaintainerSignoff,
   extractTrustBoundaryImpact,
+  findSignoffSectionStart,
   formatPullRequestEntry,
   parseTargetVersion,
   planPrBodyRefresh,
@@ -631,17 +632,57 @@ describe("buildPrBody", () => {
     expect(body).toContain("`npm audit` advisories are triaged");
     expect(body).toContain("- [ ] Dist reproducibility check is clean");
     expect(body).toContain("- [ ] Manual security regression checks");
+    expect(body).toContain("- [ ] Prompt-artifact leakage check");
+    expect(body).toContain("uses the resolved custom reference content for each prompt");
     expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
-    expect(body).toContain("- [ ] Release-specific items table");
+    expect(body).toContain("- [ ] Release-specific items table is filled below this checklist");
     expect(body).toContain("- [ ] Trust-boundary CHANGELOG callout");
     expect(body).toContain("contributing a release level (i.e. not `release: skip`)");
     expect(body).toContain("- [ ] Gate evidence zip attached to the GitHub Release");
+    expect(body).toContain("### Release-specific items");
+    expect(body).toContain("| # | Item | Owning work | State |");
 
     const preMergeIndex = body.indexOf("**Pre-merge:**");
     const postTagIndex = body.indexOf("**Post-tag:**");
     const evidenceZipIndex = body.indexOf("Gate evidence zip");
+    const tableIndex = body.indexOf("| # | Item | Owning work | State |");
     expect(postTagIndex).toBeGreaterThan(preMergeIndex);
     expect(evidenceZipIndex).toBeGreaterThan(postTagIndex);
+    expect(tableIndex).toBeGreaterThan(evidenceZipIndex);
+  });
+});
+
+describe("findSignoffSectionStart", () => {
+  it("returns -1 when the heading is absent", () => {
+    expect(findSignoffSectionStart("body without the heading")).toBe(-1);
+  });
+
+  it("matches the heading on its own Markdown line", () => {
+    const body = `intro\n\n${SIGNOFF_SECTION_HEADER}\n\ncontent`;
+    const idx = findSignoffSectionStart(body);
+    expect(idx).toBeGreaterThan(-1);
+    expect(body.slice(idx).startsWith(SIGNOFF_SECTION_HEADER)).toBe(true);
+  });
+
+  it("ignores occurrences of the heading text inside a PR title in the auto-header (line-anchored)", () => {
+    const body = [
+      "Release prepared by `scripts/prepare-release.ts` for v2.1.0.",
+      "",
+      "**PRs included (1):**",
+      "",
+      "- #100 `release: minor` — Refactor ## Release gate sign-off helper",
+      "",
+      "Merge this PR to trigger `release-on-merge.yaml`.",
+      "",
+      SIGNOFF_SECTION_HEADER,
+      "",
+      "real signoff content",
+    ].join("\n");
+    const idx = findSignoffSectionStart(body);
+    expect(idx).toBeGreaterThan(-1);
+    expect(body.slice(idx).startsWith(`${SIGNOFF_SECTION_HEADER}\n`)).toBe(true);
+    expect(body.slice(idx)).toContain("real signoff content");
+    expect(body.slice(idx)).not.toContain("Refactor ## Release gate sign-off helper");
   });
 });
 
