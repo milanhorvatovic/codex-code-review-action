@@ -22,6 +22,7 @@ import {
   runCli,
   selectLastNonPrereleaseTag,
   SIGNOFF_SECTION_HEADER,
+  SIGNOFF_TEMPLATE_VERSION_MARKER,
   tagCommitTimestamp,
   type PullRequest,
 } from "./prepare-release.js";
@@ -678,10 +679,31 @@ describe("planPrBodyRefresh", () => {
     expect(plan.body).toContain("Note: skipped X because of flaky CI; see #999.");
   });
 
-  it("returns mode=merge when the maintainer modifies a checklist line (truncated, edited)", () => {
-    const truncated = "Some stale auto-header.\n\n## Release gate sign-off\n\n- [ ] Required validation block runs cleanly.\n";
-    const plan = planPrBodyRefresh(args, truncated);
+  it("returns mode=merge when the maintainer modifies a checklist line on the current template (version marker preserved)", () => {
+    const modified = [
+      "Some stale auto-header.",
+      "",
+      SIGNOFF_SECTION_HEADER,
+      SIGNOFF_TEMPLATE_VERSION_MARKER,
+      "",
+      "- [ ] Required validation block runs cleanly.", // truncated vs current template
+    ].join("\n");
+    const plan = planPrBodyRefresh(args, modified);
     expect(plan.mode).toBe("merge");
+  });
+
+  it("returns mode=fresh when the body's signoff section comes from an older bot (no version marker, no maintainer signal)", () => {
+    const olderBot = [
+      "Some stale auto-header.",
+      "",
+      SIGNOFF_SECTION_HEADER,
+      "",
+      "- [ ] Some old checklist line removed in the current template",
+    ].join("\n");
+    const plan = planPrBodyRefresh(args, olderBot);
+    expect(plan.mode).toBe("fresh");
+    if (plan.mode !== "fresh") throw new Error("unreachable");
+    expect(plan.body).toBe(fullFresh);
   });
 
   it("returns mode=merge when sign-off is present and the marker is intact", () => {
@@ -776,6 +798,40 @@ describe("existingBodyHasMaintainerEdits", () => {
     expect(existingBodyHasMaintainerEdits(noMarkerNoSignoff)).toBe(false);
     const noMarkerWithSignoff = "Some legacy body.\nVerified by: Maintainer — 2026-05-04";
     expect(existingBodyHasMaintainerEdits(noMarkerWithSignoff)).toBe(true);
+  });
+
+  it("ignores unknown-lines when the body's signoff section lacks the current template-version marker (older bot)", () => {
+    const olderBotSignoff = [
+      SIGNOFF_SECTION_HEADER,
+      "",
+      "## Older content from a previous bot template",
+      "",
+      "- [ ] Some old checklist line that the current template no longer has",
+    ].join("\n");
+    const body = `${buildAutoHeaderSection(args)}\n\n${olderBotSignoff}`;
+    expect(existingBodyHasMaintainerEdits(body)).toBe(false);
+  });
+
+  it("preserves real maintainer sign-off on an older template via the regex signal even without the version marker", () => {
+    const olderBotWithSignoff = [
+      SIGNOFF_SECTION_HEADER,
+      "",
+      "- [ ] Old checklist line",
+      "Verified by: Maintainer — 2026-05-04",
+    ].join("\n");
+    expect(existingBodyHasMaintainerEdits(olderBotWithSignoff)).toBe(true);
+  });
+
+  it("applies the unknown-lines backstop when the current version marker is present and a non-template line was added", () => {
+    const withMarkerAndNote = [
+      buildAutoHeaderSection(args),
+      "",
+      buildSignoffSection(),
+      "",
+      "Maintainer note: skipped audit triage; see #999.",
+    ].join("\n");
+    expect(withMarkerAndNote).toContain(SIGNOFF_TEMPLATE_VERSION_MARKER);
+    expect(existingBodyHasMaintainerEdits(withMarkerAndNote)).toBe(true);
   });
 });
 
