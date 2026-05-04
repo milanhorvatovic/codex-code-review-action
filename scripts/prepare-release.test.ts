@@ -1555,6 +1555,33 @@ describe("runCli (rerun body-refresh integration)", () => {
     expect(editBody).toContain("**PRs included (1)");
     expect(editBody).toContain("## Release gate sign-off");
     expect(stdout).toContain("Updated existing release PR #42");
+    // No older-template warning when the previous body had no heading.
+    expect(stdout).not.toContain("older template");
+  });
+
+  it("warns in fresh mode when the previous body had an older sign-off section (heading but no version marker, no signal)", () => {
+    // Heading present but no current version marker and no signal:
+    // existingBodyHasMaintainerEdits returns false → fresh mode → body
+    // replaced. Maintainer prose-only edits would be lost; the warning
+    // tells them to recover from the PR's edit history.
+    const olderTemplateBody = [
+      "Stale auto-header from before this PR landed.",
+      "",
+      SIGNOFF_SECTION_HEADER,
+      "",
+      "- [ ] Required validation block runs cleanly", // older template structure
+      "- [ ] Some old item that no longer exists",
+      "",
+      "Maintainer note added to the older section without a checkbox or Verified-by.",
+    ].join("\n");
+    const { exit, editBody, stdout, stderr } = runRerunScenario(olderTemplateBody);
+    expect(exit).toBe(0);
+    expect(stderr).toBe("");
+    expect(editBody).toBeDefined();
+    expect(editBody).toContain(SIGNOFF_TEMPLATE_VERSION_MARKER);
+    expect(stdout).toContain("WARNING:");
+    expect(stdout).toContain("older template");
+    expect(stdout).toContain("recover them from the PR's edit history");
   });
 
   it("refreshes the auto-header but preserves the gate sign-off section verbatim when sign-off is present (older template, warns about new items)", () => {
