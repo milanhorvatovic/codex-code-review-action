@@ -15,6 +15,7 @@ import {
   extractTrustBoundaryImpact,
   findSignoffSectionStart,
   formatPullRequestEntry,
+  parseGitRemoteUrl,
   parseTargetVersion,
   planPrBodyRefresh,
   releaseLevelOf,
@@ -674,6 +675,58 @@ describe("resolveGateDocUrl", () => {
     expect(resolveGateDocUrl({})).toBe(
       "https://github.com/milanhorvatovic/codex-ai-code-review-action/blob/main/docs/release-gate.md",
     );
+  });
+
+  it("uses the git-fallback host and repo before the hard-coded upstream when env is unset", () => {
+    expect(
+      resolveGateDocUrl({}, { host: "https://github.fork.example", repo: "team/fork-repo" }),
+    ).toBe("https://github.fork.example/team/fork-repo/blob/main/docs/release-gate.md");
+  });
+
+  it("env vars still win over the git-fallback (env is the canonical signal under Actions)", () => {
+    expect(
+      resolveGateDocUrl(
+        { GITHUB_SERVER_URL: "https://ghe.example.com", GITHUB_REPOSITORY: "ghe/repo" },
+        { host: "https://other.example", repo: "ignored/ignored" },
+      ),
+    ).toBe("https://ghe.example.com/ghe/repo/blob/main/docs/release-gate.md");
+  });
+});
+
+describe("parseGitRemoteUrl", () => {
+  it("parses an SSH origin URL into host and repo", () => {
+    expect(parseGitRemoteUrl("git@github.com:owner/repo.git")).toEqual({
+      host: "https://github.com",
+      repo: "owner/repo",
+    });
+    expect(parseGitRemoteUrl("git@ghe.example.com:team/proj")).toEqual({
+      host: "https://ghe.example.com",
+      repo: "team/proj",
+    });
+  });
+
+  it("parses an HTTPS origin URL into host and repo (with or without .git suffix)", () => {
+    expect(parseGitRemoteUrl("https://github.com/owner/repo.git")).toEqual({
+      host: "https://github.com",
+      repo: "owner/repo",
+    });
+    expect(parseGitRemoteUrl("https://github.com/owner/repo")).toEqual({
+      host: "https://github.com",
+      repo: "owner/repo",
+    });
+  });
+
+  it("strips a basic-auth prefix from HTTPS URLs", () => {
+    expect(parseGitRemoteUrl("https://user:token@github.com/owner/repo.git")).toEqual({
+      host: "https://github.com",
+      repo: "owner/repo",
+    });
+  });
+
+  it("returns null for empty or unrecognized URLs", () => {
+    expect(parseGitRemoteUrl("")).toBeNull();
+    expect(parseGitRemoteUrl("file:///local/path")).toBeNull();
+    expect(parseGitRemoteUrl("not-a-url")).toBeNull();
   });
 });
 
@@ -1335,6 +1388,80 @@ describe("runCli (rerun body-refresh integration)", () => {
     expect(stdout.join("")).toContain("Skipping commit/push; continuing to release PR body refresh");
     const editCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "edit");
     expect(editCall).toBeDefined();
+  });
+
+  it("skips the body refresh when no file changes AND a remote release branch already exists (stale-branch guard)", () => {
+    const ghCalls: Array<{ args: string[] }> = [];
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+
+    const branch = "release/v2.1.0";
+    const remoteSha = "deadbeefcafebabe1234";
+    const ghRoutes: Record<string, string> = {
+      "release list --limit 100 --json tagName,publishedAt,isPrerelease": JSON.stringify([
+        { tagName: "v2.0.0", publishedAt: "2026-04-07T00:00:00Z", isPrerelease: false },
+      ]),
+      "pr list --state merged --base main --search merged:>2026-04-07T00:00:00Z base:main --json number,title,body,labels,url --limit 1000":
+        JSON.stringify([]),
+      [`pr list --head ${branch} --state open --json number`]: JSON.stringify([{ number: 42 }]),
+      "pr view 42 --json body": JSON.stringify({ body: "old body" }),
+    };
+    runCli({
+      argv: ["--version", "2.1.0"],
+      env: { RELEASE_APP_BOT_USER_ID: "999000" },
+      readFile: (path) => {
+        if (path === "package.json")
+          return `${JSON.stringify({ name: "x", version: "2.1.0" }, null, 2)}\n`;
+        if (path === "package-lock.json")
+          return `${JSON.stringify(
+            {
+              name: "x",
+              version: "2.1.0",
+              lockfileVersion: 3,
+              requires: true,
+              packages: { "": { name: "x", version: "2.1.0" } },
+            },
+            null,
+            2,
+          )}\n`;
+        if (path === "CHANGELOG.md")
+          return "# Changelog\n\n## [2.1.0] - 2026-05-01\n\n- _No notable changes; release contains only `release: skip` PRs._\n\n## [2.0.0] - 2026-04-07\n\n- prior\n";
+        throw new Error(`unexpected read: ${path}`);
+      },
+      writeFile: () => undefined,
+      runGh: (args) => {
+        ghCalls.push({ args: [...args] });
+        if (args[0] === "pr" && args[1] === "edit") return "";
+        const key = args.join(" ");
+        const value = ghRoutes[key];
+        if (value === undefined) throw new Error(`unrouted gh: ${key}`);
+        return value;
+      },
+      runGit: (args) => {
+        if (args[0] === "ls-remote" && args[1] === "--tags") return "abc\trefs/tags/v2.0.0\n";
+        if (args[0] === "ls-remote" && args[1] === "--heads") {
+          return `${remoteSha}\trefs/heads/${branch}\n`;
+        }
+        if (args[0] === "rev-parse") return `${remoteSha}\n`;
+        if (args[0] === "log" && args.includes("--format=%cI")) return "2026-04-07T00:00:00Z\n";
+        if (args[0] === "log" && args.includes("--format=%H%x09%ae%x09%ce")) return "";
+        if (args[0] === "diff" && args.includes("--cached")) return "";
+        return "";
+      },
+      today: () => "2026-05-01",
+      stdoutWrite: (chunk) => stdout.push(chunk),
+      stderrWrite: (chunk) => stderr.push(chunk),
+    });
+
+    expect(stderr.join("")).toBe("");
+    const out = stdout.join("");
+    expect(out).toContain("Skipping commit/push");
+    expect(out).toContain(`Skipping PR body refresh on release PR #42`);
+    expect(out).toContain(`branch ${branch} (sha=${remoteSha}) may not match`);
+    const editCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "edit");
+    expect(editCall).toBeUndefined();
+    const viewCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "view");
+    expect(viewCall).toBeUndefined();
   });
 
   it("skips the body update when sign-off is present but the marker heading is missing", () => {

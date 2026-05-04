@@ -424,23 +424,45 @@ export function buildAutoHeaderSection(args: {
 // Absolute URL for cross-references emitted into the release PR body.
 // PR descriptions are rendered against the PR page URL, not against a
 // repository file path, so relative links like `docs/release-gate.md` can
-// resolve to a 404. The URL is host- and repository-aware:
+// resolve to a 404. The URL is host- and repository-aware, with three
+// resolution layers:
 //
-// - `GITHUB_SERVER_URL` (set by GitHub Actions) selects the host so runs on
-//   GitHub Enterprise Server or any non-github.com instance produce links
-//   that resolve on the invoking server; matches the existing pattern in
-//   `src/github/git.ts` and `src/publish/main.ts`.
-// - `GITHUB_REPOSITORY` (`owner/repo`) selects the invoking repository so
-//   forks and internal mirrors point at their own docs.
-// - The hard-coded fallbacks (`https://github.com` host, upstream
-//   `owner/repo`) cover local runs that lack both env vars.
+// 1. `GITHUB_SERVER_URL` / `GITHUB_REPOSITORY` env vars (set by GitHub
+//    Actions). Matches the existing pattern in `src/github/git.ts` and
+//    `src/publish/main.ts`. Always preferred when present.
+// 2. Optional git-remote fallback (host + repo parsed from
+//    `git remote get-url origin`). Used by `runCli` so local manual runs
+//    (`npm run prepare:release`) in forks or internal mirrors generate
+//    links that point at the cloned repository, not the upstream.
+// 3. Hard-coded upstream fallback (`https://github.com` + the canonical
+//    upstream `owner/repo`) for environments that have neither.
 const DEFAULT_GATE_DOC_HOST = "https://github.com";
 const DEFAULT_GATE_DOC_REPO = "milanhorvatovic/codex-ai-code-review-action";
 
-export function resolveGateDocUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const host = env.GITHUB_SERVER_URL ?? DEFAULT_GATE_DOC_HOST;
-  const repo = env.GITHUB_REPOSITORY ?? DEFAULT_GATE_DOC_REPO;
+export function resolveGateDocUrl(
+  env: NodeJS.ProcessEnv = process.env,
+  gitFallback?: { host: string; repo: string },
+): string {
+  const host = env.GITHUB_SERVER_URL ?? gitFallback?.host ?? DEFAULT_GATE_DOC_HOST;
+  const repo = env.GITHUB_REPOSITORY ?? gitFallback?.repo ?? DEFAULT_GATE_DOC_REPO;
   return `${host}/${repo}/blob/main/docs/release-gate.md`;
+}
+
+// Parses an `origin` remote URL into a `{ host, repo }` pair. Recognizes the
+// two forms `git remote get-url` typically returns:
+//   - SSH: `git@<host>:<owner>/<repo>(.git)?`
+//   - HTTPS: `https?://<host>/<owner>/<repo>(.git)?`
+// Returns null on any unrecognized form so callers can fall back cleanly.
+export function parseGitRemoteUrl(
+  remoteUrl: string,
+): { host: string; repo: string } | null {
+  const trimmed = remoteUrl.trim();
+  if (trimmed === "") return null;
+  const ssh = /^git@([^:]+):(.+?)(?:\.git)?$/.exec(trimmed);
+  if (ssh) return { host: `https://${ssh[1]}`, repo: ssh[2] };
+  const http = /^https?:\/\/(?:[^@/]+@)?([^/]+)\/(.+?)(?:\.git)?$/.exec(trimmed);
+  if (http) return { host: `https://${http[1]}`, repo: http[2] };
+  return null;
 }
 
 // Stable HTML-comment marker embedded in the sign-off section so reruns can
@@ -524,6 +546,16 @@ export function buildPrBody(args: {
 // The version-marker gate avoids the false-positive where a bot template
 // change would otherwise classify every older-template body as "edited" and
 // cause `planPrBodyRefresh` to preserve a stale checklist.
+//
+// Trade-off: a maintainer who edits an older-template body without writing a
+// `Verified by:` / `Waived:` line, without checking a box, AND without
+// preserving the version marker (e.g. an editor stripped the HTML comment)
+// will have their edits classified as untouched-stale and overwritten on
+// rerun. This is acceptable because the canonical sign-off path uses one of
+// the regex-detected patterns; silent-prose-only edits on a template that
+// has since changed are an unusual workflow. If preservation matters, write
+// a `Verified by:` or `Waived:` line, tick a checkbox, or keep the
+// `<!-- release-gate-template-version:vN -->` marker intact.
 export function existingBodyHasMaintainerEdits(
   existingBody: string | null | undefined,
   gateDocUrl: string = resolveGateDocUrl(),
@@ -893,7 +925,16 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       }
     }
 
-    const gateDocUrl = resolveGateDocUrl(env);
+    let gitFallback: { host: string; repo: string } | undefined;
+    try {
+      const remoteUrl = runGit(["remote", "get-url", "origin"]).trim();
+      const parsed = parseGitRemoteUrl(remoteUrl);
+      if (parsed !== null) gitFallback = parsed;
+    } catch {
+      // git remote unavailable; resolveGateDocUrl falls back to the
+      // hard-coded upstream default.
+    }
+    const gateDocUrl = resolveGateDocUrl(env, gitFallback);
     const prBodyArgs = {
       version: targetVersion,
       isPrerelease: isPre,
@@ -937,6 +978,12 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       stdoutWrite(`Opened release PR for v${targetVersion} on branch ${branch}.\n`);
     } else {
       const number = firstOpenPr.number;
+      if (!hasFileChanges && remoteSha !== "") {
+        stdoutWrite(
+          `Skipping PR body refresh on release PR #${number}: no commit was pushed this run and the remote release branch ${branch} (sha=${remoteSha}) may not match the current main+bumps state. Refreshing the body now would describe a state that does not match the branch tip; close the PR or delete the branch and re-run if a refresh is required.\n`,
+        );
+        return 0;
+      }
       const existingBodyJson = runGh([
         "pr",
         "view",
