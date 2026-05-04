@@ -19,6 +19,7 @@ import {
   planPrBodyRefresh,
   releaseLevelOf,
   renderChangelogEntry,
+  resolveGateDocUrl,
   resolveTargetVersion,
   runCli,
   selectLastNonPrereleaseTag,
@@ -634,6 +635,7 @@ describe("buildPrBody", () => {
     expect(body).toContain("- [ ] Manual security regression checks");
     expect(body).toContain("- [ ] Prompt-artifact leakage check");
     expect(body).toContain("uses the resolved custom reference content for each prompt");
+    expect(body).toContain("gh run download <run-id> --name codex-prepare");
     expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
     expect(body).toContain("- [ ] Release-specific items table is filled below this checklist");
     expect(body).toContain("- [ ] Trust-boundary CHANGELOG callout");
@@ -649,6 +651,32 @@ describe("buildPrBody", () => {
     expect(postTagIndex).toBeGreaterThan(preMergeIndex);
     expect(evidenceZipIndex).toBeGreaterThan(postTagIndex);
     expect(tableIndex).toBeGreaterThan(evidenceZipIndex);
+  });
+});
+
+describe("resolveGateDocUrl", () => {
+  it("uses GITHUB_REPOSITORY when set so forks/internal mirrors point at their own docs", () => {
+    expect(resolveGateDocUrl({ GITHUB_REPOSITORY: "fork-owner/fork-repo" })).toBe(
+      "https://github.com/fork-owner/fork-repo/blob/main/docs/release-gate.md",
+    );
+  });
+
+  it("falls back to the upstream repository when GITHUB_REPOSITORY is unset", () => {
+    expect(resolveGateDocUrl({})).toBe(
+      "https://github.com/milanhorvatovic/codex-ai-code-review-action/blob/main/docs/release-gate.md",
+    );
+  });
+});
+
+describe("buildSignoffSection (with explicit gateDocUrl)", () => {
+  it("substitutes the provided URL for every cross-reference", () => {
+    const url = "https://github.com/test-owner/test-repo/blob/main/docs/release-gate.md";
+    const section = buildSignoffSection(url);
+    expect(section).toContain(`(${url})`);
+    expect(section).toContain(`(${url}#required-validation)`);
+    expect(section).toContain(`(${url}#release-specific-items)`);
+    expect(section).toContain(`(${url}#archiving-the-gate)`);
+    expect(section).not.toContain("milanhorvatovic/codex-ai-code-review-action");
   });
 });
 
