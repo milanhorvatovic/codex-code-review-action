@@ -608,6 +608,7 @@ describe("gate doc / PR body checklist drift", () => {
     "Required validation",
     "Dist reproducibility",
     "Manual security regression checks",
+    "codex-prepare", // Prompt-artifact leakage check (artifact name shared by both)
     "review-reference-source: base", // Conditional base-mode checks
     "Release-specific items",
     "Trust-boundary",
