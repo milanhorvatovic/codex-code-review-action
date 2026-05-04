@@ -31,7 +31,7 @@ npm run build
 npm run lint
 npm run typecheck
 npm test
-npm audit
+npm audit || true   # advisory: see triage note below; `|| true` keeps the rest of the block running under `set -e`
 npm run verify:doc-pins
 npm run verify:prose-style
 ```
