@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from typing import Callable
 
-from .pin_resolver import GhResult, PinResolutionError, resolve_pin
+from lib.pin_resolver import GhResult, PinResolutionError, resolve_pin
 
 
 def _fake_gh(map_: dict[tuple[str, ...], GhResult]) -> Callable[[tuple[str, ...]], GhResult]:

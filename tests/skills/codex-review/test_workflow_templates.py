@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 import unittest
 
-from .invariants import assert_workflow
-from .workflow_templates import WorkflowTemplateOptions, render_hardened_workflow
+from lib.invariants import assert_workflow
+from lib.workflow_templates import WorkflowTemplateOptions, render_hardened_workflow
 
 _SHA = "1111111111111111111111111111111111111111"
 _TAG = "v2.1.0"

@@ -18,11 +18,23 @@ jobs:
         run: python3 --version
 
       - name: Run skill unit tests
-        working-directory: skills/codex-review/scripts
-        run: python3 -m unittest discover -p "test_*.py" -v
+        # Tests live under tests/skills/codex-review/ so the skill directory
+        # contains only files that ship to integrators via Claude Code
+        # marketplace install (which copies the skill source tree verbatim).
+        env:
+          PYTHONPATH: skills/codex-review/scripts
+        run: python3 -m unittest discover -s tests/skills/codex-review -p "test_*.py" -v
 
       - name: Smoke-test entry-point CLIs
         working-directory: skills/codex-review
         run: |
           python3 scripts/adopt.py --help > /dev/null
           python3 scripts/tune.py --help > /dev/null
+
+      - name: Verify shipping tree contains no test files
+        run: |
+          if find skills/codex-review -name "test_*.py" -o -name "__fixtures__" -type d | grep -q .; then
+            echo "::error::Found test files or __fixtures__ directories under skills/codex-review/. These must live under tests/skills/codex-review/ so they are excluded from marketplace install."
+            find skills/codex-review -name "test_*.py" -o -name "__fixtures__" -type d
+            exit 1
+          fi

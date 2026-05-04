@@ -9,7 +9,7 @@ from pathlib import Path
 from tune import TuneError, TuneInputs, run_tune
 
 _HERE = Path(__file__).resolve().parent
-_FIXTURES = _HERE.parent / "__fixtures__" / "findings-examples"
+_FIXTURES = _HERE / "__fixtures__" / "findings-examples"
 
 
 class TuneTests(unittest.TestCase):

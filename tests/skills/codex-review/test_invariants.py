@@ -5,11 +5,11 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from .invariants import assert_workflow, format_report
+from lib.invariants import assert_workflow, format_report
 
 _HERE = Path(__file__).resolve().parent
 _FIXTURE_WORKFLOW = (
-    _HERE.parent.parent
+    _HERE
     / "__fixtures__"
     / "codex-review-action"
     / ".github"

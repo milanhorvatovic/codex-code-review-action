@@ -1,6 +1,12 @@
 # Fixtures
 
-Inputs used by the skill's unit tests (`python3 -m unittest discover` from `scripts/`) and by the entry-point CLIs during development.
+Inputs used by the skill's unit tests under `tests/skills/codex-review/` and by the entry-point CLIs at `skills/codex-review/scripts/{adopt,tune}.py` during development. These files live outside the skill directory so that the Claude Code marketplace install does NOT copy them to integrators' machines.
+
+Run the tests from the repo root:
+
+```
+PYTHONPATH=skills/codex-review/scripts python3 -m unittest discover -s tests/skills/codex-review -p "test_*.py"
+```
 
 ## Per-repo fixtures (top-level subdirectories)
 

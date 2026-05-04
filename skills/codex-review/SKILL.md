@@ -38,7 +38,8 @@ Read only the capability that matches the task. Do not load both unless the task
 - `references/pin-resolution.md` — the runtime contract for resolving the latest reviewed SHA and tag for the action's three sub-actions via `gh api`. No static pin table is shipped.
 - `scripts/adopt.py`, `scripts/tune.py` — entry-point CLIs invoked by the capabilities. Each accepts `--help` and operates on explicit paths; no environment-variable inputs.
 - `scripts/lib/` — Python 3.12 stdlib-only internals consumed by the entry-point scripts (`detect.py`, `schema_mapper.py`, `invariants/`, `reference_layerer.py`, `workflow_templates.py`, `pin_resolver.py`, `findings_loader.py`, plus per-finding diagnoses under `scripts/lib/diagnoses/`). No `pip install` required.
-- `__fixtures__/` — a per-repo snapshot directory (`codex-review-action/`) plus conformant `findings.json` examples under `findings-examples/`, exercised by unit tests and used as the demonstration corpus when the entry scripts are run during development.
+
+Tests and test fixtures live outside the skill directory at `tests/skills/codex-review/` (in the source repository) so the skill directory contains only files that ship to integrators via Claude Code marketplace install. Marketplace installers copy the skill source tree verbatim and have no exclusion mechanism.
 
 ## Trust boundary
 

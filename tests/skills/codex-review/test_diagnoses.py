@@ -5,13 +5,13 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from ..findings_loader import Findings, parse_findings
-from .low_confidence import low_confidence_diagnosis
-from .noisy_p3 import noisy_p3_diagnosis
-from .truncation import truncation_diagnosis
+from lib.diagnoses.low_confidence import low_confidence_diagnosis
+from lib.diagnoses.noisy_p3 import noisy_p3_diagnosis
+from lib.diagnoses.truncation import truncation_diagnosis
+from lib.findings_loader import Findings, parse_findings
 
 _HERE = Path(__file__).resolve().parent
-_FIXTURES = _HERE.parent.parent.parent / "__fixtures__" / "findings-examples"
+_FIXTURES = _HERE / "__fixtures__" / "findings-examples"
 
 
 def _load(name: str) -> Findings:

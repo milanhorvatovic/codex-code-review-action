@@ -10,7 +10,7 @@ from lib.pin_resolver import PinResolution
 from adopt import AdoptInputs, run_adopt
 
 _HERE = Path(__file__).resolve().parent
-_FIXTURE_REPO = _HERE.parent / "__fixtures__" / "codex-review-action"
+_FIXTURE_REPO = _HERE / "__fixtures__" / "codex-review-action"
 _SHA = "0fc55cdd3d5cf9841c9ba58822354f67b6c63293"
 _TAG = "v2.1.0"
 

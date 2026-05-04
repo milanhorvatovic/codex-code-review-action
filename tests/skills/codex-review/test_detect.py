@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from .detect import DetectOptions, detect, make_dict_reader
+from lib.detect import DetectOptions, detect, make_dict_reader
 
 
 class DetectTests(unittest.TestCase):

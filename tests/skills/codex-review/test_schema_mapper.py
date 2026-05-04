@@ -6,10 +6,10 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
-from .schema_mapper import classify_trust, find_input, map_schema, parse_manifest
+from lib.schema_mapper import classify_trust, find_input, map_schema, parse_manifest
 
 _HERE = Path(__file__).resolve().parent
-_FIXTURE_ROOT = _HERE.parent.parent / "__fixtures__" / "codex-review-action"
+_FIXTURE_ROOT = _HERE / "__fixtures__" / "codex-review-action"
 
 
 def _read(relative: str) -> str:
