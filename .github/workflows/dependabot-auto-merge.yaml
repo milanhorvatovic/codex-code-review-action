@@ -12,6 +12,15 @@ permissions:
   contents: read
   pull-requests: read
 
+# Serialize per PR: rapid `synchronize`/`labeled` events from Dependabot or maintainers can
+# trigger overlapping runs; without serialization the auto-merge job races against itself
+# (one run merges; a parallel run later attempts the same merge and exits non-zero on an
+# already-merged PR). cancel-in-progress is true so a new event always supersedes the
+# in-flight run with the latest PR state.
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   rebuild-dist:
     # Skip on label events — head SHA is unchanged, so dist/ cannot have drifted since the last
