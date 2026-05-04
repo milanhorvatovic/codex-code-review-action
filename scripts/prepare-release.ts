@@ -424,16 +424,23 @@ export function buildAutoHeaderSection(args: {
 // Absolute URL for cross-references emitted into the release PR body.
 // PR descriptions are rendered against the PR page URL, not against a
 // repository file path, so relative links like `docs/release-gate.md` can
-// resolve to a 404. The URL is repository-aware: when running under GitHub
-// Actions the env var `GITHUB_REPOSITORY` (`owner/repo`) selects the
-// invoking repository so forks and internal mirrors point at their own
-// docs; the hard-coded fallback is the canonical upstream path for local
-// runs that lack the env var.
+// resolve to a 404. The URL is host- and repository-aware:
+//
+// - `GITHUB_SERVER_URL` (set by GitHub Actions) selects the host so runs on
+//   GitHub Enterprise Server or any non-github.com instance produce links
+//   that resolve on the invoking server; matches the existing pattern in
+//   `src/github/git.ts` and `src/publish/main.ts`.
+// - `GITHUB_REPOSITORY` (`owner/repo`) selects the invoking repository so
+//   forks and internal mirrors point at their own docs.
+// - The hard-coded fallbacks (`https://github.com` host, upstream
+//   `owner/repo`) cover local runs that lack both env vars.
+const DEFAULT_GATE_DOC_HOST = "https://github.com";
 const DEFAULT_GATE_DOC_REPO = "milanhorvatovic/codex-ai-code-review-action";
 
 export function resolveGateDocUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const host = env.GITHUB_SERVER_URL ?? DEFAULT_GATE_DOC_HOST;
   const repo = env.GITHUB_REPOSITORY ?? DEFAULT_GATE_DOC_REPO;
-  return `https://github.com/${repo}/blob/main/docs/release-gate.md`;
+  return `${host}/${repo}/blob/main/docs/release-gate.md`;
 }
 
 // Stable HTML-comment marker embedded in the sign-off section so reruns can

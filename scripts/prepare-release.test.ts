@@ -661,7 +661,16 @@ describe("resolveGateDocUrl", () => {
     );
   });
 
-  it("falls back to the upstream repository when GITHUB_REPOSITORY is unset", () => {
+  it("uses GITHUB_SERVER_URL when set so GitHub Enterprise Server runs produce host-correct links", () => {
+    expect(
+      resolveGateDocUrl({
+        GITHUB_SERVER_URL: "https://ghe.example.com",
+        GITHUB_REPOSITORY: "team/repo",
+      }),
+    ).toBe("https://ghe.example.com/team/repo/blob/main/docs/release-gate.md");
+  });
+
+  it("falls back to upstream host and repository when both env vars are unset", () => {
     expect(resolveGateDocUrl({})).toBe(
       "https://github.com/milanhorvatovic/codex-ai-code-review-action/blob/main/docs/release-gate.md",
     );
