@@ -121,26 +121,31 @@ jobs:
       # `steps.metadata.outputs.update-type` is the most-severe per-dep type across the group.
       # The dogfood self-reference bumps SHA→SHA under the same prerelease tag, which
       # fetch-metadata conservatively reports as semver-major. Treating that as "major" for
-      # gating purposes blocks otherwise-safe grouped patches and standalone self-bumps. We
-      # walk the per-dep JSON instead and only escalate to "major" when a *third-party* dep is
-      # genuinely a major bump.
+      # gating purposes blocks otherwise-safe grouped patches and standalone self-bumps.
+      #
+      # Walk `updated-dependencies-json` instead and pick the most-severe update-type after
+      # excluding the self-reference *only* when its bump is SHA-only same-version
+      # (`prevVersion == newVersion`). Real major bumps of the self-reference still classify
+      # as semver-major and route to manual review. The self-reference is identified via
+      # `github.repository` so a rename/transfer/fork picks up the new name automatically.
       - name: Derive effective update-type
         id: effective
         env:
+          SELF_DEPENDENCY: ${{ github.repository }}
           UPDATED_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
         run: |
           set -euo pipefail
-          third_party_major=$(jq -r '
-            any(.[];
-              .updateType == "version-update:semver-major"
-              and .dependencyName != "milanhorvatovic/codex-ai-code-review-action"
-            )
+          effective=$(jq -r --arg self "$SELF_DEPENDENCY" '
+            [.[]
+              | select(.dependencyName != $self or .prevVersion != .newVersion)
+              | .updateType]
+            | if any(. == "version-update:semver-major") then "version-update:semver-major"
+              elif any(. == "version-update:semver-minor") then "version-update:semver-minor"
+              elif any(. == "version-update:semver-patch") then "version-update:semver-patch"
+              else "version-update:semver-patch"
+              end
           ' <<<"$UPDATED_JSON")
-          if [ "$third_party_major" = "true" ]; then
-            echo "update-type=version-update:semver-major" >> "$GITHUB_OUTPUT"
-          else
-            echo "update-type=version-update:semver-patch" >> "$GITHUB_OUTPUT"
-          fi
+          echo "update-type=$effective" >> "$GITHUB_OUTPUT"
 
       # See CONTRIBUTING.md → Trust-boundary changes for the policy.
       # Two guards coexist intentionally:
