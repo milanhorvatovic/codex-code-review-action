@@ -52,6 +52,10 @@ class TuneTests(unittest.TestCase):
         with self.assertRaises(TuneError):
             run_tune(TuneInputs())
 
+    def test_invalid_findings_raise_controlled_error(self) -> None:
+        with self.assertRaisesRegex(TuneError, "missing top-level field"):
+            run_tune(TuneInputs(findings_text="{}"))
+
     def test_path_overrides_propagate_into_diff_hunks(self) -> None:
         out = run_tune(
             TuneInputs(

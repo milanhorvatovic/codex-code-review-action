@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from lib.diagnoses import Diagnosis, DiagnosisContext, run_all_diagnoses
-from lib.findings_loader import Findings, parse_findings
+from lib.findings_loader import Findings, FindingsValidationError, parse_findings
 
 
 class TuneError(Exception):
@@ -39,11 +39,20 @@ class TuneOutputs:
 
 
 def _load_findings(inputs: TuneInputs) -> Findings:
+    text: str
     if inputs.findings_text is not None:
-        return parse_findings(inputs.findings_text)
-    if inputs.findings_path is not None:
-        return parse_findings(Path(inputs.findings_path).read_text(encoding="utf-8"))
-    raise TuneError("supply either findings_path or findings_text")
+        text = inputs.findings_text
+    elif inputs.findings_path is not None:
+        try:
+            text = Path(inputs.findings_path).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise TuneError(f"failed to read findings file '{inputs.findings_path}': {exc}") from exc
+    else:
+        raise TuneError("supply either findings_path or findings_text")
+    try:
+        return parse_findings(text)
+    except FindingsValidationError as exc:
+        raise TuneError(str(exc)) from exc
 
 
 def _render_report(findings: Findings, diagnoses: tuple[Diagnosis, ...]) -> str:
