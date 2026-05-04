@@ -121,12 +121,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--reference-path",
         default=None,
-        help="Path to the consumer's current .github/codex/review-reference.md (optional).",
+        help=(
+            "Path to the consumer's current review-reference file (optional context for the "
+            "rationale strings). The action's `review-reference-file` input accepts any "
+            "workspace-relative path; pass whichever location your repo uses."
+        ),
     )
     parser.add_argument(
         "--workflow-path",
         default=None,
-        help="Path to the consumer's current workflow file (optional).",
+        help=(
+            "Path to the consumer's current workflow file (optional context). The codex-review "
+            "workflow may live anywhere under .github/workflows/; pass whichever filename your repo uses."
+        ),
     )
     return parser
 

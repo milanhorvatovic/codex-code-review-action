@@ -19,7 +19,12 @@ Help the integrator iterate on review quality. The deterministic diagnosis lives
 python3 scripts/tune.py --findings-path /path/to/findings.json --help
 ```
 
-`--findings-path` is required — point it at a `findings.json` artifact saved by `retain-findings: "true"` (see `CC-07` consent guidance). Optional flags add the integrator's current `review-reference.md` and workflow file as context for richer rationale strings. The script validates the findings against the runtime contract, runs the three diagnoses (low-confidence verdict, noisy P3 surface, truncation banner), and prints a markdown report with one fenced-diff `## Recommendation` per fired diagnosis plus a per-finding rationale.
+`--findings-path` is required — point it at a `findings.json` artifact saved by `retain-findings: "true"` (see `CC-07` consent guidance). The other path flags add context for richer rationale strings; both accept whatever convention the integrator's repo uses:
+
+- `--reference-path` — the integrator's current review-reference file, wherever they store it. The action's `review-reference-file` input does not constrain the location.
+- `--workflow-path` — the integrator's current workflow file, wherever they named it under `.github/workflows/`.
+
+The script validates the findings against the runtime contract, runs the three diagnoses (low-confidence verdict, noisy P3 surface, truncation banner), and prints a markdown report with one fenced-diff `## Recommendation` per fired diagnosis plus a per-finding rationale.
 
 ## After running
 
@@ -27,6 +32,7 @@ Engage with the integrator on the report:
 
 - For each fired diagnosis, walk the contributing findings and the proposed diff. Help the integrator decide whether the diff matches their intent or whether a different cut would fit better — e.g., a sharper focus-area edit instead of an `effort` bump, or pruning a reference-file section instead of raising `min-confidence`.
 - Recommendations stay within the action's public input surface (`min-confidence`, `effort`, `model`, `max-chunk-bytes`, reference-file edits). They never propose changes that would violate `CC-01..CC-09` — those are non-negotiable security guardrails. If a finding seems to suggest one, surface the conflict and help the integrator pick a different angle.
+- The diffs assume the integrator's reference and workflow files at the paths they passed in. If they didn't pass `--reference-path` or `--workflow-path`, the diff hunks use placeholder paths; remind them to retarget the diff before applying.
 - If the integrator asks about a pattern the script doesn't yet diagnose (missed-issue audits, docs-only noise reduction, paths-filter recommendations), say so directly and help them reason through the tweak by hand. Don't fabricate a structured recommendation the script wouldn't produce.
 
 The script never writes to the working tree. The integrator applies any diff with `git apply` or by hand and re-runs the action to confirm the next review meets the bar.
@@ -36,3 +42,4 @@ The script never writes to the working tree. The integrator applies any diff wit
 - [`../../references/invariants.md`](../../references/invariants.md) — guardrails every recommendation respects.
 - [`../../scripts/lib/diagnoses/`](../../scripts/lib/diagnoses/) — `low_confidence.py`, `noisy_p3.py`, `truncation.py`. The three modules are short and self-explanatory; read them when an integrator asks how a recommendation was derived.
 - The action's `defaults/review-output-schema.json` — the findings shape the script validates against.
+- The action's `review-reference-file` input documentation — supports any workspace-relative path subject to the safety constraints.

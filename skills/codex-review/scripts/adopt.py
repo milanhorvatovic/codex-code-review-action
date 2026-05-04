@@ -1,15 +1,22 @@
 """Deterministic glue for the codex-review:adopt capability.
 
-Composes the workflow + starter reference-file + ADOPTION report. Refuses to
-write any artifact unless every CC-NN invariant passes against the emitted
-workflow.
+Composes a hardened workflow YAML, a starter review-reference, and an
+ADOPTION report. Refuses to write any artifact unless every CC-NN invariant
+passes against the emitted workflow.
+
+All three output paths plus the layering baseline are configurable. The
+skill does not assume the integrator wants the workflow at
+`.github/workflows/codex-review.yaml`, the reference at
+`.github/codex/review-reference.md`, or the report at `ADOPTION.md` — those
+are the defaults; the integrator overrides any of them via flags. Likewise
+for the action's own `review-reference-file` input, which accepts any
+workspace-relative path subject to the action's safety constraints.
 
 Invoked from the capability prompt as:
 
-    python3 scripts/adopt.py --target-repo /path/to/repo [--allow-users ...] [--write]
+    python3 scripts/adopt.py --target-repo /path/to/repo [flags]
 
-The default is dry-run; pass --write to land the three artifacts in the
-target repository's working tree.
+See `--help` for the full flag list.
 """
 
 from __future__ import annotations
@@ -19,13 +26,20 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from lib.baseline_fetcher import (
+    BaselineFetchError,
+    fetch_baseline_from_action,
+    load_baseline_from_path,
+)
 from lib.detect import DetectOptions, Language, detect, make_filesystem_reader
 from lib.invariants import assert_workflow, format_report
 from lib.pin_resolver import GhExec, PinResolution, default_gh, resolve_pin
 from lib.reference_layerer import LayerOptions, layer_reference
 from lib.workflow_templates import WorkflowTemplateOptions, render_hardened_workflow
 
-DEFAULT_DEFAULTS_PATH = "defaults/review-reference.md"
+DEFAULT_WORKFLOW_PATH = ".github/workflows/codex-review.yaml"
+DEFAULT_REFERENCE_PATH = ".github/codex/review-reference.md"
+DEFAULT_REPORT_PATH = "ADOPTION.md"
 
 
 class AdoptError(Exception):
@@ -38,7 +52,11 @@ class AdoptInputs:
     dry_run: bool = True
     pin: PinResolution | None = None
     project_name: str | None = None
+    reference_baseline_path: str | None = None
+    reference_path: str = DEFAULT_REFERENCE_PATH
+    report_path: str = DEFAULT_REPORT_PATH
     target_repo: str | None = None
+    workflow_path: str = DEFAULT_WORKFLOW_PATH
 
 
 @dataclass(frozen=True)
@@ -87,14 +105,24 @@ def _detect_bare_action(target_repo: Path) -> _BareActionResult:
     return _BareActionResult(found=bool(locations), locations=tuple(locations))
 
 
-def _load_defaults_reference(target_repo: Path) -> str:
-    candidates = [target_repo / DEFAULT_DEFAULTS_PATH, target_repo.parent / DEFAULT_DEFAULTS_PATH]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate.read_text(encoding="utf-8")
-    raise AdoptError(
-        f"could not locate {DEFAULT_DEFAULTS_PATH} relative to target-repo; pass an absolute path or run from a checkout that has the action's defaults available"
-    )
+def _load_baseline(
+    *,
+    gh: GhExec,
+    pin: PinResolution,
+    override_path: str | None,
+) -> str:
+    if override_path is not None:
+        try:
+            return load_baseline_from_path(override_path)
+        except BaselineFetchError as exc:
+            raise AdoptError(str(exc)) from exc
+    try:
+        return fetch_baseline_from_action(gh, pin.sha)
+    except BaselineFetchError as exc:
+        raise AdoptError(
+            f"failed to fetch the baseline review-reference from the action repo at {pin.sha}: {exc}\n"
+            "If you have the file staged locally, pass --reference-baseline-path to skip the fetch."
+        ) from exc
 
 
 @dataclass
@@ -105,6 +133,9 @@ class _ReportContext:
     invariants_report: str
     pin: PinResolution
     project_name: str
+    reference_path: str
+    report_path: str
+    workflow_path: str
 
 
 def _render_adoption_report(ctx: _ReportContext) -> str:
@@ -123,6 +154,12 @@ def _render_adoption_report(ctx: _ReportContext) -> str:
     lines.append("")
     lines.append(f"- Tag: `{ctx.pin.tag}`")
     lines.append(f"- SHA: `{ctx.pin.sha}`")
+    lines.append("")
+    lines.append("## Output paths")
+    lines.append("")
+    lines.append(f"- Workflow: `{ctx.workflow_path}` (override with `--workflow-path`)")
+    lines.append(f"- Starter reference: `{ctx.reference_path}` (override with `--reference-path`)")
+    lines.append(f"- This report: `{ctx.report_path}` (override with `--report-path`)")
     lines.append("")
     lines.append("## Detection summary")
     lines.append("")
@@ -160,7 +197,7 @@ def _render_adoption_report(ctx: _ReportContext) -> str:
     lines.append("## Open question")
     lines.append("")
     lines.append(
-        "If your repository explicitly accepts that same-repo PR authors can edit `.github/codex/review-reference.md` and steer the review prompt of their own PR, you can wire the file by adding a `# workspace-mode accepted by ...` comment on the prepare step's `with:` block and the `review-reference-file: .github/codex/review-reference.md` line. Otherwise wait for [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97)."
+        "If your repository explicitly accepts that same-repo PR authors can edit the review-reference and steer the review prompt of their own PR, you can wire the file by adding a `# workspace-mode accepted by ...` comment on the prepare step's `with:` block plus a `review-reference-file: <your-path>` line. The action input accepts any workspace-relative path subject to its safety constraints (no symlinks, no traversal, ≤ 64 KiB, regular file). Otherwise wait for [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97)."
     )
     lines.append("")
     return "\n".join(lines)
@@ -169,7 +206,8 @@ def _render_adoption_report(ctx: _ReportContext) -> str:
 def run_adopt(inputs: AdoptInputs, gh: GhExec | None = None) -> AdoptOutputs:
     target_repo_str = inputs.target_repo or str(Path.cwd())
     target_repo = Path(target_repo_str)
-    pin = inputs.pin if inputs.pin is not None else resolve_pin(gh or default_gh())
+    gh_exec = gh or default_gh()
+    pin = inputs.pin if inputs.pin is not None else resolve_pin(gh_exec)
     project_name = _pick_project_name(target_repo_str, inputs.project_name)
 
     reader = make_filesystem_reader(str(target_repo))
@@ -186,8 +224,13 @@ def run_adopt(inputs: AdoptInputs, gh: GhExec | None = None) -> AdoptOutputs:
         )
 
     languages: tuple[Language, ...] = facts.languages or ("javascript",)
+    baseline = _load_baseline(
+        gh=gh_exec,
+        pin=pin,
+        override_path=inputs.reference_baseline_path,
+    )
     reference_file = layer_reference(
-        _load_defaults_reference(target_repo),
+        baseline,
         LayerOptions(languages=languages, project_name=project_name),
     )
 
@@ -200,13 +243,16 @@ def run_adopt(inputs: AdoptInputs, gh: GhExec | None = None) -> AdoptOutputs:
             invariants_report=invariants_report,
             pin=pin,
             project_name=project_name,
+            reference_path=inputs.reference_path,
+            report_path=inputs.report_path,
+            workflow_path=inputs.workflow_path,
         )
     )
 
     writes = (
-        WriteEntry(content=workflow, path=".github/workflows/codex-review.yaml"),
-        WriteEntry(content=reference_file, path=".github/codex/review-reference.md"),
-        WriteEntry(content=adoption_report, path="ADOPTION.md"),
+        WriteEntry(content=workflow, path=inputs.workflow_path),
+        WriteEntry(content=reference_file, path=inputs.reference_path),
+        WriteEntry(content=adoption_report, path=inputs.report_path),
     )
 
     if not inputs.dry_run:
@@ -245,6 +291,42 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Project name shown in the starter reference file (default: target-repo's last path segment).",
     )
     parser.add_argument(
+        "--workflow-path",
+        default=DEFAULT_WORKFLOW_PATH,
+        help=(
+            "Where to write the emitted workflow file inside the target repository. "
+            f"Default: {DEFAULT_WORKFLOW_PATH}. GitHub Actions only discovers workflows under .github/workflows/, "
+            "so customizing the directory is unusual; renaming the file is fine."
+        ),
+    )
+    parser.add_argument(
+        "--reference-path",
+        default=DEFAULT_REFERENCE_PATH,
+        help=(
+            "Where to write the starter review-reference inside the target repository. "
+            f"Default: {DEFAULT_REFERENCE_PATH}. The action's `review-reference-file` input "
+            "accepts any workspace-relative path; pick the location that fits your repo's layout."
+        ),
+    )
+    parser.add_argument(
+        "--report-path",
+        default=DEFAULT_REPORT_PATH,
+        help=(
+            "Where to write the ADOPTION audit report inside the target repository. "
+            f"Default: {DEFAULT_REPORT_PATH}."
+        ),
+    )
+    parser.add_argument(
+        "--reference-baseline-path",
+        default=None,
+        help=(
+            "Optional path to a locally-staged copy of the action's defaults/review-reference.md "
+            "to layer against. When omitted (default), the script fetches the file from the action "
+            "repo at the resolved release SHA via gh api. Useful for offline runs or when pinning "
+            "to a non-released SHA."
+        ),
+    )
+    parser.add_argument(
         "--write",
         action="store_true",
         help="Write artifacts to the target repository's working tree. Default is dry-run.",
@@ -258,7 +340,11 @@ def main(argv: list[str] | None = None) -> int:
         allow_users=args.allow_users,
         dry_run=not args.write,
         project_name=args.project_name,
+        reference_baseline_path=args.reference_baseline_path,
+        reference_path=args.reference_path,
+        report_path=args.report_path,
         target_repo=args.target_repo,
+        workflow_path=args.workflow_path,
     )
     try:
         out = run_adopt(inputs)
@@ -267,6 +353,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.write:
         print(f"Wrote {len(out.writes)} artifact(s) under {Path(args.target_repo).resolve()}.")
+        for entry in out.writes:
+            print(f"  - {entry.path}")
     else:
         print("# === Workflow ===")
         print(out.workflow)
