@@ -716,15 +716,40 @@ describe("resolveGateDocUrl", () => {
       resolveGateDocUrl({}, { host: "https://github.com", repo: "team/repo" }),
     ).toBe("https://github.com/team/repo/blob/main/docs/release-gate.md");
   });
+
+  it("branchOverride wins over env and git-fallback so callers can pin the link to a release branch", () => {
+    expect(
+      resolveGateDocUrl(
+        { GITHUB_REF_NAME: "main", GITHUB_REPOSITORY: "team/repo" },
+        { host: "https://github.com", repo: "team/repo", defaultBranch: "trunk" },
+        "release/v2.1.0",
+      ),
+    ).toBe("https://github.com/team/repo/blob/release/v2.1.0/docs/release-gate.md");
+  });
 });
 
 describe("parseGitRemoteUrl", () => {
-  it("parses an SSH origin URL into host and repo", () => {
+  it("parses scp-style SSH origin URL into host and repo", () => {
     expect(parseGitRemoteUrl("git@github.com:owner/repo.git")).toEqual({
       host: "https://github.com",
       repo: "owner/repo",
     });
     expect(parseGitRemoteUrl("git@ghe.example.com:team/proj")).toEqual({
+      host: "https://ghe.example.com",
+      repo: "team/proj",
+    });
+  });
+
+  it("parses URL-style ssh:// origin URL into host and repo", () => {
+    expect(parseGitRemoteUrl("ssh://git@github.com/owner/repo.git")).toEqual({
+      host: "https://github.com",
+      repo: "owner/repo",
+    });
+    expect(parseGitRemoteUrl("ssh://git@ghe.example.com:2222/team/proj")).toEqual({
+      host: "https://ghe.example.com",
+      repo: "team/proj",
+    });
+    expect(parseGitRemoteUrl("ssh://ghe.example.com/team/proj.git")).toEqual({
       host: "https://ghe.example.com",
       repo: "team/proj",
     });

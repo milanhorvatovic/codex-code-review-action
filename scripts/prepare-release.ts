@@ -449,19 +449,30 @@ const DEFAULT_GATE_DOC_BRANCH = "main";
 export function resolveGateDocUrl(
   env: NodeJS.ProcessEnv = process.env,
   gitFallback?: { host: string; repo: string; defaultBranch?: string },
+  branchOverride?: string,
 ): string {
   const host = env.GITHUB_SERVER_URL ?? gitFallback?.host ?? DEFAULT_GATE_DOC_HOST;
   const repo = env.GITHUB_REPOSITORY ?? gitFallback?.repo ?? DEFAULT_GATE_DOC_REPO;
+  // `branchOverride` wins when provided so callers (e.g. `runCli` pinning
+  // the link to `release/v<X.Y.Z>`) can override the default-branch fallback
+  // chain. This keeps the link aligned with the merge candidate that
+  // reviewers are actually approving rather than whatever main happens to
+  // hold at view time.
   const branch =
-    env.GITHUB_REF_NAME ?? gitFallback?.defaultBranch ?? DEFAULT_GATE_DOC_BRANCH;
+    branchOverride ??
+    env.GITHUB_REF_NAME ??
+    gitFallback?.defaultBranch ??
+    DEFAULT_GATE_DOC_BRANCH;
   return `${host}/${repo}/blob/${branch}/docs/release-gate.md`;
 }
 
 // Parses an `origin` remote URL into a `{ host, repo }` pair. Recognizes the
-// two forms `git remote get-url` typically returns:
-//   - SSH: `git@<host>:<owner>/<repo>(.git)?` — emitted as `https://<host>`
-//     because SSH remote URLs do not carry an HTTP-scheme; HTTPS is the
-//     only browser-resolvable option.
+// three forms `git remote get-url` typically returns:
+//   - scp-style SSH: `git@<host>:<owner>/<repo>(.git)?` — emitted as
+//     `https://<host>` because SSH remote URLs do not carry an HTTP scheme.
+//   - URL-style SSH: `ssh://[<user>@]<host>[:<port>]/<owner>/<repo>(.git)?`
+//     — same emission rule as scp-style; the user, port, and any leading
+//     slash on the path are stripped.
 //   - HTTP(S): `https?://<host>/<owner>/<repo>(.git)?` — preserves the
 //     matched scheme so internal mirrors using plain HTTP keep working.
 // Returns null on any unrecognized form so callers can fall back cleanly.
@@ -470,8 +481,12 @@ export function parseGitRemoteUrl(
 ): { host: string; repo: string } | null {
   const trimmed = remoteUrl.trim();
   if (trimmed === "") return null;
-  const ssh = /^git@([^:]+):(.+?)(?:\.git)?$/.exec(trimmed);
-  if (ssh) return { host: `https://${ssh[1]}`, repo: ssh[2] };
+  const scp = /^git@([^:]+):(.+?)(?:\.git)?$/.exec(trimmed);
+  if (scp) return { host: `https://${scp[1]}`, repo: scp[2] };
+  const sshUrl = /^ssh:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/+(.+?)(?:\.git)?$/.exec(
+    trimmed,
+  );
+  if (sshUrl) return { host: `https://${sshUrl[1]}`, repo: sshUrl[2] };
   const http = /^(https?):\/\/(?:[^@/]+@)?([^/]+)\/(.+?)(?:\.git)?$/.exec(trimmed);
   if (http) return { host: `${http[1]}://${http[2]}`, repo: http[3] };
   return null;
@@ -957,7 +972,7 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       // git remote unavailable; resolveGateDocUrl falls back to the
       // hard-coded upstream default.
     }
-    const gateDocUrl = resolveGateDocUrl(env, gitFallback);
+    const gateDocUrl = resolveGateDocUrl(env, gitFallback, branch);
     const prBodyArgs = {
       version: targetVersion,
       isPrerelease: isPre,

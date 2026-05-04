@@ -124,7 +124,9 @@ release-gate-v<X.Y.Z>/
 After the tag pushes and the GitHub Release exists (created by `release.yaml`), upload the zip:
 
 ```bash
-gh release upload v<X.Y.Z> release-gate-v<X.Y.Z>.zip
+gh release upload v<X.Y.Z> release-gate-v<X.Y.Z>.zip --clobber
 ```
+
+`--clobber` makes the upload retry-safe: a partial-upload retry, an evidence-zip regeneration, or a re-upload after fixing typos in the snapshot all overwrite the existing asset instead of failing.
 
 The zip is the durable record. If automation of this step proves useful after the first cycle, the upload can move into `release.yaml` — until then, it is a maintainer-driven step documented in the release process.
