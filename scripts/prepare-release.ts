@@ -999,7 +999,18 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       // git remote unavailable; resolveGateDocUrl falls back to the
       // hard-coded upstream default.
     }
-    const gateDocUrl = resolveGateDocUrl(env, gitFallback, branch);
+    // Intentionally do not pin the URL to the ephemeral release branch:
+    // release branches are deleted after merge, and the PR description
+    // continues to serve as audit surface post-merge for the post-tag
+    // checklist. Resolve to the default branch (env GITHUB_REF_NAME → git
+    // symbolic-ref refs/remotes/origin/HEAD → "main") so the link stays
+    // valid for the lifetime of the merged PR. The minor risk that the
+    // gate doc on the default branch may advance past the merge candidate
+    // during release prep is documented in docs/release-gate.md; in
+    // practice the release branch is created from default-branch HEAD and
+    // the gate doc is not edited on the release branch, so the two copies
+    // are effectively identical at review time.
+    const gateDocUrl = resolveGateDocUrl(env, gitFallback);
     const prBodyArgs = {
       version: targetVersion,
       isPrerelease: isPre,

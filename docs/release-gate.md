@@ -19,6 +19,8 @@ The gate applies to both release paths documented in [`CONTRIBUTING.md`](../CONT
 
 The release PR body's checklist on the automated path is hard-coded in `buildPrBody` rather than generated from this document — when the gate's section structure changes, update both files in the same PR. On the manual path the maintainer copies this page directly, so the checklist always matches the doc.
 
+The PR body's link to this page is pinned to the repository's default branch (typically `main`), not to the ephemeral `release/v<X.Y.Z>` branch that hosts the merge candidate. This keeps the link valid for audit reads of the merged PR after the release branch is deleted. Pre-merge reviewers should validate against the merge candidate's checked-out copy of `docs/release-gate.md` if they suspect the default branch advanced with gate-doc-affecting changes during release prep — in practice the release branch is created from the default-branch HEAD without further edits to this file, so the two copies are effectively identical at review time.
+
 ## Required validation
 
 Run the full validation suite against the merge candidate (the release branch's HEAD before the squash-merge), on the Node version pinned in `package.json` (`engines.node`). The release-tag automation (`release-on-merge.yaml`) re-validates the merge commit with `lint`, `typecheck`, tests, `verify-dist`, `verify-lockfile-version`, and the branch-vs-package-vs-CHANGELOG version-consistency check. `verify-doc-pins` and `verify-prose-style` run on every PR and push to `main` via their dedicated workflows but are not part of the release-tag job, so include them in this manual rerun to confirm the merge candidate's state. `npm audit` is maintainer-only and is the gate's advisory layer.
