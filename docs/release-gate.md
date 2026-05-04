@@ -23,7 +23,7 @@ The PR body's link to this page is pinned to the repository's default branch (ty
 
 ## Required validation
 
-Run the full validation suite against the merge candidate (the release branch's HEAD before the squash-merge), on the Node version pinned in `package.json` (`engines.node`). The release-tag automation (`release-on-merge.yaml`) re-validates the merge commit with `lint`, `typecheck`, tests, `verify-dist`, `verify-lockfile-version`, and the branch-vs-package-vs-CHANGELOG version-consistency check. `verify-doc-pins` and `verify-prose-style` run on every PR and push to `main` via their dedicated workflows but are not part of the release-tag job, so include them in this manual rerun to confirm the merge candidate's state. `npm audit` is maintainer-only and is the gate's advisory layer.
+Run the full validation suite against the merge candidate (the release branch's HEAD before the squash-merge), on the Node version pinned in `package.json` (`engines.node`). The release-tag automation (`release-on-merge.yaml`) re-validates the merge commit with `npm run lint`, `npm run typecheck`, `npm test`, `verify-dist`, `verify-lockfile-version`, and the branch-vs-package-vs-CHANGELOG version-consistency check. `npm run verify:doc-pins` and `npm run verify:prose-style` run on every PR and push to `main` via their dedicated workflows but are not part of the release-tag job, so include them in this manual rerun to confirm the merge candidate's state. `npm audit` is maintainer-only and is the gate's advisory layer.
 
 ```bash
 npm ci

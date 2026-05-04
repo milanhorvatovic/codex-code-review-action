@@ -455,17 +455,18 @@ export function buildAutoHeaderSection(args: {
 //    upstream `owner/repo`) for environments that have neither.
 //
 // The branch in the URL path resolves through `branchOverride` (explicit
-// caller pin) → git fallback (`origin/HEAD` resolved via
-// `git symbolic-ref refs/remotes/origin/HEAD`) → hard-coded `main`. Note
-// that `GITHUB_REF_NAME` is intentionally NOT consulted: under
-// `workflow_dispatch` it carries the dispatch ref (e.g. `release/v2.1.0`
-// when the workflow is rerun from the release branch), not the
-// repository's default branch. Pinning the audit link to the dispatch ref
-// would 404 after the branch is deleted post-merge — defeating the
-// durable-audit-link goal documented in `docs/release-gate.md`. Forks and
-// internal mirrors whose default branch is not `main` keep working as
-// long as `origin/HEAD` is set on the clone or the caller passes
-// `branchOverride`.
+// caller pin) → git fallback (the caller resolves the repository default
+// branch from `git symbolic-ref refs/remotes/origin/HEAD`, falling back
+// to `git ls-remote --symref origin HEAD` when `origin/HEAD` is not set
+// locally) → hard-coded `main`. Note that `GITHUB_REF_NAME` is
+// intentionally NOT consulted: under `workflow_dispatch` it carries the
+// dispatch ref (e.g. `release/v2.1.0` when the workflow is rerun from
+// the release branch), not the repository's default branch. Pinning the
+// audit link to the dispatch ref would 404 after the branch is deleted
+// post-merge — defeating the durable-audit-link goal documented in
+// `docs/release-gate.md`. Forks and internal mirrors whose default
+// branch is not `main` keep working as long as either fallback resolves
+// or the caller passes `branchOverride`.
 const DEFAULT_GATE_DOC_HOST = "https://github.com";
 const DEFAULT_GATE_DOC_REPO = "milanhorvatovic/codex-ai-code-review-action";
 const DEFAULT_GATE_DOC_BRANCH = "main";
@@ -482,6 +483,37 @@ export function resolveGateDocUrl(
     gitFallback?.defaultBranch ??
     DEFAULT_GATE_DOC_BRANCH;
   return `${host}/${repo}/blob/${branch}/docs/release-gate.md`;
+}
+
+// Resolves the repository's default branch by asking git, in two layers:
+//
+//   1. `git symbolic-ref refs/remotes/origin/HEAD` — uses the local
+//      origin/HEAD pointer set by `git clone` and `git remote set-head
+//      origin -a`. Fast, network-free.
+//   2. `git ls-remote --symref origin HEAD` — falls back to a remote
+//      query when the local pointer is missing (shallow clones, fresh CI
+//      clones without `set-head`). Output: `ref: refs/heads/<name>\tHEAD`.
+//
+// Returns undefined when neither succeeds (e.g. no `origin` remote, both
+// commands fail) so callers can fall back to a hard-coded default.
+export function resolveDefaultBranchFromGit(
+  runGit: GitRunner,
+): string | undefined {
+  try {
+    const ref = runGit(["symbolic-ref", "refs/remotes/origin/HEAD"]).trim();
+    const m = /^refs\/remotes\/origin\/(.+)$/.exec(ref);
+    if (m && m[1] !== undefined && m[1] !== "") return m[1];
+  } catch {
+    // origin/HEAD not set; fall through to ls-remote --symref below.
+  }
+  try {
+    const lsRemote = runGit(["ls-remote", "--symref", "origin", "HEAD"]);
+    const m = /^ref: refs\/heads\/(\S+)\s+HEAD/m.exec(lsRemote);
+    if (m && m[1] !== undefined && m[1] !== "") return m[1];
+  } catch {
+    // Network or auth error; caller falls back to its own default.
+  }
+  return undefined;
 }
 
 // Parses an `origin` remote URL into a `{ host, repo }` pair. Recognizes the
@@ -985,16 +1017,10 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       const remoteUrl = runGit(["remote", "get-url", "origin"]).trim();
       const parsed = parseGitRemoteUrl(remoteUrl);
       if (parsed !== null) {
-        let defaultBranch: string | undefined;
-        try {
-          const ref = runGit(["symbolic-ref", "refs/remotes/origin/HEAD"]).trim();
-          const m = /^refs\/remotes\/origin\/(.+)$/.exec(ref);
-          if (m && m[1] !== undefined) defaultBranch = m[1];
-        } catch {
-          // origin/HEAD not set; defaultBranch stays undefined and
-          // resolveGateDocUrl falls back to its built-in default ("main").
-        }
-        gitFallback = { ...parsed, defaultBranch };
+        gitFallback = {
+          ...parsed,
+          defaultBranch: resolveDefaultBranchFromGit(runGit),
+        };
       }
     } catch {
       // git remote unavailable; resolveGateDocUrl falls back to the
@@ -1003,14 +1029,16 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     // Intentionally do not pin the URL to the ephemeral release branch:
     // release branches are deleted after merge, and the PR description
     // continues to serve as audit surface post-merge for the post-tag
-    // checklist. Resolve to the default branch (env GITHUB_REF_NAME → git
-    // symbolic-ref refs/remotes/origin/HEAD → "main") so the link stays
-    // valid for the lifetime of the merged PR. The minor risk that the
-    // gate doc on the default branch may advance past the merge candidate
-    // during release prep is documented in docs/release-gate.md; in
-    // practice the release branch is created from default-branch HEAD and
-    // the gate doc is not edited on the release branch, so the two copies
-    // are effectively identical at review time.
+    // checklist. Resolve to the default branch via the gitFallback chain
+    // (parsed from `git symbolic-ref refs/remotes/origin/HEAD`, then
+    // `git ls-remote --symref origin HEAD`, then "main") so the link
+    // stays valid for the lifetime of the merged PR. The minor risk that
+    // the gate doc on the default branch may advance past the merge
+    // candidate during release prep is documented in
+    // docs/release-gate.md; in practice the release branch is created
+    // from default-branch HEAD and the gate doc is not edited on the
+    // release branch, so the two copies are effectively identical at
+    // review time.
     const gateDocUrl = resolveGateDocUrl(env, gitFallback);
     const prBodyArgs = {
       version: targetVersion,

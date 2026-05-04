@@ -23,6 +23,7 @@ import {
   planPrBodyRefresh,
   releaseLevelOf,
   renderChangelogEntry,
+  resolveDefaultBranchFromGit,
   resolveGateDocUrl,
   resolveTargetVersion,
   runCli,
@@ -772,6 +773,52 @@ describe("resolveGateDocUrl", () => {
         "feature-branch",
       ),
     ).toBe("https://github.com/team/repo/blob/feature-branch/docs/release-gate.md");
+  });
+});
+
+describe("resolveDefaultBranchFromGit", () => {
+  it("uses git symbolic-ref refs/remotes/origin/HEAD when available", () => {
+    const calls: string[][] = [];
+    const runGit = (args: string[]) => {
+      calls.push(args);
+      if (args[0] === "symbolic-ref") return "refs/remotes/origin/main\n";
+      throw new Error(`unrouted git: ${args.join(" ")}`);
+    };
+    expect(resolveDefaultBranchFromGit(runGit)).toBe("main");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("falls back to git ls-remote --symref when origin/HEAD is not set locally", () => {
+    const calls: string[][] = [];
+    const runGit = (args: string[]) => {
+      calls.push(args);
+      if (args[0] === "symbolic-ref") {
+        // origin/HEAD missing on shallow/fresh clones — git exits non-zero.
+        throw new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref");
+      }
+      if (args[0] === "ls-remote" && args.includes("--symref")) {
+        return "ref: refs/heads/trunk\tHEAD\nabc123\tHEAD\n";
+      }
+      throw new Error(`unrouted git: ${args.join(" ")}`);
+    };
+    expect(resolveDefaultBranchFromGit(runGit)).toBe("trunk");
+    expect(calls.map((c) => c[0])).toEqual(["symbolic-ref", "ls-remote"]);
+  });
+
+  it("returns undefined when both lookups fail (no origin remote, network failure, etc.)", () => {
+    const runGit = () => {
+      throw new Error("git: no origin remote configured");
+    };
+    expect(resolveDefaultBranchFromGit(runGit)).toBeUndefined();
+  });
+
+  it("returns undefined when symbolic-ref returns empty (defensive against silent failure)", () => {
+    const runGit = (args: string[]) => {
+      if (args[0] === "symbolic-ref") return "";
+      if (args[0] === "ls-remote") return "";
+      throw new Error(`unrouted git: ${args.join(" ")}`);
+    };
+    expect(resolveDefaultBranchFromGit(runGit)).toBeUndefined();
   });
 });
 
