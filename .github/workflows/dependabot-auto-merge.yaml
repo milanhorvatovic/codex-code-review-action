@@ -167,6 +167,7 @@ jobs:
       # When the secret is unset, the step warns and skips — auto-merge is still enabled
       # and the PR waits for manual approval, matching the prior behavior.
       - name: Approve PR (so required-review check passes)
+        id: approve
         if: >-
           steps.effective.outputs.update-type != 'version-update:semver-major'
           && !contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')
@@ -177,9 +178,15 @@ jobs:
         # This step is intentionally fail-open: any failure (missing token, revoked PAT,
         # insufficient PAT scope, transient GitHub API error, malformed response) emits a
         # warning and exits 0. A hard failure here would cause GitHub Actions to skip the
-        # subsequent auto-merge enable step, which would degrade behavior worse than the
-        # prior state (no approval AND no auto-merge). The fallback is: the PR waits for
-        # manual review with auto-merge already enabled, matching the prior behavior.
+        # subsequent merge step entirely; the merge step's fallback path (which depends on
+        # this step's `succeeded` output) handles the unhappy case by enabling GitHub
+        # auto-merge so a later manual approval can fire the merge.
+        #
+        # The step writes a `succeeded=true|false` output via an EXIT trap so the merge
+        # step downstream knows whether a code-owner review was posted: `true` ⇒ proceed
+        # with synchronous merge; `false` ⇒ fall back to `gh pr merge --auto`. Without
+        # this signal, the synchronous merge would fail the workflow on missing-approval
+        # and the PR would strand because this workflow doesn't trigger on review events.
         #
         # GitHub Actions invokes the default bash shell as `bash --noprofile --norc -eo
         # pipefail {0}`, so errexit is on by default. We explicitly disable it (`set +e`)
@@ -189,6 +196,8 @@ jobs:
         run: |
           set +e
           set -uo pipefail
+          succeeded=false
+          trap 'echo "succeeded=$succeeded" >> "$GITHUB_OUTPUT"' EXIT
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "::warning::DEPENDABOT_APPROVE_TOKEN is not set — skipping auto-approval. The PR will require manual review before auto-merge can complete. Configure a fine-grained PAT scoped to this repo (Pull requests: write) belonging to a code-owner and store it under Settings → Secrets and variables → Dependabot → DEPENDABOT_APPROVE_TOKEN."
             exit 0
@@ -205,25 +214,36 @@ jobs:
             echo "::warning::Failed to post auto-approval review (likely a revoked or insufficiently-scoped DEPENDABOT_APPROVE_TOKEN, or a transient GitHub API error). Auto-merge will still be enabled; the PR will wait for manual review."
             exit 0
           fi
+          succeeded=true
 
-      # Wait for every required status check to reach a terminal state, then squash-merge
-      # synchronously inside this workflow run. The previous flow called `gh pr merge --auto`,
-      # which delegated the actual merge to GitHub's server-side auto-merge worker. That
-      # worker occasionally failed to fire after the last required check transitioned green,
-      # leaving the PR open with auto-merge enabled, no merge attempt, and no failure event
-      # (see PR #114 for a confirmed instance). Merging inline under the bot's still-valid
-      # GITHUB_TOKEN eliminates the enable→fire race and surfaces any merge error as a
-      # workflow failure instead of a silent stall.
+      # Two paths, branching on whether the auto-approval step posted a code-owner review:
       #
-      # Trust-boundary handling: the label is re-checked twice — once before polling (so we
-      # don't waste minutes waiting on a PR we won't merge) and again immediately before the
-      # merge (closing the race where a maintainer applies the label while checks run).
+      # Happy path (approval succeeded): wait for every required status check to reach a
+      # terminal state, then squash-merge synchronously inside this workflow run. Merging
+      # inline under the bot's still-valid GITHUB_TOKEN eliminates the enable→fire race in
+      # GitHub's server-side auto-merge worker, which occasionally failed to fire after the
+      # last required check transitioned green and left the PR open with auto-merge enabled
+      # but no merge attempt and no failure event (see PR #114 for a confirmed instance).
+      #
+      # Fallback path (approval did not succeed — fail-open from the previous step): the PR
+      # is missing the required code-owner review, so a synchronous merge would fail the
+      # workflow and the PR would strand because this workflow doesn't trigger on review
+      # events. Fall back to enabling GitHub auto-merge so a later manual approval fires
+      # the merge — the same behavior as before the synchronous-merge change. This loses
+      # the no-stall guarantee on the unhappy path but is strictly better than failing the
+      # workflow and leaving the PR unmerge-able.
+      #
+      # Trust-boundary handling on the happy path: the label is re-checked twice — once
+      # before polling (so we don't waste minutes waiting on a PR we won't merge) and again
+      # immediately before the merge (closing the race where a maintainer applies the label
+      # while checks run). On the fallback path the original post-enable revert is kept.
       - name: Wait for required checks, then squash-merge
         if: >-
           steps.effective.outputs.update-type != 'version-update:semver-major'
           && !contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')
           && !contains(github.event.pull_request.labels.*.name, 'trust-boundary')
         env:
+          APPROVE_SUCCEEDED: ${{ steps.approve.outputs.succeeded }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
@@ -233,6 +253,15 @@ jobs:
           }
           if [ "$(has_trust_boundary)" = "true" ]; then
             echo "trust-boundary label is now present (applied after workflow start); skipping merge."
+            exit 0
+          fi
+          if [ "${APPROVE_SUCCEEDED:-false}" != "true" ]; then
+            echo "::warning::Auto-approval did not succeed; falling back to GitHub auto-merge so a maintainer's later approval can fire the merge."
+            gh pr merge --auto --squash "$PR_URL"
+            if [ "$(has_trust_boundary)" = "true" ]; then
+              echo "trust-boundary label was applied while enabling auto-merge; reverting."
+              gh pr merge --disable-auto "$PR_URL"
+            fi
             exit 0
           fi
           # `--required` filters to checks listed in the branch ruleset's required_status_checks.
