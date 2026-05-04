@@ -10,6 +10,7 @@ import {
   categorizePullRequest,
   computeVersionBump,
   consolidateRcSections,
+  existingBodyHasMaintainerEdits,
   existingBodyHasMaintainerSignoff,
   extractTrustBoundaryImpact,
   formatPullRequestEntry,
@@ -658,9 +659,29 @@ describe("planPrBodyRefresh", () => {
     expect(planPrBodyRefresh(args, "")).toEqual({ mode: "fresh", body: fullFresh });
   });
 
-  it("returns mode=fresh when the existing body has no maintainer sign-off so reruns pick up template updates", () => {
-    const stale = "Some stale auto-header.\n\n## Release gate sign-off\n\n- [ ] Required validation block runs cleanly.\n";
-    expect(planPrBodyRefresh(args, stale)).toEqual({ mode: "fresh", body: fullFresh });
+  it("returns mode=fresh when the existing body's signoff section is byte-identical to the bot template (reruns pick up template updates)", () => {
+    const unmodified = `Some stale auto-header.\n\n${buildSignoffSection()}`;
+    expect(planPrBodyRefresh(args, unmodified)).toEqual({ mode: "fresh", body: fullFresh });
+  });
+
+  it("returns mode=merge when the maintainer adds free-form notes below the signoff section", () => {
+    const withNotes = [
+      buildAutoHeaderSection(args),
+      "",
+      buildSignoffSection(),
+      "",
+      "Note: skipped X because of flaky CI; see #999.",
+    ].join("\n");
+    const plan = planPrBodyRefresh(args, withNotes);
+    expect(plan.mode).toBe("merge");
+    if (plan.mode !== "merge") throw new Error("unreachable");
+    expect(plan.body).toContain("Note: skipped X because of flaky CI; see #999.");
+  });
+
+  it("returns mode=merge when the maintainer modifies a checklist line (truncated, edited)", () => {
+    const truncated = "Some stale auto-header.\n\n## Release gate sign-off\n\n- [ ] Required validation block runs cleanly.\n";
+    const plan = planPrBodyRefresh(args, truncated);
+    expect(plan.mode).toBe("merge");
   });
 
   it("returns mode=merge when sign-off is present and the marker is intact", () => {
@@ -710,6 +731,51 @@ describe("planPrBodyRefresh", () => {
     expect(plan.mode).toBe("skip");
     if (plan.mode !== "skip") throw new Error("unreachable");
     expect(plan.reason).toContain("`## Release gate sign-off` marker");
+  });
+});
+
+describe("existingBodyHasMaintainerEdits", () => {
+  const args = {
+    version: "2.1.0",
+    isPrerelease: false,
+    prs: [makePr({ number: 1, title: "F", labels: [{ name: "release: minor" }] })],
+    baseTag: "v2.0.0",
+  };
+
+  it("returns false for null/empty bodies", () => {
+    expect(existingBodyHasMaintainerEdits(null)).toBe(false);
+    expect(existingBodyHasMaintainerEdits(undefined)).toBe(false);
+    expect(existingBodyHasMaintainerEdits("")).toBe(false);
+  });
+
+  it("returns false for a body whose signoff section is byte-identical to the fresh template", () => {
+    const body = `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`;
+    expect(existingBodyHasMaintainerEdits(body)).toBe(false);
+  });
+
+  it("delegates to existingBodyHasMaintainerSignoff when the regex signal is present", () => {
+    expect(existingBodyHasMaintainerEdits("Verified by: Maintainer — 2026-05-04")).toBe(true);
+    expect(existingBodyHasMaintainerEdits("- [x] Required validation block runs cleanly")).toBe(
+      true,
+    );
+  });
+
+  it("returns true when the signoff section has a non-template line (added note, modified row)", () => {
+    const withNote = [
+      buildAutoHeaderSection(args),
+      "",
+      buildSignoffSection(),
+      "",
+      "Maintainer note: skipped audit triage; see #999.",
+    ].join("\n");
+    expect(existingBodyHasMaintainerEdits(withNote)).toBe(true);
+  });
+
+  it("requires the marker heading for the unknown-lines backstop (regex still applies without marker)", () => {
+    const noMarkerNoSignoff = "Some legacy body without the gate marker or sign-off labels.";
+    expect(existingBodyHasMaintainerEdits(noMarkerNoSignoff)).toBe(false);
+    const noMarkerWithSignoff = "Some legacy body.\nVerified by: Maintainer — 2026-05-04";
+    expect(existingBodyHasMaintainerEdits(noMarkerWithSignoff)).toBe(true);
   });
 });
 
@@ -1071,6 +1137,70 @@ describe("runCli (rerun body-refresh integration)", () => {
     expect(editBody).toContain("Maintainer note retained on rerun.");
     expect(stdout).toContain("Refreshed auto-generated header on release PR #42");
     expect(stdout).toContain("re-verify the gate before approving");
+  });
+
+  it("refreshes the PR body even when no file changes are staged (template-text-only update)", () => {
+    const ghCalls: Array<{ args: string[] }> = [];
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+
+    const branch = "release/v2.1.0";
+    const ghRoutes: Record<string, string> = {
+      "release list --limit 100 --json tagName,publishedAt,isPrerelease": JSON.stringify([
+        { tagName: "v2.0.0", publishedAt: "2026-04-07T00:00:00Z", isPrerelease: false },
+      ]),
+      "pr list --state merged --base main --search merged:>2026-04-07T00:00:00Z base:main --json number,title,body,labels,url --limit 1000":
+        JSON.stringify([]),
+      [`pr list --head ${branch} --state open --json number`]: JSON.stringify([{ number: 42 }]),
+      "pr view 42 --json body": JSON.stringify({ body: "old body" }),
+    };
+    runCli({
+      argv: ["--version", "2.1.0"],
+      env: { RELEASE_APP_BOT_USER_ID: "999000" },
+      readFile: (path) => {
+        if (path === "package.json")
+          return `${JSON.stringify({ name: "x", version: "2.1.0" }, null, 2)}\n`;
+        if (path === "package-lock.json")
+          return `${JSON.stringify(
+            {
+              name: "x",
+              version: "2.1.0",
+              lockfileVersion: 3,
+              requires: true,
+              packages: { "": { name: "x", version: "2.1.0" } },
+            },
+            null,
+            2,
+          )}\n`;
+        if (path === "CHANGELOG.md")
+          return "# Changelog\n\n## [2.1.0] - 2026-05-01\n\n- _No notable changes; release contains only `release: skip` PRs._\n\n## [2.0.0] - 2026-04-07\n\n- prior\n";
+        throw new Error(`unexpected read: ${path}`);
+      },
+      writeFile: () => undefined,
+      runGh: (args) => {
+        ghCalls.push({ args: [...args] });
+        if (args[0] === "pr" && args[1] === "edit") return "";
+        const key = args.join(" ");
+        const value = ghRoutes[key];
+        if (value === undefined) throw new Error(`unrouted gh: ${key}`);
+        return value;
+      },
+      runGit: (args) => {
+        if (args[0] === "ls-remote" && args[1] === "--tags") return "abc\trefs/tags/v2.0.0\n";
+        if (args[0] === "ls-remote" && args[1] === "--heads") return "";
+        if (args[0] === "log" && args.includes("--format=%cI")) return "2026-04-07T00:00:00Z\n";
+        if (args[0] === "diff" && args.includes("--cached")) return "";
+        return "";
+      },
+      today: () => "2026-05-01",
+      stdoutWrite: (chunk) => stdout.push(chunk),
+      stderrWrite: (chunk) => stderr.push(chunk),
+    });
+
+    expect(stderr.join("")).toBe("");
+    expect(stdout.join("")).toContain("Skipping commit/push; continuing to release PR body refresh");
+    const editCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "edit");
+    expect(editCall).toBeDefined();
   });
 
   it("skips the body update when sign-off is present but the marker heading is missing", () => {

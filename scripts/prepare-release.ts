@@ -409,24 +409,32 @@ export function buildAutoHeaderSection(args: {
   return lines.join("\n");
 }
 
+// Absolute URL base for cross-references emitted into the release PR body.
+// PR descriptions are rendered against the PR page URL, not against a
+// repository file path, so relative links like `docs/release-gate.md` can
+// resolve to a 404. Hard-coding the repository's main-branch blob URL keeps
+// every link stable regardless of where the PR description is rendered.
+const GATE_DOC_URL =
+  "https://github.com/milanhorvatovic/codex-ai-code-review-action/blob/main/docs/release-gate.md";
+
 export function buildSignoffSection(): string {
   const lines: string[] = [
     SIGNOFF_SECTION_HEADER,
     "",
-    "Walk [`docs/release-gate.md`](docs/release-gate.md) against the merge candidate (the release branch's HEAD before the squash-merge). Resolve each pre-merge box below to a `Verified by: <maintainer> — <YYYY-MM-DD>` line or a `Waived: <rationale referencing tracked follow-up>` line before approving the squash-merge. The post-tag box is completed after `release.yaml` creates the GitHub Release.",
+    `Walk [\`docs/release-gate.md\`](${GATE_DOC_URL}) against the merge candidate (the release branch's HEAD before the squash-merge). Resolve each pre-merge box below to a \`Verified by: <maintainer> — <YYYY-MM-DD>\` line or a \`Waived: <rationale referencing tracked follow-up>\` line before approving the squash-merge. The post-tag box is completed after \`release.yaml\` creates the GitHub Release.`,
     "",
     "**Pre-merge:**",
     "",
-    "- [ ] Required validation block runs cleanly on the merge candidate (`npm ci` → `npm run verify:prose-style`); any `npm audit` advisories are triaged per [Required validation](docs/release-gate.md#required-validation) (fix, accept with documented rationale, or defer with a tracked issue).",
+    `- [ ] Required validation block runs cleanly on the merge candidate (\`npm ci\` → \`npm run verify:prose-style\`); any \`npm audit\` advisories are triaged per [Required validation](${GATE_DOC_URL}#required-validation) (fix, accept with documented rationale, or defer with a tracked issue).`,
     "- [ ] Dist reproducibility check is clean (`npm run build && git diff --exit-code -- dist package.json package-lock.json`).",
     "- [ ] Manual security regression checks for `review-reference-file` are confirmed against the merge candidate.",
     "- [ ] Conditional `review-reference-source: base` checks are run, or waived with a rationale.",
-    "- [ ] Release-specific items table is filled with cross-references to owning PRs/issues, and each row resolved to `Verified by:` or `Waived:` (see [Release-specific items](docs/release-gate.md#release-specific-items)).",
+    `- [ ] Release-specific items table is filled with cross-references to owning PRs/issues, and each row resolved to \`Verified by:\` or \`Waived:\` (see [Release-specific items](${GATE_DOC_URL}#release-specific-items)).`,
     "- [ ] Trust-boundary CHANGELOG callout is present if any merged PR contributing a release level (i.e. not `release: skip`) is labeled `trust-boundary`. (Skipped PRs do not appear in CHANGELOG entries, so they cannot trigger the callout requirement.)",
     "",
     "**Post-tag:**",
     "",
-    "- [ ] Gate evidence zip attached to the GitHub Release after the tag pushes (see [Archiving the gate](docs/release-gate.md#archiving-the-gate)).",
+    `- [ ] Gate evidence zip attached to the GitHub Release after the tag pushes (see [Archiving the gate](${GATE_DOC_URL}#archiving-the-gate)).`,
   ];
   return lines.join("\n");
 }
@@ -438,6 +446,44 @@ export function buildPrBody(args: {
   baseTag: string | undefined;
 }): string {
   return `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection()}`;
+}
+
+// Returns true if the existing release PR body shows ANY sign of maintainer
+// engagement with the gate sign-off section. Two signals, ORed:
+//
+//   1. `existingBodyHasMaintainerSignoff` — explicit Verified by: / Waived:
+//      lines or checked task-list rows (regex on stripped body).
+//   2. Unknown-lines backstop — any non-blank line in the sign-off section
+//      that is not byte-identical to a line in the bot's freshly generated
+//      `buildSignoffSection()` template. Catches added notes, populated
+//      release-specific table rows, modified checklist text — patterns that
+//      would not match the regex.
+//
+// The unknown-lines check requires the marker heading to be present; if
+// missing, only the regex signal is consulted. False-positive direction:
+// when the bot's template itself changes between reruns, the existing
+// (older-template) lines look "unknown" and we choose preserve over
+// overwrite — the safe direction.
+export function existingBodyHasMaintainerEdits(
+  existingBody: string | null | undefined,
+): boolean {
+  if (existingBody === null || existingBody === undefined || existingBody === "") {
+    return false;
+  }
+  if (existingBodyHasMaintainerSignoff(existingBody)) return true;
+  const idx = existingBody.indexOf(SIGNOFF_SECTION_HEADER);
+  if (idx === -1) return false;
+  const templateLines = new Set(
+    buildSignoffSection()
+      .split("\n")
+      .map((line) => line.trimEnd()),
+  );
+  for (const rawLine of existingBody.slice(idx).split("\n")) {
+    const line = rawLine.trimEnd();
+    if (line === "") continue;
+    if (!templateLines.has(line)) return true;
+  }
+  return false;
 }
 
 export type PrBodyRefreshPlan =
@@ -476,10 +522,10 @@ export function planPrBodyRefresh(
     return { mode: "fresh", body: fullFreshBody };
   }
 
-  const hasSignoff = existingBodyHasMaintainerSignoff(existingBody);
+  const hasEdits = existingBodyHasMaintainerEdits(existingBody);
   const markerIdx = existingBody.indexOf(SIGNOFF_SECTION_HEADER);
 
-  if (!hasSignoff) {
+  if (!hasEdits) {
     return { mode: "fresh", body: fullFreshBody };
   }
 
@@ -487,7 +533,7 @@ export function planPrBodyRefresh(
     return {
       mode: "skip",
       reason:
-        "PR body contains maintainer sign-off (`Verified by:` / `Waived:` line) but no `## Release gate sign-off` marker. Restore the marker heading if you want the bot to refresh the auto-generated header on reruns; otherwise the body is preserved verbatim.",
+        "PR body contains maintainer edits (sign-off lines, checked task-list rows, or added prose) but no `## Release gate sign-off` marker. Restore the marker heading if you want the bot to refresh the auto-generated header on reruns; otherwise the body is preserved verbatim.",
     };
   }
 
@@ -762,17 +808,18 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     runGit(["config", "user.email", botEmail]);
     runGit(["add", "package.json", "package-lock.json", "CHANGELOG.md"]);
     const stagedDiff = runGit(["diff", "--cached", "--name-only"]).trim();
-    if (stagedDiff === "") {
-      stdoutWrite(
-        `No changes for v${targetVersion}: package.json, package-lock.json, and CHANGELOG.md on origin/main already match the computed output. Skipping commit and PR update.\n`,
-      );
-      return 0;
-    }
-    runGit(["commit", "-m", `release: v${targetVersion}`]);
-    if (remoteSha === "") {
-      runGit(["push", "origin", branch]);
+    const hasFileChanges = stagedDiff !== "";
+    if (hasFileChanges) {
+      runGit(["commit", "-m", `release: v${targetVersion}`]);
+      if (remoteSha === "") {
+        runGit(["push", "origin", branch]);
+      } else {
+        runGit(["push", `--force-with-lease=${branch}:${remoteSha}`, "origin", branch]);
+      }
     } else {
-      runGit(["push", `--force-with-lease=${branch}:${remoteSha}`, "origin", branch]);
+      stdoutWrite(
+        `No file changes for v${targetVersion}: package.json, package-lock.json, and CHANGELOG.md on origin/main already match the computed output. Skipping commit/push; continuing to release PR body refresh so reruns can pick up template updates.\n`,
+      );
     }
 
     const prBodyArgs = {
@@ -794,6 +841,12 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     const openPrs = JSON.parse(existingPr) as Array<{ number: number }>;
     const firstOpenPr = openPrs[0];
     if (firstOpenPr === undefined) {
+      if (!hasFileChanges) {
+        stdoutWrite(
+          `No file changes and no existing release PR for v${targetVersion}; nothing to do.\n`,
+        );
+        return 0;
+      }
       runGh([
         "pr",
         "create",
