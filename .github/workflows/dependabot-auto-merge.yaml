@@ -22,7 +22,7 @@ permissions:
 # labeled event (which means "stop the merge now"). We do NOT cancel for non-trust-
 # boundary `labeled` events: Dependabot adds `dependencies`/`release: patch`/etc. labels
 # in rapid succession right after opening a PR, and those replacement runs skip both
-# `rebuild-dist` and `auto-merge` per their `if:` guards — so cancelling the in-flight
+# `rebuild-dist` and `auto-merge` per their `if:` guards — so canceling the in-flight
 # merge run for them would leave the PR stranded with neither a synchronous merge nor
 # auto-merge enabled. Letting them queue behind the in-flight run is harmless (they're
 # no-ops on the merge path) and avoids the stall.
