@@ -15,7 +15,7 @@ The gate applies to both release paths documented in [`CONTRIBUTING.md`](../CONT
 3. Record the filled-in gate on the working surface picked in step 1 so the sign-off is visible before merging:
    - **Automated path:** in the release PR description, alongside the auto-generated header.
    - **Manual path:** in the local working copy held in the working tree (do not commit it to the release branch). The filled file is then packaged into the evidence zip in step 4 and uploaded as a release asset; the gate is intentionally not tracked in the repo so per-release artifacts do not accumulate. See [Archiving the gate](#archiving-the-gate).
-4. After the tag pushes and the GitHub Release is created, package the filled gate plus any supporting evidence into a zip and upload it to the release as an asset. See [Archiving the gate](#archiving-the-gate).
+4. After the tag pushes, the GitHub Release is created, and every post-tag item is signed off (including the self-pin refresh PR for final releases — skipped for `vX.Y.Z-rc.N`), package the filled gate plus any supporting evidence into a zip and upload it to the release as an asset. See [Archiving the gate](#archiving-the-gate).
 
 The release PR body's checklist on the automated path is hard-coded in `buildPrBody` rather than generated from this document — when the gate's section structure changes, update both files in the same PR. On the manual path the maintainer copies this page directly, so the checklist always matches the doc.
 
@@ -39,7 +39,7 @@ npm run verify:prose-style
 `npm audit` is advisory — a non-zero exit does not automatically block the tag, but every advisory must be triaged (fix, accept with documented rationale, or defer with a tracked issue) before sign-off. Capture the machine-readable form alongside the human-readable run for the evidence zip:
 
 ```bash
-npm audit --json > audit.json
+npm audit --json > audit.json || true   # advisory exit codes propagate from npm audit; `|| true` keeps the capture step from aborting under `set -e`
 ```
 
 `audit.json` is the file referenced by [Archiving the gate](#archiving-the-gate) below.
