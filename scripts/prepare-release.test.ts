@@ -637,6 +637,8 @@ describe("buildPrBody", () => {
     expect(body).toContain("- [ ] Prompt-artifact leakage check");
     expect(body).toContain("uses the resolved custom reference content for each prompt");
     expect(body).toContain("gh run download <run-id> --name codex-prepare");
+    expect(body).toContain("scratch PR from a maintainer account");
+    expect(body).toContain("`allow-users` in `.github/workflows/codex-review.yaml`");
     expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
     expect(body).toContain("- [ ] Release-specific items table is filled below this checklist");
     expect(body).toContain("- [ ] Trust-boundary CHANGELOG callout");
@@ -1081,6 +1083,19 @@ describe("existingBodyHasMaintainerSignoff", () => {
   it("ignores Verified by / Waived occurrences inside fenced code blocks", () => {
     const body = "```\nVerified by: example — 2026-01-01\n```\n";
     expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
+  });
+
+  it("preserves Verified by detection even when the body contains an unmatched backtick (e.g., a PR title with a single backtick)", () => {
+    const body = [
+      "- #100 `release: minor` — Fix `release docs",
+      "",
+      "## Release gate sign-off",
+      "",
+      "Verified by: Maintainer — 2026-05-04",
+      "",
+      "Some `inline code` later",
+    ].join("\n");
+    expect(existingBodyHasMaintainerSignoff(body)).toBe(true);
   });
 
   it("does not match a PR title containing Waived: or Verified by:", () => {

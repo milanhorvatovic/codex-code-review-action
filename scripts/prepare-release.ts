@@ -361,9 +361,15 @@ const SIGNOFF_LINE_PATTERN =
 
 export function existingBodyHasMaintainerSignoff(body: string | null | undefined): boolean {
   if (body === null || body === undefined || body === "") return false;
+  // Inline-span stripping is intentionally line-bounded (`[^`\n]*` rather
+  // than `[^`]*`) so an unmatched backtick — e.g. a PR title containing a
+  // single backtick that the auto-header copies in verbatim — cannot swallow
+  // an entire region of the body up to the next backtick. Without the
+  // newline guard the regex could erase real `Verified by:` / `Waived:`
+  // lines, making a signed-off body look untouched on rerun.
   const stripped = body
     .replace(/```[\s\S]*?```/g, "")
-    .replace(/`[^`]*`/g, "");
+    .replace(/`[^`\n]*`/g, "");
   return SIGNOFF_LINE_PATTERN.test(stripped);
 }
 
@@ -524,7 +530,7 @@ export function buildSignoffSection(gateDocUrl: string = resolveGateDocUrl()): s
     `- [ ] Required validation block runs cleanly on the merge candidate (\`npm ci\` → \`npm run verify:prose-style\`); any \`npm audit\` advisories are triaged per [Required validation](${gateDocUrl}#required-validation) (fix, accept with documented rationale, or defer with a tracked issue).`,
     "- [ ] Dist reproducibility check is clean (`npm run build && git diff --exit-code -- dist package.json package-lock.json`).",
     "- [ ] Manual security regression checks for `review-reference-file` are confirmed against the merge candidate.",
-    "- [ ] Prompt-artifact leakage check: the resolved `reviewReference` flowing into the assembled prompt comes only from the validated path-resolver, never raw runner-local content. Confirmed by `src/prepare/referenceFile.test.ts` (path validation) and `src/prepare/main.test.ts` ('uses the resolved custom reference content for each prompt'). For direct inspection, download the `codex-prepare` artifact from the dogfood workflow run on the merge candidate (`gh run download <run-id> --name codex-prepare`) within its retention window and confirm the assembled prompt files contain only validated content.",
+    "- [ ] Prompt-artifact leakage check: the resolved `reviewReference` flowing into the assembled prompt comes only from the validated path-resolver, never raw runner-local content. Confirmed by `src/prepare/referenceFile.test.ts` (path validation) and `src/prepare/main.test.ts` ('uses the resolved custom reference content for each prompt'). For direct inspection, open a scratch PR from a maintainer account against the merge candidate (release PRs opened by `codex-review-action-release-bot[bot]` are excluded by `allow-users` in `.github/workflows/codex-review.yaml` and do not produce a `codex-prepare` artifact); when the dogfood prepare job completes, run `gh run download <run-id> --name codex-prepare` within its retention window and confirm the assembled prompt files contain only validated content.",
     "- [ ] Conditional `review-reference-source: base` checks are run, or waived with a rationale.",
     `- [ ] Release-specific items table is filled below this checklist with cross-references to owning PRs/issues, and each row resolved to \`Verified by:\` or \`Waived:\` (see [Release-specific items](${gateDocUrl}#release-specific-items)).`,
     "- [ ] Trust-boundary CHANGELOG callout is present if any merged PR contributing a release level (i.e. not `release: skip`) is labeled `trust-boundary`. (Skipped PRs do not appear in CHANGELOG entries, so they cannot trigger the callout requirement.)",
