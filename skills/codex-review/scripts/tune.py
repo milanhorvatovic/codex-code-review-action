@@ -15,7 +15,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from lib.diagnoses import Diagnosis, run_all_diagnoses
+from lib.diagnoses import Diagnosis, DiagnosisContext, run_all_diagnoses
 from lib.findings_loader import Findings, parse_findings
 
 
@@ -103,7 +103,11 @@ def _render_report(findings: Findings, diagnoses: tuple[Diagnosis, ...]) -> str:
 
 def run_tune(inputs: TuneInputs) -> TuneOutputs:
     findings = _load_findings(inputs)
-    diagnoses = run_all_diagnoses(findings)
+    ctx = DiagnosisContext(
+        reference_path=inputs.reference_path or DiagnosisContext().reference_path,
+        workflow_path=inputs.workflow_path or DiagnosisContext().workflow_path,
+    )
+    diagnoses = run_all_diagnoses(findings, ctx)
     report = _render_report(findings, diagnoses)
     return TuneOutputs(diagnoses=diagnoses, findings=findings, report=report)
 

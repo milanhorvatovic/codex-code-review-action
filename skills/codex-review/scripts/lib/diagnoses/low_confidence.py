@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from ..findings_loader import Findings
-from .types import Diagnosis, Recommendation
+from .types import Diagnosis, DiagnosisContext, Recommendation
 
 _VERDICT_THRESHOLD = 0.9
 _FINDING_BAND_LOWER = 0.5
 _FINDING_BAND_UPPER = 0.7
 
 
-def low_confidence_diagnosis(findings: Findings) -> Diagnosis:
+def low_confidence_diagnosis(findings: Findings, ctx: DiagnosisContext) -> Diagnosis:
     if findings.overall_confidence_score >= _VERDICT_THRESHOLD:
         return Diagnosis(kind="low-confidence", recommendations=(), triggered=False)
     in_band = [
@@ -23,8 +23,8 @@ def low_confidence_diagnosis(findings: Findings) -> Diagnosis:
     titles = tuple(finding.title for finding in in_band)
     diff = "\n".join(
         [
-            "--- a/.github/codex/review-reference.md",
-            "+++ b/.github/codex/review-reference.md",
+            f"--- a/{ctx.reference_path}",
+            f"+++ b/{ctx.reference_path}",
             "@@",
             "+## Calibration",
             "+",

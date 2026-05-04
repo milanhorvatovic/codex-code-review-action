@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from ..findings_loader import Findings
-from .types import Diagnosis, Recommendation
+from .types import Diagnosis, DiagnosisContext, Recommendation
 
 _BANNER_PHRASE = "incomplete review"
 
 
-def truncation_diagnosis(findings: Findings) -> Diagnosis:
+def truncation_diagnosis(findings: Findings, ctx: DiagnosisContext) -> Diagnosis:
     if _BANNER_PHRASE not in findings.summary.lower():
         return Diagnosis(kind="truncation", recommendations=(), triggered=False)
     titles = tuple(finding.title for finding in findings.findings)
     diff = "\n".join(
         [
-            "--- a/.github/workflows/codex-review.yaml",
-            "+++ b/.github/workflows/codex-review.yaml",
+            f"--- a/{ctx.workflow_path}",
+            f"+++ b/{ctx.workflow_path}",
             "@@",
             "       - id: prepare",
             "         uses: milanhorvatovic/codex-ai-code-review-action/prepare@<sha>",

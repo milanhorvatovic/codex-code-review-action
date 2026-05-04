@@ -52,6 +52,23 @@ class TuneTests(unittest.TestCase):
         with self.assertRaises(TuneError):
             run_tune(TuneInputs())
 
+    def test_path_overrides_propagate_into_diff_hunks(self) -> None:
+        out = run_tune(
+            TuneInputs(
+                findings_path=str(_FIXTURES / "noisy-p3.json"),
+                workflow_path=".github/workflows/code-review.yaml",
+                reference_path=".codex/policy.md",
+            )
+        )
+        # The noisy-p3 diff is workflow-targeted; verify the workflow path is honored.
+        self.assertIn(".github/workflows/code-review.yaml", out.report)
+        self.assertNotIn("<your-workflow-path>", out.report)
+
+    def test_default_paths_render_as_placeholders(self) -> None:
+        out = run_tune(TuneInputs(findings_path=str(_FIXTURES / "low-confidence-verdict.json")))
+        # When no path is supplied, the diff hunks use placeholder text rather than lying about paths.
+        self.assertIn("<your-review-reference-path>", out.report)
+
 
 if __name__ == "__main__":
     unittest.main()

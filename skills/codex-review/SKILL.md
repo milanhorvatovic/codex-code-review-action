@@ -19,7 +19,7 @@ name: codex-review
 
 Router skill for the [`milanhorvatovic/codex-ai-code-review-action`](https://github.com/milanhorvatovic/codex-ai-code-review-action) GitHub Action.
 
-The action ships three composite sub-actions (`prepare`, `review`, `publish`) that compose a privilege-separated PR review pipeline. Adoption is non-trivial: the consumer picks `min-confidence`, authors a project-specific `review-reference-file`, sizes `max-chunk-bytes`, gates `OPENAI_API_KEY` to a single job, pins all three sub-actions to the same SHA, and walks the [`docs/consumer-controls.md`](../../docs/consumer-controls.md) checklist. This skill compresses that work into two capabilities and validates the result against the same checklist before emitting any file.
+The action ships three composite sub-actions (`prepare`, `review`, `publish`) that compose a privilege-separated PR review pipeline. Adoption is non-trivial: the consumer picks `min-confidence`, authors a project-specific `review-reference-file`, sizes `max-chunk-bytes`, gates `OPENAI_API_KEY` to a single job, pins all three sub-actions to the same SHA, and walks the [consumer-controls audit checklist](https://github.com/milanhorvatovic/codex-ai-code-review-action/blob/main/docs/consumer-controls.md). This skill compresses that work into two capabilities and validates the result against the same checklist before emitting any file.
 
 ## Capabilities
 

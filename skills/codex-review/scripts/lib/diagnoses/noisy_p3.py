@@ -5,12 +5,12 @@ from __future__ import annotations
 import math
 
 from ..findings_loader import Findings
-from .types import Diagnosis, Recommendation
+from .types import Diagnosis, DiagnosisContext, Recommendation
 
 _P3_COUNT_THRESHOLD = 6
 
 
-def noisy_p3_diagnosis(findings: Findings) -> Diagnosis:
+def noisy_p3_diagnosis(findings: Findings, ctx: DiagnosisContext) -> Diagnosis:
     p3 = [finding for finding in findings.findings if finding.priority == 3]
     if len(p3) <= _P3_COUNT_THRESHOLD:
         return Diagnosis(kind="noisy-p3", recommendations=(), triggered=False)
@@ -21,8 +21,8 @@ def noisy_p3_diagnosis(findings: Findings) -> Diagnosis:
     titles = tuple(finding.title for finding in p3)
     diff = "\n".join(
         [
-            "--- a/.github/workflows/codex-review.yaml",
-            "+++ b/.github/workflows/codex-review.yaml",
+            f"--- a/{ctx.workflow_path}",
+            f"+++ b/{ctx.workflow_path}",
             "@@",
             "       - uses: milanhorvatovic/codex-ai-code-review-action/publish@<sha>",
             "         with:",
@@ -37,7 +37,7 @@ def noisy_p3_diagnosis(findings: Findings) -> Diagnosis:
         [
             f"Found {len(p3)} P3 (minor) findings.",
             f"Setting publish.min-confidence to {cutoff:.2f} would prune the bottom 75% of P3 findings on this run.",
-            "If P3 noise is concentrated in one file-type section of your review-reference.md, consider pruning that section instead — that addresses the cause, not the symptom.",
+            "If P3 noise is concentrated in one file-type section of your review-reference, consider pruning that section instead — that addresses the cause, not the symptom.",
             "Affected finding titles below.",
         ]
     )

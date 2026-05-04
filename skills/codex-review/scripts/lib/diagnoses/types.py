@@ -12,6 +12,22 @@ type RecommendationTarget = Literal["reference-file", "workflow"]
 
 
 @dataclass(frozen=True)
+class DiagnosisContext:
+    """Paths the diagnoses use when rendering diff hunks.
+
+    The fields are integrator-supplied; the integrator runs `tune` and may
+    pass --reference-path / --workflow-path to point at whatever conventions
+    their repo uses. The diagnoses use these values verbatim in the unified
+    diff hunks so the integrator can apply the patch without retargeting.
+    Default values are placeholders that make it obvious the integrator did
+    not point the script at their actual files.
+    """
+
+    reference_path: str = "<your-review-reference-path>"
+    workflow_path: str = "<your-workflow-path>"
+
+
+@dataclass(frozen=True)
 class Recommendation:
     contributing_findings: tuple[str, ...]
     diff: str
@@ -27,4 +43,4 @@ class Diagnosis:
     triggered: bool
 
 
-type DiagnosisFn = Callable[[Findings], Diagnosis]
+type DiagnosisFn = Callable[[Findings, DiagnosisContext], Diagnosis]

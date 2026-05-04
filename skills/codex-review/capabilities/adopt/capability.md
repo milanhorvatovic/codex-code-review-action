@@ -45,6 +45,6 @@ The script refuses to write any artifact when an invariant fails — surface the
 
 - [`../../references/invariants.md`](../../references/invariants.md) — `CC-01..CC-09` predicates the script asserts before emitting.
 - [`../../references/pin-resolution.md`](../../references/pin-resolution.md) — runtime pin contract.
-- [`docs/consumer-controls.md`](../../../docs/consumer-controls.md) — human-readable invariants and the audit checklist.
+- [Consumer-controls audit checklist](https://github.com/milanhorvatovic/codex-ai-code-review-action/blob/main/docs/consumer-controls.md) — human-readable invariants and the audit checklist (in the action repo).
 - The action's `defaults/review-reference.md` (fetched at runtime) — the upstream baseline the layerer composes against.
 - The action's `review-reference-file` input documentation — supports any workspace-relative path subject to the safety constraints.
