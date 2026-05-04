@@ -255,10 +255,13 @@ jobs:
       #      approval step exited 0: if `DEPENDABOT_APPROVE_TOKEN` belongs to a non-CODEOWNER
       #      identity, `gh pr review --approve` succeeds but `reviewDecision` stays
       #      `REVIEW_REQUIRED` and we correctly fall back instead of failing on the merge.
-      #   2. Fail-safe label query. The trust-boundary label is queried via a tri-state
-      #      helper that returns `unknown` on `gh pr view` errors. Unknown defers to the
-      #      auto-merge fallback path, which has a reactive `disable-auto-merge-on-trust-
-      #      boundary` job as a backstop — strictly safer than silent fail-open.
+      #   2. Fail-closed label query. The trust-boundary label is queried via a tri-state
+      #      helper that returns `unknown` on `gh pr view` errors. Pre- and post-poll
+      #      `unknown` exits the job with `::error::` rather than arming auto-merge: if
+      #      the label was actually present and the reactive disable job already ran, an
+      #      armed auto-merge here cannot be backstopped. The same fail-closed treatment
+      #      runs after `arm_auto_merge` enables auto-merge — `unknown` triggers a
+      #      defensive `gh pr merge --disable-auto` and a non-zero return.
       #   3. Concurrency-safe. Workflow-level concurrency cancels overlapping runs on the
       #      same PR, so the `gh pr checks --watch` loop here is interrupted cleanly when
       #      a new commit lands rather than racing a fresh run.
@@ -287,11 +290,14 @@ jobs:
 
           # Tri-state trust-boundary label query.  Returns "true" / "false" on a successful
           # gh response and "unknown" if the API call fails (rate limit, network, 5xx).
-          # Callers treat "unknown" the same as "fall back to auto-merge" rather than
-          # silently fail-opening to a sync merge that could let a labeled PR through.
+          # Callers handle "unknown" by failing closed — see the helper-level comments
+          # below for the policy reasoning. Stderr is intentionally NOT redirected so the
+          # underlying gh failure (auth, rate limit, transient 5xx) lands in the workflow
+          # log; the downstream `unknown` error messages tell maintainers to investigate
+          # that output.
           trust_boundary_state() {
             local result
-            if ! result=$(gh pr view "$PR_URL" --json labels --jq 'any(.labels[]; .name == "trust-boundary")' 2>/dev/null); then
+            if ! result=$(gh pr view "$PR_URL" --json labels --jq 'any(.labels[]; .name == "trust-boundary")'); then
               echo "unknown"
               return
             fi
@@ -307,7 +313,7 @@ jobs:
           # Returns 0 on success, 1 on failure (with `::error::` annotations emitted).
           verify_auto_merge_or_terminal() {
             local state_json pr_state has_auto
-            if ! state_json=$(gh pr view "$PR_URL" --json state,autoMergeRequest 2>/dev/null); then
+            if ! state_json=$(gh pr view "$PR_URL" --json state,autoMergeRequest); then
               echo "::error::Failed to verify PR state after the gh pr merge --auto call. Cannot confirm whether auto-merge was enabled; manual intervention required."
               return 1
             fi
@@ -425,7 +431,7 @@ jobs:
           # is GitHub's authoritative answer — `APPROVED` only when every applicable rule
           # (incl. code-owner review) is met, regardless of whether `gh pr review --approve`
           # exited 0 above.
-          if ! review_decision=$(gh pr view "$PR_URL" --json reviewDecision --jq .reviewDecision 2>/dev/null); then
+          if ! review_decision=$(gh pr view "$PR_URL" --json reviewDecision --jq .reviewDecision); then
             fall_back_to_auto_merge "Failed to query reviewDecision"
           fi
           if [ "$review_decision" != "APPROVED" ]; then
