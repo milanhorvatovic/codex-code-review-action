@@ -372,7 +372,7 @@ The review action wraps [`openai/codex-action`](https://github.com/openai/codex-
 
 ## Customizing review rules per repository
 
-> **Quick adopt.** A bundled Claude Code skill at [`skills/codex-review/`](skills/codex-review/) generates the workflow file, a starter `.github/codex/review-reference.md`, and an audit-mapped `ADOPTION.md` in one pass. Invoke `codex-review:adopt` from a Claude Code session checked out against the consumer repository; the skill emits files for human review before commit and never auto-PRs anything. The manual path documented below remains canonical and is what `codex-review:adopt` mirrors. See [`docs/consumer-controls.md`](docs/consumer-controls.md) for the audit checklist the skill walks before it writes any artifact.
+> **Quick adopt.** A bundled Agent Skill at [`skills/codex-review/`](skills/codex-review/) generates the workflow file, a starter `.github/codex/review-reference.md`, and an audit-mapped `ADOPTION.md` in one pass. Invoke `codex-review:adopt` from an Agent Skills-capable client checked out against the consumer repository, or run `python3 scripts/adopt.py --target-repo <repo>` from the installed skill directory. The skill emits files for human review before commit and never auto-PRs anything. The manual path documented below remains canonical and is what `codex-review:adopt` mirrors. See [`docs/consumer-controls.md`](docs/consumer-controls.md) for the audit checklist the skill walks before it writes any artifact.
 
 The review reference file controls what the AI focuses on during reviews — language-specific checklists, focus areas, examples, and confidence calibration.
 

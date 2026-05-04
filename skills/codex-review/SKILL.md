@@ -23,6 +23,12 @@ The action ships three composite sub-actions (`prepare`, `review`, `publish`) th
 
 This skill is installed as a companion artifact. It does not assume any checkout of the action implementation, and it does not read maintainer-only files. Helper scripts operate on explicit consumer paths, fetch upstream release artifacts via `gh api`, or use caller-supplied reviewed pin values for offline/pre-resolved runs.
 
+## Portability
+
+Use this skill from any Agent Skills-capable client against any consumer repository adopting this action. The working checkout does not need to be this source repository: `adopt` accepts `--target-repo`, and `tune` accepts a retained `findings.json` plus optional consumer workflow/reference paths.
+
+Clients that do not auto-route `capabilities/` should load `capabilities/adopt/capability.md` for setup/refresh/audit requests and `capabilities/tune/capability.md` for retained-finding diagnosis requests.
+
 ## Capabilities
 
 Route to the appropriate capability based on the integrator's intent:
