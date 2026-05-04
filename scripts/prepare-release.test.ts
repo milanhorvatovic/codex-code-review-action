@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -591,6 +594,45 @@ describe("resolveTargetVersion", () => {
   });
 });
 
+describe("gate doc / PR body checklist drift", () => {
+  // Categories that BOTH `docs/release-gate.md` and `buildSignoffSection` must
+  // cover. If a future edit adds or removes a category from one without
+  // updating the other, this test fails. The list is the contract; updating
+  // it is part of any change that adds/removes a gate category.
+  // Substrings present in BOTH the doc's section and the corresponding PR
+  // body bullet. The doc uses prose section headings; the PR body uses
+  // checklist items that mention the same concept. The shared substring is
+  // the contract.
+  const GATE_CATEGORIES = [
+    "Required validation",
+    "Dist reproducibility",
+    "Manual security regression checks",
+    "review-reference-source: base", // Conditional base-mode checks
+    "Release-specific items",
+    "Trust-boundary",
+    "Archiving the gate",
+  ] as const;
+
+  const gateDocPath = fileURLToPath(
+    new URL("../docs/release-gate.md", import.meta.url),
+  );
+  const gateDoc = readFileSync(gateDocPath, "utf-8");
+  const signoff = buildSignoffSection("https://example.test/release-gate.md");
+
+  for (const category of GATE_CATEGORIES) {
+    it(`docs/release-gate.md and buildSignoffSection both reference "${category}"`, () => {
+      expect(
+        gateDoc,
+        `docs/release-gate.md is missing a reference to "${category}"; if the category was renamed or removed, update GATE_CATEGORIES too.`,
+      ).toContain(category);
+      expect(
+        signoff,
+        `buildSignoffSection is missing a reference to "${category}"; if the category was renamed or removed, update GATE_CATEGORIES too.`,
+      ).toContain(category);
+    });
+  }
+});
+
 describe("buildPrBody", () => {
   it("includes counts, since-line, and pre-release flag", () => {
     const body = buildPrBody({
@@ -637,8 +679,8 @@ describe("buildPrBody", () => {
     expect(body).toContain("- [ ] Prompt-artifact leakage check");
     expect(body).toContain("uses the resolved custom reference content for each prompt");
     expect(body).toContain("gh run download <run-id> --name codex-prepare");
-    expect(body).toContain("scratch PR from a maintainer account");
-    expect(body).toContain("`allow-users` in `.github/workflows/codex-review.yaml`");
+    expect(body).toContain("`allow-users`");
+    expect(body).toContain("widen `allow-users`");
     expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
     expect(body).toContain("- [ ] Release-specific items table is filled below this checklist");
     expect(body).toContain("- [ ] Trust-boundary CHANGELOG callout");
@@ -1096,6 +1138,24 @@ describe("existingBodyHasMaintainerSignoff", () => {
       "Some `inline code` later",
     ].join("\n");
     expect(existingBodyHasMaintainerSignoff(body)).toBe(true);
+  });
+
+  it("ignores signals above the marker so they don't route to merge mode and get dropped", () => {
+    // The merge path slices from the marker onward, so any sign-off
+    // detected above the marker would be classified as edit but then
+    // silently lost. Scope detection to the marker-onward section.
+    const body = [
+      "Auto-header preamble.",
+      "",
+      "Verified by: Maintainer — 2026-05-04",
+      "",
+      "- [x] Some pre-marker checked box",
+      "",
+      "## Release gate sign-off",
+      "",
+      "- [ ] Required validation block runs cleanly on the merge candidate",
+    ].join("\n");
+    expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
   });
 
   it("does not match a PR title containing Waived: or Verified by:", () => {
