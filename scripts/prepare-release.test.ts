@@ -736,16 +736,19 @@ describe("resolveGateDocUrl", () => {
     ).toBe("https://ghe.example.com/ghe/repo/blob/main/docs/release-gate.md");
   });
 
-  it("uses GITHUB_REF_NAME when set so non-main default branches resolve correctly", () => {
+  it("ignores GITHUB_REF_NAME (workflow run ref, not repo default branch) and falls back to git-default or main", () => {
+    // GITHUB_REF_NAME under workflow_dispatch is the dispatch ref (often
+    // a release branch), not the repository default. Pinning the audit
+    // link to it would 404 after the branch is deleted post-merge.
     expect(
       resolveGateDocUrl({
         GITHUB_REPOSITORY: "team/repo",
-        GITHUB_REF_NAME: "trunk",
+        GITHUB_REF_NAME: "release/v2.1.0",
       }),
-    ).toBe("https://github.com/team/repo/blob/trunk/docs/release-gate.md");
+    ).toBe("https://github.com/team/repo/blob/main/docs/release-gate.md");
   });
 
-  it("uses git-fallback defaultBranch when env is unset", () => {
+  it("uses git-fallback defaultBranch when set", () => {
     expect(
       resolveGateDocUrl({}, {
         host: "https://github.com",
@@ -755,20 +758,20 @@ describe("resolveGateDocUrl", () => {
     ).toBe("https://github.com/team/repo/blob/trunk/docs/release-gate.md");
   });
 
-  it("falls back to main when neither env nor git-fallback specifies a branch", () => {
+  it("falls back to main when neither branchOverride nor git-fallback specifies a branch", () => {
     expect(
       resolveGateDocUrl({}, { host: "https://github.com", repo: "team/repo" }),
     ).toBe("https://github.com/team/repo/blob/main/docs/release-gate.md");
   });
 
-  it("branchOverride wins over env and git-fallback so callers can pin the link to a release branch", () => {
+  it("branchOverride wins over git-fallback so callers can opt into a non-default branch", () => {
     expect(
       resolveGateDocUrl(
-        { GITHUB_REF_NAME: "main", GITHUB_REPOSITORY: "team/repo" },
+        { GITHUB_REPOSITORY: "team/repo" },
         { host: "https://github.com", repo: "team/repo", defaultBranch: "trunk" },
-        "release/v2.1.0",
+        "feature-branch",
       ),
-    ).toBe("https://github.com/team/repo/blob/release/v2.1.0/docs/release-gate.md");
+    ).toBe("https://github.com/team/repo/blob/feature-branch/docs/release-gate.md");
   });
 });
 

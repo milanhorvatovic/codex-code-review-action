@@ -454,11 +454,18 @@ export function buildAutoHeaderSection(args: {
 // 3. Hard-coded upstream fallback (`https://github.com` + the canonical
 //    upstream `owner/repo`) for environments that have neither.
 //
-// The branch in the URL path follows the same precedence: env
-// (`GITHUB_REF_NAME`) → git fallback (parsed from
-// `git symbolic-ref refs/remotes/origin/HEAD`) → hard-coded `main`.
-// Forks/internal mirrors whose default branch is not `main` keep working as
-// long as either env or git provides the correct ref.
+// The branch in the URL path resolves through `branchOverride` (explicit
+// caller pin) → git fallback (`origin/HEAD` resolved via
+// `git symbolic-ref refs/remotes/origin/HEAD`) → hard-coded `main`. Note
+// that `GITHUB_REF_NAME` is intentionally NOT consulted: under
+// `workflow_dispatch` it carries the dispatch ref (e.g. `release/v2.1.0`
+// when the workflow is rerun from the release branch), not the
+// repository's default branch. Pinning the audit link to the dispatch ref
+// would 404 after the branch is deleted post-merge — defeating the
+// durable-audit-link goal documented in `docs/release-gate.md`. Forks and
+// internal mirrors whose default branch is not `main` keep working as
+// long as `origin/HEAD` is set on the clone or the caller passes
+// `branchOverride`.
 const DEFAULT_GATE_DOC_HOST = "https://github.com";
 const DEFAULT_GATE_DOC_REPO = "milanhorvatovic/codex-ai-code-review-action";
 const DEFAULT_GATE_DOC_BRANCH = "main";
@@ -470,14 +477,8 @@ export function resolveGateDocUrl(
 ): string {
   const host = env.GITHUB_SERVER_URL ?? gitFallback?.host ?? DEFAULT_GATE_DOC_HOST;
   const repo = env.GITHUB_REPOSITORY ?? gitFallback?.repo ?? DEFAULT_GATE_DOC_REPO;
-  // `branchOverride` wins when provided so callers (e.g. `runCli` pinning
-  // the link to `release/v<X.Y.Z>`) can override the default-branch fallback
-  // chain. This keeps the link aligned with the merge candidate that
-  // reviewers are actually approving rather than whatever main happens to
-  // hold at view time.
   const branch =
     branchOverride ??
-    env.GITHUB_REF_NAME ??
     gitFallback?.defaultBranch ??
     DEFAULT_GATE_DOC_BRANCH;
   return `${host}/${repo}/blob/${branch}/docs/release-gate.md`;
