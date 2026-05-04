@@ -691,6 +691,31 @@ describe("resolveGateDocUrl", () => {
       ),
     ).toBe("https://ghe.example.com/ghe/repo/blob/main/docs/release-gate.md");
   });
+
+  it("uses GITHUB_REF_NAME when set so non-main default branches resolve correctly", () => {
+    expect(
+      resolveGateDocUrl({
+        GITHUB_REPOSITORY: "team/repo",
+        GITHUB_REF_NAME: "trunk",
+      }),
+    ).toBe("https://github.com/team/repo/blob/trunk/docs/release-gate.md");
+  });
+
+  it("uses git-fallback defaultBranch when env is unset", () => {
+    expect(
+      resolveGateDocUrl({}, {
+        host: "https://github.com",
+        repo: "team/repo",
+        defaultBranch: "trunk",
+      }),
+    ).toBe("https://github.com/team/repo/blob/trunk/docs/release-gate.md");
+  });
+
+  it("falls back to main when neither env nor git-fallback specifies a branch", () => {
+    expect(
+      resolveGateDocUrl({}, { host: "https://github.com", repo: "team/repo" }),
+    ).toBe("https://github.com/team/repo/blob/main/docs/release-gate.md");
+  });
 });
 
 describe("parseGitRemoteUrl", () => {
@@ -713,6 +738,13 @@ describe("parseGitRemoteUrl", () => {
     expect(parseGitRemoteUrl("https://github.com/owner/repo")).toEqual({
       host: "https://github.com",
       repo: "owner/repo",
+    });
+  });
+
+  it("preserves http:// scheme for internal mirrors (does not force https)", () => {
+    expect(parseGitRemoteUrl("http://ghe.internal/team/repo.git")).toEqual({
+      host: "http://ghe.internal",
+      repo: "team/repo",
     });
   });
 
@@ -1390,13 +1422,16 @@ describe("runCli (rerun body-refresh integration)", () => {
     expect(editCall).toBeDefined();
   });
 
-  it("skips the body refresh when no file changes AND a remote release branch already exists (stale-branch guard)", () => {
+  function runStaleBranchScenario(treeMatch: "match" | "mismatch") {
     const ghCalls: Array<{ args: string[] }> = [];
     const stdout: string[] = [];
     const stderr: string[] = [];
 
     const branch = "release/v2.1.0";
     const remoteSha = "deadbeefcafebabe1234";
+    const branchTreeSha = "branchtree000000";
+    const mainTreeSha = treeMatch === "match" ? branchTreeSha : "maintree00000000";
+
     const ghRoutes: Record<string, string> = {
       "release list --limit 100 --json tagName,publishedAt,isPrerelease": JSON.stringify([
         { tagName: "v2.0.0", publishedAt: "2026-04-07T00:00:00Z", isPrerelease: false },
@@ -1442,7 +1477,13 @@ describe("runCli (rerun body-refresh integration)", () => {
         if (args[0] === "ls-remote" && args[1] === "--heads") {
           return `${remoteSha}\trefs/heads/${branch}\n`;
         }
-        if (args[0] === "rev-parse") return `${remoteSha}\n`;
+        if (args[0] === "rev-parse") {
+          const target = args[1];
+          if (target === `${remoteSha}^{tree}`) return `${branchTreeSha}\n`;
+          if (target === "origin/main^{tree}") return `${mainTreeSha}\n`;
+          if (target === `refs/remotes/origin/${branch}`) return `${remoteSha}\n`;
+          return "\n";
+        }
         if (args[0] === "log" && args.includes("--format=%cI")) return "2026-04-07T00:00:00Z\n";
         if (args[0] === "log" && args.includes("--format=%H%x09%ae%x09%ce")) return "";
         if (args[0] === "diff" && args.includes("--cached")) return "";
@@ -1453,15 +1494,39 @@ describe("runCli (rerun body-refresh integration)", () => {
       stderrWrite: (chunk) => stderr.push(chunk),
     });
 
-    expect(stderr.join("")).toBe("");
-    const out = stdout.join("");
-    expect(out).toContain("Skipping commit/push");
-    expect(out).toContain(`Skipping PR body refresh on release PR #42`);
-    expect(out).toContain(`branch ${branch} (sha=${remoteSha}) may not match`);
+    return {
+      ghCalls,
+      stdout: stdout.join(""),
+      stderr: stderr.join(""),
+      branch,
+      remoteSha,
+    };
+  }
+
+  it("skips the body refresh when no file changes AND the remote branch's tree diverges from origin/main (stale)", () => {
+    const { ghCalls, stdout, stderr, branch, remoteSha } =
+      runStaleBranchScenario("mismatch");
+    expect(stderr).toBe("");
+    expect(stdout).toContain("Skipping commit/push");
+    expect(stdout).toContain(`Skipping PR body refresh on release PR #42`);
+    expect(stdout).toContain(
+      `branch ${branch} (sha=${remoteSha}) does not match origin/main's tree`,
+    );
     const editCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "edit");
     expect(editCall).toBeUndefined();
     const viewCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "view");
     expect(viewCall).toBeUndefined();
+  });
+
+  it("refreshes the body when no file changes but the remote branch's tree matches origin/main (template-text-only update with branch in sync)", () => {
+    const { ghCalls, stdout, stderr, branch, remoteSha } =
+      runStaleBranchScenario("match");
+    expect(stderr).toBe("");
+    expect(stdout).toContain(
+      `Release branch ${branch} (sha=${remoteSha}) matches origin/main's tree`,
+    );
+    const editCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "edit");
+    expect(editCall).toBeDefined();
   });
 
   it("skips the body update when sign-off is present but the marker heading is missing", () => {

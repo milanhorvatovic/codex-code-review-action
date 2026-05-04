@@ -436,22 +436,34 @@ export function buildAutoHeaderSection(args: {
 //    links that point at the cloned repository, not the upstream.
 // 3. Hard-coded upstream fallback (`https://github.com` + the canonical
 //    upstream `owner/repo`) for environments that have neither.
+//
+// The branch in the URL path follows the same precedence: env
+// (`GITHUB_REF_NAME`) → git fallback (parsed from
+// `git symbolic-ref refs/remotes/origin/HEAD`) → hard-coded `main`.
+// Forks/internal mirrors whose default branch is not `main` keep working as
+// long as either env or git provides the correct ref.
 const DEFAULT_GATE_DOC_HOST = "https://github.com";
 const DEFAULT_GATE_DOC_REPO = "milanhorvatovic/codex-ai-code-review-action";
+const DEFAULT_GATE_DOC_BRANCH = "main";
 
 export function resolveGateDocUrl(
   env: NodeJS.ProcessEnv = process.env,
-  gitFallback?: { host: string; repo: string },
+  gitFallback?: { host: string; repo: string; defaultBranch?: string },
 ): string {
   const host = env.GITHUB_SERVER_URL ?? gitFallback?.host ?? DEFAULT_GATE_DOC_HOST;
   const repo = env.GITHUB_REPOSITORY ?? gitFallback?.repo ?? DEFAULT_GATE_DOC_REPO;
-  return `${host}/${repo}/blob/main/docs/release-gate.md`;
+  const branch =
+    env.GITHUB_REF_NAME ?? gitFallback?.defaultBranch ?? DEFAULT_GATE_DOC_BRANCH;
+  return `${host}/${repo}/blob/${branch}/docs/release-gate.md`;
 }
 
 // Parses an `origin` remote URL into a `{ host, repo }` pair. Recognizes the
 // two forms `git remote get-url` typically returns:
-//   - SSH: `git@<host>:<owner>/<repo>(.git)?`
-//   - HTTPS: `https?://<host>/<owner>/<repo>(.git)?`
+//   - SSH: `git@<host>:<owner>/<repo>(.git)?` — emitted as `https://<host>`
+//     because SSH remote URLs do not carry an HTTP-scheme; HTTPS is the
+//     only browser-resolvable option.
+//   - HTTP(S): `https?://<host>/<owner>/<repo>(.git)?` — preserves the
+//     matched scheme so internal mirrors using plain HTTP keep working.
 // Returns null on any unrecognized form so callers can fall back cleanly.
 export function parseGitRemoteUrl(
   remoteUrl: string,
@@ -460,8 +472,8 @@ export function parseGitRemoteUrl(
   if (trimmed === "") return null;
   const ssh = /^git@([^:]+):(.+?)(?:\.git)?$/.exec(trimmed);
   if (ssh) return { host: `https://${ssh[1]}`, repo: ssh[2] };
-  const http = /^https?:\/\/(?:[^@/]+@)?([^/]+)\/(.+?)(?:\.git)?$/.exec(trimmed);
-  if (http) return { host: `https://${http[1]}`, repo: http[2] };
+  const http = /^(https?):\/\/(?:[^@/]+@)?([^/]+)\/(.+?)(?:\.git)?$/.exec(trimmed);
+  if (http) return { host: `${http[1]}://${http[2]}`, repo: http[3] };
   return null;
 }
 
@@ -925,11 +937,22 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
       }
     }
 
-    let gitFallback: { host: string; repo: string } | undefined;
+    let gitFallback: { host: string; repo: string; defaultBranch?: string } | undefined;
     try {
       const remoteUrl = runGit(["remote", "get-url", "origin"]).trim();
       const parsed = parseGitRemoteUrl(remoteUrl);
-      if (parsed !== null) gitFallback = parsed;
+      if (parsed !== null) {
+        let defaultBranch: string | undefined;
+        try {
+          const ref = runGit(["symbolic-ref", "refs/remotes/origin/HEAD"]).trim();
+          const m = /^refs\/remotes\/origin\/(.+)$/.exec(ref);
+          if (m && m[1] !== undefined) defaultBranch = m[1];
+        } catch {
+          // origin/HEAD not set; defaultBranch stays undefined and
+          // resolveGateDocUrl falls back to its built-in default ("main").
+        }
+        gitFallback = { ...parsed, defaultBranch };
+      }
     } catch {
       // git remote unavailable; resolveGateDocUrl falls back to the
       // hard-coded upstream default.
@@ -979,10 +1002,31 @@ export function runCli(deps: PrepareReleaseDeps = {}): number {
     } else {
       const number = firstOpenPr.number;
       if (!hasFileChanges && remoteSha !== "") {
+        // Distinguish "branch tip matches main+bumps" (safe to refresh body)
+        // from "branch tip diverges from main" (stale; skip and warn).
+        // Tree-hash equality is sufficient — if both refs point at the same
+        // tree the PR body refresh describes a state byte-identical to the
+        // branch tip, regardless of commit-graph history.
+        let branchTreeMatchesMain = false;
+        try {
+          const branchTree = runGit(["rev-parse", `${remoteSha}^{tree}`]).trim();
+          const mainTree = runGit(["rev-parse", "origin/main^{tree}"]).trim();
+          if (branchTree !== "" && branchTree === mainTree) {
+            branchTreeMatchesMain = true;
+          }
+        } catch {
+          // rev-parse failed; treat as unknown state and prefer the safe
+          // skip-and-warn path below.
+        }
+        if (!branchTreeMatchesMain) {
+          stdoutWrite(
+            `Skipping PR body refresh on release PR #${number}: no commit was pushed this run and the remote release branch ${branch} (sha=${remoteSha}) does not match origin/main's tree. Refreshing the body now would describe a state that does not match the branch tip; close the PR or delete the branch and re-run if a refresh is required.\n`,
+          );
+          return 0;
+        }
         stdoutWrite(
-          `Skipping PR body refresh on release PR #${number}: no commit was pushed this run and the remote release branch ${branch} (sha=${remoteSha}) may not match the current main+bumps state. Refreshing the body now would describe a state that does not match the branch tip; close the PR or delete the branch and re-run if a refresh is required.\n`,
+          `Release branch ${branch} (sha=${remoteSha}) matches origin/main's tree; refreshing PR body to pick up template updates.\n`,
         );
-        return 0;
       }
       const existingBodyJson = runGh([
         "pr",
