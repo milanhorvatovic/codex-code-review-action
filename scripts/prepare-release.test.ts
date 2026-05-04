@@ -740,6 +740,17 @@ describe("parseGitRemoteUrl", () => {
     });
   });
 
+  it("parses scp-style SSH with non-default usernames (custom SSH config aliases)", () => {
+    expect(parseGitRemoteUrl("alice@ghe.example.com:team/repo.git")).toEqual({
+      host: "https://ghe.example.com",
+      repo: "team/repo",
+    });
+    expect(parseGitRemoteUrl("deploy-bot@github.com:owner/repo")).toEqual({
+      host: "https://github.com",
+      repo: "owner/repo",
+    });
+  });
+
   it("parses URL-style ssh:// origin URL into host and repo", () => {
     expect(parseGitRemoteUrl("ssh://git@github.com/owner/repo.git")).toEqual({
       host: "https://github.com",
@@ -968,6 +979,13 @@ describe("existingBodyHasMaintainerEdits", () => {
     expect(existingBodyHasMaintainerEdits("- [x] Required validation block runs cleanly")).toBe(
       true,
     );
+  });
+
+  it("treats a body whose signoff section was generated with a different gateDocUrl as untouched (URL changes alone don't count as edits)", () => {
+    const oldUrl = "https://github.com/old-owner/old-repo/blob/main/docs/release-gate.md";
+    const newUrl = "https://github.com/new-owner/new-repo/blob/release/v2.1.0/docs/release-gate.md";
+    const oldBody = `${buildAutoHeaderSection(args)}\n\n${buildSignoffSection(oldUrl)}`;
+    expect(existingBodyHasMaintainerEdits(oldBody, newUrl)).toBe(false);
   });
 
   it("returns true when the signoff section has a non-template line (added note, modified row)", () => {

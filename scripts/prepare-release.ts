@@ -468,8 +468,10 @@ export function resolveGateDocUrl(
 
 // Parses an `origin` remote URL into a `{ host, repo }` pair. Recognizes the
 // three forms `git remote get-url` typically returns:
-//   - scp-style SSH: `git@<host>:<owner>/<repo>(.git)?` — emitted as
-//     `https://<host>` because SSH remote URLs do not carry an HTTP scheme.
+//   - scp-style SSH: `<user>@<host>:<owner>/<repo>(.git)?` — `<user>` is
+//     conventionally `git` but can be any non-empty username (custom SSH
+//     config aliases). Emitted as `https://<host>` because SSH remote URLs
+//     do not carry an HTTP scheme.
 //   - URL-style SSH: `ssh://[<user>@]<host>[:<port>]/<owner>/<repo>(.git)?`
 //     — same emission rule as scp-style; the user, port, and any leading
 //     slash on the path are stripped.
@@ -481,7 +483,7 @@ export function parseGitRemoteUrl(
 ): { host: string; repo: string } | null {
   const trimmed = remoteUrl.trim();
   if (trimmed === "") return null;
-  const scp = /^git@([^:]+):(.+?)(?:\.git)?$/.exec(trimmed);
+  const scp = /^[^@:/\s]+@([^:]+):(.+?)(?:\.git)?$/.exec(trimmed);
   if (scp) return { host: `https://${scp[1]}`, repo: scp[2] };
   const sshUrl = /^ssh:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/+(.+?)(?:\.git)?$/.exec(
     trimmed,
@@ -583,6 +585,14 @@ export function buildPrBody(args: {
 // has since changed are an unusual workflow. If preservation matters, write
 // a `Verified by:` or `Waived:` line, tick a checkbox, or keep the
 // `<!-- release-gate-template-version:vN -->` marker intact.
+// Strips Markdown link targets (the URL inside parentheses) for the
+// unknown-lines comparison. URL changes alone (server, repo, or branch
+// rotated between runs) shouldn't make untouched bodies look edited; only
+// structural / textual divergence should.
+function normalizeLineForUnknownLinesCheck(line: string): string {
+  return line.replace(/\(https?:\/\/[^)]+\)/g, "(URL)");
+}
+
 export function existingBodyHasMaintainerEdits(
   existingBody: string | null | undefined,
   gateDocUrl: string = resolveGateDocUrl(),
@@ -600,10 +610,10 @@ export function existingBodyHasMaintainerEdits(
   const templateLines = new Set(
     buildSignoffSection(gateDocUrl)
       .split("\n")
-      .map((line) => line.trimEnd()),
+      .map((line) => normalizeLineForUnknownLinesCheck(line.trimEnd())),
   );
   for (const rawLine of signoffSection.split("\n")) {
-    const line = rawLine.trimEnd();
+    const line = normalizeLineForUnknownLinesCheck(rawLine.trimEnd());
     if (line === "") continue;
     if (!templateLines.has(line)) return true;
   }
