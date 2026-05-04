@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import unittest
 from pathlib import Path
 
-from tune import TuneError, TuneInputs, run_tune
+from tune import TuneError, TuneInputs, main as tune_main, run_tune
 
 _HERE = Path(__file__).resolve().parent
 _FIXTURES = _HERE / "__fixtures__" / "findings-examples"
@@ -72,6 +74,26 @@ class TuneTests(unittest.TestCase):
         out = run_tune(TuneInputs(findings_path=str(_FIXTURES / "low-confidence-verdict.json")))
         # When no path is supplied, the diff hunks use placeholder text rather than lying about paths.
         self.assertIn("<your-review-reference-path>", out.report)
+
+    def test_cli_json_output_is_machine_readable(self) -> None:
+        stdout = io.StringIO()
+        args = [
+            "--findings-path",
+            str(_FIXTURES / "noisy-p3.json"),
+            "--workflow-path",
+            ".github/workflows/code-review.yaml",
+            "--json",
+        ]
+
+        with contextlib.redirect_stdout(stdout):
+            code = tune_main(args)
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["verdict"]["total_findings"], 12)
+        self.assertIn("report", payload)
+        self.assertIn("diagnoses", payload)
+        self.assertTrue(any(item["kind"] == "noisy-p3" and item["triggered"] for item in payload["diagnoses"]))
 
 
 if __name__ == "__main__":

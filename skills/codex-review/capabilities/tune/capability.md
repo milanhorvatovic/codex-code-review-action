@@ -27,6 +27,8 @@ python3 scripts/tune.py --findings-path /path/to/findings.json --help
 
 The script validates the findings against the runtime contract, runs the three diagnoses (low-confidence verdict, noisy P3 surface, truncation banner), and prints a markdown report with one fenced-diff `## Recommendation` per fired diagnosis plus a per-finding rationale.
 
+Pass `--json` when the calling agent/runtime needs structured diagnoses and recommendations instead of parsing the Markdown report.
+
 ## After running
 
 Engage with the integrator on the report:

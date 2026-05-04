@@ -22,6 +22,7 @@ See `--help` for the full flag list.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -55,6 +56,7 @@ _TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 class AdoptInputs:
     allow_users: str = ""
     dry_run: bool = True
+    overwrite: bool = False
     pin: PinResolution | None = None
     project_name: str | None = None
     reference_baseline_path: str | None = None
@@ -127,6 +129,30 @@ def _destination_inside_repo(target_repo: Path, relative_path: str) -> Path:
     except ValueError as exc:
         raise AdoptError(f"output path '{relative_path}' resolves outside the target repository") from exc
     return destination
+
+
+def _prepare_write_destinations(
+    target_repo: Path,
+    writes: tuple[WriteEntry, ...],
+    *,
+    overwrite: bool,
+) -> tuple[tuple[WriteEntry, Path], ...]:
+    resolved: list[tuple[WriteEntry, Path]] = []
+    existing: list[str] = []
+    for entry in writes:
+        destination = _destination_inside_repo(target_repo, entry.path)
+        if destination.exists():
+            if destination.is_dir():
+                raise AdoptError(f"output path '{entry.path}' already exists and is a directory")
+            existing.append(entry.path)
+        resolved.append((entry, destination))
+    if existing and not overwrite:
+        paths = ", ".join(f"`{path}`" for path in existing)
+        raise AdoptError(
+            f"refusing to overwrite existing output path(s): {paths}. "
+            "Re-run with --write --overwrite after reviewing the current files."
+        )
+    return tuple(resolved)
 
 
 def _detect_bare_action(target_repo: Path) -> _BareActionResult:
@@ -307,8 +333,8 @@ def run_adopt(inputs: AdoptInputs, gh: GhExec | None = None) -> AdoptOutputs:
     )
 
     if not inputs.dry_run:
-        for entry in writes:
-            destination = _destination_inside_repo(target_repo, entry.path)
+        destinations = _prepare_write_destinations(target_repo, writes, overwrite=inputs.overwrite)
+        for entry, destination in destinations:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(entry.content, encoding="utf-8")
 
@@ -395,7 +421,37 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write artifacts to the target repository's working tree. Default is dry-run.",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow --write to replace existing output files. Default refuses to overwrite.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of Markdown/plain-text output.",
+    )
     return parser
+
+
+def _outputs_to_json(out: AdoptOutputs, *, wrote: bool) -> str:
+    return json.dumps(
+        {
+            "adoption_report": out.adoption_report,
+            "invariants_report": out.invariants_report,
+            "reference_file": out.reference_file,
+            "workflow": out.workflow,
+            "wrote": wrote,
+            "writes": [
+                {
+                    "content": entry.content,
+                    "path": entry.path,
+                }
+                for entry in out.writes
+            ],
+        },
+        indent=2,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -415,6 +471,7 @@ def main(argv: list[str] | None = None) -> int:
     inputs = AdoptInputs(
         allow_users=args.allow_users,
         dry_run=not args.write,
+        overwrite=args.overwrite,
         pin=pin,
         project_name=args.project_name,
         reference_baseline_path=args.reference_baseline_path,
@@ -428,6 +485,9 @@ def main(argv: list[str] | None = None) -> int:
     except AdoptError as exc:
         print(f"adopt failed: {exc}", file=sys.stderr)
         return 1
+    if args.json:
+        print(_outputs_to_json(out, wrote=args.write))
+        return 0
     if args.write:
         print(f"Wrote {len(out.writes)} artifact(s) under {Path(args.target_repo).resolve()}.")
         for entry in out.writes:

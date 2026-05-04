@@ -21,7 +21,9 @@ Help the integrator land the action against their repository. The deterministic 
 python3 scripts/adopt.py --target-repo /path/to/consumer/repo --help
 ```
 
-Default is dry-run — artifacts print to stdout, the working tree is untouched. Pass `--write` to land them. The script handles pin resolution via `gh api` ([`references/pin-resolution.md`](../../references/pin-resolution.md)), repository detection, workflow + reference-file composition using the action's hardened three-job pattern, runtime fetch of the upstream review-reference baseline at the resolved release SHA, and the consumer-controls invariants assertion.
+Default is dry-run — artifacts print to stdout, the working tree is untouched. Pass `--write` to land them. Existing output files are refused by default; pass `--overwrite` with `--write` only after the integrator has reviewed the current files. Pass `--json` when the calling agent/runtime needs structured output instead of Markdown/plain text.
+
+The script handles pin resolution via `gh api` ([`references/pin-resolution.md`](../../references/pin-resolution.md)), repository detection, workflow + reference-file composition using the action's hardened three-job pattern, runtime fetch of the upstream review-reference baseline at the resolved release SHA, and the consumer-controls invariants assertion.
 
 If the integrator already has a reviewed pin, pass `--pin-sha <40-hex-sha> --pin-tag vX.Y.Z` to skip `releases/latest` resolution. This is the offline/pre-resolved path; pair it with `--reference-baseline-path` when `gh api` is not available for fetching the upstream baseline file.
 

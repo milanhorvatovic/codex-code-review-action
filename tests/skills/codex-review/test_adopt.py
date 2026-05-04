@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from lib.pin_resolver import GhResult, PinResolution
 
-from adopt import AdoptError, AdoptInputs, run_adopt
+from adopt import AdoptError, AdoptInputs, main as adopt_main, run_adopt
 
 _HERE = Path(__file__).resolve().parent
 _FIXTURE_REPO = _HERE / "__fixtures__" / "codex-review-action"
@@ -168,6 +171,64 @@ class AdoptTests(unittest.TestCase):
             gh=gh,
         )
         self.assertRegex(out.reference_file, r"### JavaScript / TypeScript")
+
+    def test_write_refuses_existing_outputs_without_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflow = root / ".github" / "workflows" / "codex-review.yaml"
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text("existing workflow\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(AdoptError, "refusing to overwrite"):
+                run_adopt(_default_inputs(target_repo=str(root), dry_run=False))
+
+            self.assertEqual(workflow.read_text(encoding="utf-8"), "existing workflow\n")
+            self.assertFalse((root / "ADOPTION.md").exists())
+            self.assertFalse((root / ".github" / "codex" / "review-reference.md").exists())
+
+    def test_write_allows_overwrite_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflow = root / ".github" / "workflows" / "codex-review.yaml"
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text("existing workflow\n", encoding="utf-8")
+
+            run_adopt(_default_inputs(target_repo=str(root), dry_run=False, overwrite=True))
+
+            self.assertIn("milanhorvatovic/codex-ai-code-review-action/prepare", workflow.read_text(encoding="utf-8"))
+            self.assertTrue((root / "ADOPTION.md").is_file())
+            self.assertTrue((root / ".github" / "codex" / "review-reference.md").is_file())
+
+    def test_cli_json_output_is_machine_readable(self) -> None:
+        stdout = io.StringIO()
+        args = [
+            "--target-repo",
+            str(_FIXTURE_REPO),
+            "--pin-sha",
+            _SHA,
+            "--pin-tag",
+            _TAG,
+            "--reference-baseline-path",
+            str(_BASELINE_PATH),
+            "--json",
+        ]
+
+        with contextlib.redirect_stdout(stdout):
+            code = adopt_main(args)
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertFalse(payload["wrote"])
+        self.assertIn("workflow", payload)
+        self.assertIn("reference_file", payload)
+        self.assertEqual(
+            sorted(entry["path"] for entry in payload["writes"]),
+            [
+                ".github/codex/review-reference.md",
+                ".github/workflows/codex-review.yaml",
+                "ADOPTION.md",
+            ],
+        )
 
 
 if __name__ == "__main__":

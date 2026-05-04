@@ -11,6 +11,7 @@ Invoked from the capability prompt as:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -148,7 +149,43 @@ def _build_parser() -> argparse.ArgumentParser:
             "workflow may live anywhere under .github/workflows/; pass whichever filename your repo uses."
         ),
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of Markdown output.",
+    )
     return parser
+
+
+def _outputs_to_json(out: TuneOutputs) -> str:
+    return json.dumps(
+        {
+            "diagnoses": [
+                {
+                    "kind": diagnosis.kind,
+                    "recommendations": [
+                        {
+                            "contributing_findings": list(rec.contributing_findings),
+                            "diff": rec.diff,
+                            "kind": rec.kind,
+                            "rationale": rec.rationale,
+                            "target": rec.target,
+                        }
+                        for rec in diagnosis.recommendations
+                    ],
+                    "triggered": diagnosis.triggered,
+                }
+                for diagnosis in out.diagnoses
+            ],
+            "report": out.report,
+            "verdict": {
+                "overall_confidence_score": out.findings.overall_confidence_score,
+                "overall_correctness": out.findings.overall_correctness,
+                "total_findings": len(out.findings.findings),
+            },
+        },
+        indent=2,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -164,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     except TuneError as exc:
         print(f"tune failed: {exc}", file=sys.stderr)
         return 1
-    print(out.report)
+    print(_outputs_to_json(out) if args.json else out.report)
     return 0
 
 
