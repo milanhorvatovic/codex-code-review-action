@@ -15,11 +15,20 @@ permissions:
 # Serialize per PR: rapid `synchronize`/`labeled` events from Dependabot or maintainers can
 # trigger overlapping runs; without serialization the auto-merge job races against itself
 # (one run merges; a parallel run later attempts the same merge and exits non-zero on an
-# already-merged PR). cancel-in-progress is true so a new event always supersedes the
-# in-flight run with the latest PR state.
+# already-merged PR).
+#
+# `cancel-in-progress` is conditional. We cancel for `opened`/`reopened`/`synchronize`
+# (the new event has fresher PR state to merge against) and for the `trust-boundary`
+# labeled event (which means "stop the merge now"). We do NOT cancel for non-trust-
+# boundary `labeled` events: Dependabot adds `dependencies`/`release: patch`/etc. labels
+# in rapid succession right after opening a PR, and those replacement runs skip both
+# `rebuild-dist` and `auto-merge` per their `if:` guards — so cancelling the in-flight
+# merge run for them would leave the PR stranded with neither a synchronous merge nor
+# auto-merge enabled. Letting them queue behind the in-flight run is harmless (they're
+# no-ops on the merge path) and avoids the stall.
 concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event.action != 'labeled' || github.event.label.name == 'trust-boundary' }}
 
 jobs:
   rebuild-dist:
