@@ -118,6 +118,30 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+      # `steps.metadata.outputs.update-type` is the most-severe per-dep type across the group.
+      # The dogfood self-reference bumps SHA→SHA under the same prerelease tag, which
+      # fetch-metadata conservatively reports as semver-major. Treating that as "major" for
+      # gating purposes blocks otherwise-safe grouped patches and standalone self-bumps. We
+      # walk the per-dep JSON instead and only escalate to "major" when a *third-party* dep is
+      # genuinely a major bump.
+      - name: Derive effective update-type
+        id: effective
+        env:
+          UPDATED_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
+        run: |
+          set -euo pipefail
+          third_party_major=$(jq -r '
+            any(.[];
+              .updateType == "version-update:semver-major"
+              and .dependencyName != "milanhorvatovic/codex-ai-code-review-action"
+            )
+          ' <<<"$UPDATED_JSON")
+          if [ "$third_party_major" = "true" ]; then
+            echo "update-type=version-update:semver-major" >> "$GITHUB_OUTPUT"
+          else
+            echo "update-type=version-update:semver-patch" >> "$GITHUB_OUTPUT"
+          fi
+
       # See CONTRIBUTING.md → Trust-boundary changes for the policy.
       # Two guards coexist intentionally:
       #   1. Exclude-by-name: skip auto-merge for any (possibly grouped) bump that includes
@@ -139,7 +163,7 @@ jobs:
       # and the PR waits for manual approval, matching the prior behavior.
       - name: Approve PR (so required-review check passes)
         if: >-
-          steps.metadata.outputs.update-type != 'version-update:semver-major'
+          steps.effective.outputs.update-type != 'version-update:semver-major'
           && !contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')
           && !contains(github.event.pull_request.labels.*.name, 'trust-boundary')
         env:
@@ -179,7 +203,7 @@ jobs:
 
       - name: Auto-merge patch and minor updates
         if: >-
-          steps.metadata.outputs.update-type != 'version-update:semver-major'
+          steps.effective.outputs.update-type != 'version-update:semver-major'
           && !contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')
           && !contains(github.event.pull_request.labels.*.name, 'trust-boundary')
         env:
