@@ -407,7 +407,16 @@ jobs:
             fall_back_to_auto_merge "reviewDecision is '${review_decision:-<empty>}' (need APPROVED for synchronous merge)"
           fi
 
-          gh pr merge --squash "$PR_URL"
+          # Mergeability isn't stable between the watch returning and this call: the base
+          # branch can move (the ruleset has `strict_required_status_checks_policy: true`,
+          # so BEHIND blocks the merge), GitHub can return a transient merge-state error,
+          # or another rule can become pending. This workflow doesn't re-trigger on base-
+          # branch updates, so a naked failure here would strand the PR. Fall back to
+          # verified auto-merge — same `arm_auto_merge` helper used elsewhere — so a later
+          # branch-update or transient-error recovery still completes the merge.
+          if ! gh pr merge --squash "$PR_URL"; then
+            fall_back_to_auto_merge "Synchronous squash merge failed (mergeability may have changed since the check wait completed — base branch advanced, transient API error, or branch is BEHIND)"
+          fi
 
   # Reactive disable: if a maintainer applies the `trust-boundary` label after auto-merge has
   # already been enabled by the auto-merge job above, the label-guard `if:` on that step only
