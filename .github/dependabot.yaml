@@ -7,6 +7,11 @@ updates:
     package-ecosystem: "github-actions"
     groups:
       github-actions:
+        exclude-patterns:
+          # Keep the dogfood self-reference out of the third-party group: it bumps
+          # SHA→SHA under the same `v2.1.0-pre` tag, which dependabot/fetch-metadata
+          # classifies as semver-major and otherwise poisons the grouped update-type.
+          - "milanhorvatovic/codex-ai-code-review-action"
         patterns:
           - "*"
     labels:
