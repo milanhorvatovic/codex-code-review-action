@@ -45,6 +45,7 @@ jobs:
         uses: milanhorvatovic/codex-ai-code-review-action/prepare@0fc55cdd3d5cf9841c9ba58822354f67b6c63293 # v2.1.0-pre
         with:
           allow-users: milanhorvatovic # bounds OpenAI cost while the dogfood is being proven out; revisit after one release cycle
+          max-chunk-bytes: ${{ vars.CODEX_MAX_CHUNK_BYTES || '204800' }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.prepare.outputs.skipped != 'true' && steps.prepare.outputs.has-changes == 'true'
@@ -76,6 +77,8 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           chunk: ${{ matrix.chunk }}
+          effort: ${{ vars.CODEX_EFFORT || '' }} # empty = Codex CLI default
+          model: ${{ vars.CODEX_MODEL || '' }} # empty = Codex CLI default
 
   publish:
     needs: [prepare, review]
@@ -102,5 +105,9 @@ jobs:
         with:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
-          retain-findings: "false" # explicit for auditors; matches the action default
+          retain-findings: "true" # retention approved so dogfood findings stay available for ongoing review-quality iteration (CC-07 consent)
+          retain-findings-days: ${{ vars.CODEX_RETAIN_FINDINGS_DAYS || '7' }} # tight window; raise via vars if longer history is needed
+          min-confidence: ${{ vars.CODEX_MIN_CONFIDENCE || '0' }} # 0 = no filtering until tune recommends a cutoff
+          max-comments: ${{ vars.CODEX_MAX_COMMENTS || '' }} # empty = unlimited
+          model: ${{ vars.CODEX_MODEL || '' }} # footer label; pairs with the review job's model
           fail-on-missing-chunks: "true" # pinned SHA includes this input; consumer-controls.md item 8 requires it for v2.1+
