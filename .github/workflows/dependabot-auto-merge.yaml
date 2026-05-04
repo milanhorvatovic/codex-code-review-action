@@ -292,43 +292,66 @@ jobs:
             echo "$result"
           }
 
-          # Helper: enable GitHub auto-merge with a post-check, then exit 0.  The reactive
-          # disable-auto-merge-on-trust-boundary job below remains a backstop for any
-          # trust-boundary application that lands after this enables auto-merge.
-          #
           # `gh pr merge --auto` is allowed to exit non-zero (already enabled, PR already
-          # merged/closed, transient API error), but we then *verify* the desired state
-          # was actually reached: PR is MERGED/CLOSED, or PR is OPEN with auto-merge
-          # enabled. If neither holds, the call failed for a real reason (bot lacks merge
-          # permission, repo `Allow auto-merge` disabled, GitHub outage) and the PR would
-          # be silently stranded — fail the workflow instead of pretending success.
-          fall_back_to_auto_merge() {
-            echo "::warning::$1; enabling GitHub auto-merge so a later code-owner approval (and/or the reactive disable-auto-merge job for trust-boundary) can finish or halt the merge."
-            gh pr merge --auto --squash "$PR_URL" 2>&1 || true
+          # merged/closed, transient API error), but we then verify the desired state was
+          # actually reached: PR is MERGED/CLOSED, or PR is OPEN with auto-merge enabled.
+          # If neither holds, the call failed for a real reason (bot lacks merge permission,
+          # repo `Allow auto-merge` disabled, GitHub outage) and the PR would be silently
+          # stranded — surface the failure as a workflow error instead of pretending success.
+          # Returns 0 on success, 1 on failure (with `::error::` annotations emitted).
+          verify_auto_merge_or_terminal() {
             local state_json pr_state has_auto
             if ! state_json=$(gh pr view "$PR_URL" --json state,autoMergeRequest 2>/dev/null); then
               echo "::error::Failed to verify PR state after the gh pr merge --auto call. Cannot confirm whether auto-merge was enabled; manual intervention required."
-              exit 1
+              return 1
             fi
             pr_state=$(jq -r '.state' <<<"$state_json")
             has_auto=$(jq -r '.autoMergeRequest != null' <<<"$state_json")
             case "$pr_state" in
               MERGED|CLOSED)
-                echo "PR is $pr_state; nothing more to do." ;;
+                echo "PR is $pr_state; nothing more to do."
+                return 0 ;;
               OPEN)
-                if [ "$has_auto" != "true" ]; then
-                  echo "::error::gh pr merge --auto exited but autoMergeRequest is still null on an OPEN PR. The fallback failed for a real reason — likely the github-actions bot lacks merge permission, the repository's Allow auto-merge setting is disabled, or a GitHub-side error. Investigate the gh pr merge output above and re-run after fixing."
-                  exit 1
-                fi ;;
+                if [ "$has_auto" = "true" ]; then
+                  return 0
+                fi
+                echo "::error::gh pr merge --auto exited but autoMergeRequest is still null on an OPEN PR. The auto-merge enable failed for a real reason — likely the github-actions bot lacks merge permission, the repository's Allow auto-merge setting is disabled, or a GitHub-side error. Investigate the gh pr merge output above and re-run after fixing."
+                return 1 ;;
               *)
                 echo "::error::Unexpected PR state '$pr_state' after auto-merge attempt; manual intervention required."
-                exit 1 ;;
+                return 1 ;;
             esac
+          }
+
+          # Enable GitHub auto-merge, verify the call took, and revert it if the
+          # trust-boundary label is now present.  Returns 0 on full success, 1 on any
+          # verification or revert failure (with appropriate `::error::` annotations).
+          # Disable-auto on a trust-boundary PR is a hard failure: silently logging it as a
+          # warning would let auto-merge stay armed on a PR the policy says must remain
+          # manual, which is a worse outcome than a noisy workflow failure.
+          arm_auto_merge() {
+            gh pr merge --auto --squash "$PR_URL" 2>&1 || true
+            if ! verify_auto_merge_or_terminal; then
+              return 1
+            fi
             if [ "$(trust_boundary_state)" = "true" ]; then
               echo "trust-boundary label is now present; reverting auto-merge."
               if ! gh pr merge --disable-auto "$PR_URL"; then
-                echo "::warning::Failed to disable auto-merge (possibly not currently enabled); continuing."
+                echo "::error::Failed to disable auto-merge on a trust-boundary PR. The PR may still merge automatically when conditions are met, bypassing the policy that requires manual maintainer review. Investigate immediately."
+                return 1
               fi
+            fi
+            return 0
+          }
+
+          # Used by the unhappy paths (review not APPROVED, label state unknown). Enables
+          # auto-merge as a graceful fallback so a later code-owner approval can finish the
+          # merge; the reactive disable-auto-merge-on-trust-boundary job below remains a
+          # backstop for trust-boundary applications that land after this point.
+          fall_back_to_auto_merge() {
+            echo "::warning::$1; enabling GitHub auto-merge so a later code-owner approval (and/or the reactive disable-auto-merge job for trust-boundary) can finish or halt the merge."
+            if ! arm_auto_merge; then
+              exit 1
             fi
             exit 0
           }
@@ -351,12 +374,14 @@ jobs:
           # If a required check fails (terminally or flakily) the watch exits non-zero. This
           # workflow's auto-merge job is skipped on `labeled` events and isn't triggered by
           # review events, so without a re-arm step a manual rerun-to-green of the failed
-          # check has no path to finish the merge — the PR strands. Enable GitHub auto-merge
-          # as a re-armed safety net (so the worker fires when the rerun lands), then exit 1
-          # so the check failure stays visible as a workflow failure.
+          # check has no path to finish the merge — the PR strands. Re-arm via auto-merge
+          # (so the worker fires when the rerun lands), going through the same verified
+          # `arm_auto_merge` helper as the fallback path so a real auto-merge enable failure
+          # is surfaced as a second `::error::`. Exit 1 unconditionally so the check failure
+          # stays visible as a workflow failure.
           if ! gh pr checks "$PR_URL" --required --watch --fail-fast; then
             echo "::warning::A required check failed during the wait; enabling GitHub auto-merge as a re-armed safety net so a later rerun-to-green of the failed check can fire the merge without a manual workflow re-trigger."
-            gh pr merge --auto --squash "$PR_URL" 2>&1 || true
+            arm_auto_merge || true
             exit 1
           fi
 
