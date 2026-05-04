@@ -126,6 +126,14 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     needs: rebuild-dist
     runs-on: ubuntu-latest
+    # `gh pr checks --watch` blocks until every required check reaches a terminal state.
+    # If a check hangs (stuck self-hosted runner, never-reporting integration, etc.),
+    # the run would otherwise wait up to GitHub's 6-hour default and tie up the per-PR
+    # concurrency slot. 30 minutes is well above the typical required-check runtime
+    # (verify-dist/test/actionlint/verify-pr-release-label all finish in 1-3 minutes),
+    # so a 30-minute cap surfaces a genuine hang as a workflow failure without flaking
+    # on normal runs.
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
@@ -287,12 +295,22 @@ jobs:
           # Helper: enable GitHub auto-merge with a post-check, then exit 0.  The reactive
           # disable-auto-merge-on-trust-boundary job below remains a backstop for any
           # trust-boundary application that lands after this enables auto-merge.
+          #
+          # Both gh calls are guarded with `if !` so a non-zero exit (auto-merge already
+          # enabled from a prior run, PR already merged/closed, transient API error)
+          # degrades to a warning rather than failing the step. This matters because the
+          # whole point of this code path is to be a graceful fallback — if it hard-fails,
+          # the PR strands with neither sync merge nor auto-merge.
           fall_back_to_auto_merge() {
             echo "::warning::$1; enabling GitHub auto-merge so a later code-owner approval (and/or the reactive disable-auto-merge job for trust-boundary) can finish or halt the merge."
-            gh pr merge --auto --squash "$PR_URL"
+            if ! gh pr merge --auto --squash "$PR_URL"; then
+              echo "::warning::Failed to enable auto-merge (possibly already enabled, or PR already merged/closed); continuing."
+            fi
             if [ "$(trust_boundary_state)" = "true" ]; then
               echo "trust-boundary label is now present; reverting auto-merge."
-              gh pr merge --disable-auto "$PR_URL"
+              if ! gh pr merge --disable-auto "$PR_URL"; then
+                echo "::warning::Failed to disable auto-merge (possibly not currently enabled); continuing."
+              fi
             fi
             exit 0
           }
