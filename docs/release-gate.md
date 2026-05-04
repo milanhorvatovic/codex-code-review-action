@@ -121,7 +121,7 @@ release-gate-v<X.Y.Z>/
   manual-checks.md    # short notes on the manual security regression checks (and base-mode checks if applicable)
 ```
 
-After the tag pushes, the GitHub Release exists (created by `release.yaml`), the self-pin refresh PR has merged, and every post-tag gate item — including any release-specific post-tag rows recorded under [Release-specific items](#release-specific-items) — has been signed off, upload the zip:
+After the tag pushes, the GitHub Release exists (created by `release.yaml`), and every post-tag gate item — including any release-specific post-tag rows recorded under [Release-specific items](#release-specific-items) — has been signed off, upload the zip. For final releases the post-tag set includes waiting for the self-pin refresh PR to merge; for pre-releases (`vX.Y.Z-rc.N`) the refresh PR is intentionally skipped by `release.yaml`, so the gate proceeds as soon as the GitHub Release exists and any RC-specific post-tag items are signed off.
 
 ```bash
 gh release upload v<X.Y.Z> release-gate-v<X.Y.Z>.zip --clobber
