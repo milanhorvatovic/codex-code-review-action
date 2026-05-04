@@ -12,22 +12,27 @@ description: >
 
 # adopt
 
-Help the integrator land the action against a real repository. The deterministic work happens in [`scripts/adopt.py`](../../scripts/adopt.py); your job is to surface the result, answer questions, and help the integrator decide what to commit.
+Help the integrator land the action against their repository. The deterministic work happens in [`scripts/adopt.py`](../../scripts/adopt.py); your job is to surface the result, answer questions, and help the integrator decide what to keep.
 
 ## Run
 
 ```
+# from the installed skills/codex-review directory
 python3 scripts/adopt.py --target-repo /path/to/consumer/repo --help
 ```
 
-Default is dry-run — artifacts print to stdout, the working tree is untouched. Pass `--write` to land them. The script handles pin resolution via `gh api` ([`references/pin-resolution.md`](../../references/pin-resolution.md)), repository detection, action-input schema validation, workflow + reference-file composition mirroring the [Production workflow example](https://github.com/milanhorvatovic/codex-ai-code-review-action#production-workflow-example), runtime fetch of the upstream review-reference baseline at the resolved release SHA, and the consumer-controls invariants assertion.
+Default is dry-run — artifacts print to stdout, the working tree is untouched. Pass `--write` to land them. The script handles pin resolution via `gh api` ([`references/pin-resolution.md`](../../references/pin-resolution.md)), repository detection, workflow + reference-file composition using the action's hardened three-job pattern, runtime fetch of the upstream review-reference baseline at the resolved release SHA, and the consumer-controls invariants assertion.
+
+If the integrator already has a reviewed pin, pass `--pin-sha <40-hex-sha> --pin-tag vX.Y.Z` to skip `releases/latest` resolution. This is the offline/pre-resolved path; pair it with `--reference-baseline-path` when `gh api` is not available for fetching the upstream baseline file.
 
 The integrator picks where each artifact lands. The script ships sensible defaults but exposes path flags:
 
 - `--workflow-path` — where the emitted workflow YAML is written. Default `.github/workflows/codex-review.yaml`. GitHub Actions only discovers workflows under `.github/workflows/`, so the directory is fixed; the filename is the integrator's call.
 - `--reference-path` — where the starter review-reference is written. Default `.github/codex/review-reference.md`. The action's `review-reference-file` input accepts any workspace-relative path (subject to its safety constraints — no symlinks, no traversal, ≤ 64 KiB, regular file). Match whatever convention the repo already uses for policy or doc files.
 - `--report-path` — where the ADOPTION audit report is written. Default `ADOPTION.md`. Pure documentation; the integrator may keep it under `docs/` or discard it after reading.
-- `--reference-baseline-path` — optional local override for the upstream baseline that the layerer composes against. When omitted, the script fetches it via `gh api` at the resolved release SHA. Useful for offline runs or when pinning to a non-released SHA.
+- `--reference-baseline-path` — optional local override for the upstream baseline that the layerer composes against. When omitted, the script fetches it via `gh api` at the resolved release SHA. Useful for offline runs when the reviewed baseline file is already available locally.
+
+All output paths must be repository-relative. `--workflow-path` must stay under `.github/workflows/` and end in `.yaml` or `.yml`; the reference and report paths may use any repository-relative file location that fits the consumer's conventions.
 
 ## After running
 
@@ -39,7 +44,7 @@ Walk the integrator through what came back:
 - Each decision in the ADOPTION report mapped to its `CC-NN` invariant. Help the integrator audit the choices rather than treating them as fixed.
 - The open posture questions where the script chose a default: who can trigger reviews (`allow-users`), whether to wire the starter review-reference into the workflow (workspace-mode trade-off, see `CC-09` and [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97)), and whether to opt in to retention (`retain-findings`, gated on the `retention approved` consent comment per `CC-07`).
 
-The script refuses to write any artifact when an invariant fails — surface the failure verbatim with the matching remediation anchor from [`references/invariants.md`](../../references/invariants.md). The integrator commits whichever artifacts they accept; the script does not auto-commit or open a PR.
+The script refuses to write any artifact when an invariant fails or an output path can escape the target repository — surface the failure verbatim with the matching remediation anchor from [`references/invariants.md`](../../references/invariants.md) when applicable. The integrator commits whichever artifacts they accept; the script does not auto-commit or open a PR.
 
 ## References
 

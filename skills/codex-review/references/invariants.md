@@ -1,6 +1,6 @@
 # Consumer-controls invariants
 
-Machine-checkable encoding of the 9 items in the [consumer-controls audit checklist](https://github.com/milanhorvatovic/codex-ai-code-review-action/blob/main/docs/consumer-controls.md). Every capability that emits a workflow walks this list and refuses to write any artifact when an invariant fails.
+Machine-checkable encoding of the consumer-controls audit checklist for `milanhorvatovic/codex-ai-code-review-action`. Any capability that emits or recommends workflow YAML must respect this list and refuse unsafe output when an invariant fails.
 
 ## Encoding rules
 
@@ -8,10 +8,6 @@ Machine-checkable encoding of the 9 items in the [consumer-controls audit checkl
 - The `structural-check` is a one-line predicate over the parsed workflow YAML. The matching predicate function lives in [`../scripts/lib/invariants/predicates.py`](../scripts/lib/invariants/predicates.py) keyed by ID.
 - The `remediation-anchor` is the matching numbered section in the upstream consumer-controls doc. Anchors are deep-links into the GitHub-hosted file; the doc itself is not shipped with the skill.
 - The `owner` follows the doc: `upstream-default` (the action enforces it at runtime) or `consumer-responsibility` (the consumer must wire it correctly).
-
-## Source-of-truth consistency
-
-The upstream consumer-controls doc numbers the same items 1–9 with `### N. <heading>`. A unit test in the source repository (under `tests/skills/codex-review/`) asserts every `CC-NN` ID in this file has a matching `### N. ` heading in the doc. The test is not shipped with the skill — it runs in CI on every PR. When the doc adds or renumbers an item, both this file and the test must be updated in the same change.
 
 ## Invariant table
 
@@ -31,4 +27,4 @@ The upstream consumer-controls doc numbers the same items 1–9 with `### N. <he
 
 ## Out-of-band detection rules
 
-The action ships a top-level `action.yaml` whose only behavior is to error out on direct use. It is not a consumer-controls invariant, but the `adopt` capability flags it as a remediation. ID: `CC-EXTRA-01-bare-action`. Predicate: any `uses: milanhorvatovic/codex-ai-code-review-action@<sha>` (without `/prepare`, `/review`, or `/publish`) in the workflow. Remediation: rewrite to the three sub-actions per the canonical template.
+The action ships a top-level `action.yaml` whose only behavior is to error out on direct use. It is not a consumer-controls invariant, but the `adopt` capability flags it as a remediation. ID: `CC-EXTRA-01-bare-action`. Predicate: any `uses: milanhorvatovic/codex-ai-code-review-action@<ref>` (without `/prepare`, `/review`, or `/publish`) in the workflow. Remediation: rewrite to the three sub-actions per the canonical template.

@@ -1,6 +1,6 @@
 # Pin resolution
 
-Both capabilities resolve the latest reviewed action release at invocation time. No static pin table is shipped with the skill. The skill stays stateless across releases and the resolved pin always tracks what the integrator's `gh` CLI sees as the latest tag.
+The `adopt` capability resolves the latest reviewed action release at invocation time unless the integrator supplies a reviewed SHA/tag pair. No static pin table is shipped with the skill. The skill stays stateless across releases and the default resolved pin tracks what the integrator's `gh` CLI sees as the latest stable tag.
 
 ## Contract
 
@@ -11,6 +11,8 @@ SHA=$(gh api repos/milanhorvatovic/codex-ai-code-review-action/commits/"$TAG" --
 
 The capability emits the resolved `<TAG>` (e.g. `v2.1.0`) as the trailing `# v<X.Y.Z>` comment on every `uses:` line and the resolved `<SHA>` (40 hex chars, lowercase) as the pin.
 
+Offline/pre-resolved runs may pass the same values directly with `--pin-sha <SHA> --pin-tag <TAG>`. Both values are required together. The SHA must be 40 lowercase hex characters and the tag must match `vX.Y.Z` so generated workflow comments and version-gated invariants remain auditable.
+
 ## Failure modes the capability must handle
 
 - **`gh` not on PATH or not authenticated.** Exit non-zero with a remediation message pointing at `gh auth status`. Do not fall back to a stale value.
@@ -20,4 +22,4 @@ The capability emits the resolved `<TAG>` (e.g. `v2.1.0`) as the trailing `# v<X
 
 ## Why runtime, not static
 
-The skill's two consumers (`adopt` and `tune`) need exactly one fact: "what is the latest reviewed pin right now?" Maintaining a committed pin table inside the skill would couple the skill to the action's release cadence and add a verifier the action repo's release tooling already covers separately. Resolving at invocation keeps the skill stateless and lets a future `upgrade` capability compare two SHAs against `gh api` directly without a pre-baked history.
+The adoption flow needs one default fact: "what is the latest reviewed pin right now?" Maintaining a committed pin table inside the skill would couple the skill to the action's release cadence and add release-state maintenance to the companion artifact. Resolving at invocation keeps the skill stateless while the manual pin flags cover locked-down environments that already approved a SHA.

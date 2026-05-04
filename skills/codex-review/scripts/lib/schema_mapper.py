@@ -1,8 +1,8 @@
 """Action-input schema mapper for the codex-review skill.
 
 Parses the prepare/, review/, and publish/ action.yaml manifests into a typed
-input registry. Top-level action.yaml is excluded by design — see scope-trim
-notes in the skill's design plan.
+input registry. Top-level action.yaml is excluded because consumers should use
+the three explicit sub-actions, not the repository-level guard action.
 
 Implementation note: a regex-based parser is sufficient for the small,
 constrained shape of the action manifests we read. Avoiding a YAML library
