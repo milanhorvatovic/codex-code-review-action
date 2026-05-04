@@ -1393,7 +1393,7 @@ describe("runCli (rerun body-refresh integration)", () => {
     expect(stdout).toContain("Updated existing release PR #42");
   });
 
-  it("refreshes the auto-header but preserves the gate sign-off section verbatim when sign-off is present", () => {
+  it("refreshes the auto-header but preserves the gate sign-off section verbatim when sign-off is present (older template, warns about new items)", () => {
     const filledBody = [
       "Stale prior auto-header — should be refreshed.",
       "",
@@ -1414,6 +1414,26 @@ describe("runCli (rerun body-refresh integration)", () => {
     expect(editBody).toContain("Maintainer note retained on rerun.");
     expect(stdout).toContain("Refreshed auto-generated header on release PR #42");
     expect(stdout).toContain("re-verify the gate before approving");
+    // The body lacks SIGNOFF_TEMPLATE_VERSION_MARKER → warning fires.
+    expect(stdout).toContain("WARNING:");
+    expect(stdout).toContain("older sign-off template");
+    expect(stdout).toContain("append/check any missing items manually");
+  });
+
+  it("does not emit the older-template warning when the existing body carries the current template-version marker", () => {
+    const filledBody = [
+      "Stale prior auto-header — should be refreshed.",
+      "",
+      SIGNOFF_SECTION_HEADER,
+      SIGNOFF_TEMPLATE_VERSION_MARKER,
+      "",
+      "Verified by: Maintainer — 2026-05-04",
+    ].join("\n");
+    const { exit, stdout, stderr } = runRerunScenario(filledBody);
+    expect(exit).toBe(0);
+    expect(stderr).toBe("");
+    expect(stdout).toContain("Refreshed auto-generated header on release PR #42");
+    expect(stdout).not.toContain("older sign-off template");
   });
 
   it("refreshes the PR body even when no file changes are staged (template-text-only update)", () => {

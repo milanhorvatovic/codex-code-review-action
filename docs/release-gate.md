@@ -14,7 +14,7 @@ The gate applies to both release paths documented in [`CONTRIBUTING.md`](../CONT
 2. Walk this page top to bottom against the merge candidate (the release branch's HEAD before the squash-merge or before the local merge to `main`). Every pre-merge item must end up either checked off (with a verified-by line) or explicitly waived (with a rationale). The post-tag item under [Archiving the gate](#archiving-the-gate) is completed after `release.yaml` creates the GitHub Release.
 3. Record the filled-in gate on the working surface picked in step 1 so the sign-off is visible before merging:
    - **Automated path:** in the release PR description, alongside the auto-generated header.
-   - **Manual path:** in the local working copy. Add it to the release commit if you want it on `main`, or hold it as a working-tree file that goes straight into the evidence zip.
+   - **Manual path:** in the local working copy held in the working tree (do not commit it to the release branch). The filled file is then packaged into the evidence zip in step 4 and uploaded as a release asset; the gate is intentionally not tracked in the repo so per-release artifacts do not accumulate. See [Archiving the gate](#archiving-the-gate).
 4. After the tag pushes and the GitHub Release is created, package the filled gate plus any supporting evidence into a zip and upload it to the release as an asset. See [Archiving the gate](#archiving-the-gate).
 
 The release PR body's checklist on the automated path is hard-coded in `buildPrBody` rather than generated from this document — when the gate's section structure changes, update both files in the same PR. On the manual path the maintainer copies this page directly, so the checklist always matches the doc.
