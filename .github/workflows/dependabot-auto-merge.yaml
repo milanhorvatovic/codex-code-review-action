@@ -237,6 +237,15 @@ jobs:
       # before polling (so we don't waste minutes waiting on a PR we won't merge) and again
       # immediately before the merge (closing the race where a maintainer applies the label
       # while checks run). On the fallback path the original post-enable revert is kept.
+      #
+      # A residual TOCTOU window remains on the happy path — between the second label
+      # re-check and `gh pr merge --squash`, a few milliseconds of inter-command latency.
+      # This is no worse than the prior `--auto` design, which had an equivalent (and
+      # often longer) window between auto-merge enable and the reactive `--disable-auto`
+      # revert: GitHub's auto-merge worker can fire the merge before the workflow reaches
+      # the post-check, and the reactive job below can fire too late to undo it. Closing
+      # this window atomically requires elevating the trust-boundary policy to a required
+      # status check so the ruleset itself refuses the merge — left as future work.
       - name: Wait for required checks, then squash-merge
         if: >-
           steps.effective.outputs.update-type != 'version-update:semver-major'
