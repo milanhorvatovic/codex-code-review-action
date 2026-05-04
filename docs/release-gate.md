@@ -68,7 +68,7 @@ If any of the unit cases above are missing from the test suite or are skipped on
 
 ## Conditional base-mode checks
 
-Run these only if the release contains the `review-reference-source: base` mode (tracked in issue [#97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97)). Until that lands, mark the section waived with a one-line rationale ("`review-reference-source: base` not part of v<X.Y.Z>; deferred to <next-version>") and move on.
+Run these only if the release contains the `review-reference-source: base` mode (tracked in issue [#97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97)). Until that lands, mark the section waived with a rationale that names the tracked follow-up so the waiver passes the [Sign-off convention](#sign-off-convention) acceptance bar — for example: `Waived: \`review-reference-source: base\` not part of v<X.Y.Z>; tracked in issue #97, target release v<next-version>`.
 
 - A PR that edits `.github/codex/review-reference.md` does not alter the policy applied to its own review when `review-reference-source: base` is set on the workflow. The base-mode read pulls the policy from the PR's base SHA, not the head SHA, so in-PR edits do not steer the prompt.
 - A missing base-branch reference path fails fast with a clear diagnostic when `review-reference-source: base` is set. The error must name the missing path and the base SHA so a maintainer can identify whether the file was renamed, deleted, or never existed at the resolved base.
@@ -110,7 +110,7 @@ If the release contains any PR labeled `trust-boundary` that also contributes a 
 
 ## Archiving the gate
 
-The filled-in gate plus supporting evidence ships as a zip asset on the GitHub Release page, not as a tracked file in the repository. This keeps the working tree free of one-shot per-release artifacts while preserving an immutable audit record next to the release tarball that is downloaded.
+The filled-in gate plus supporting evidence ships as a zip asset on the GitHub Release page, not as a tracked file in the repository. This keeps the working tree free of one-shot per-release artifacts while preserving a durable audit record next to the release tarball that is downloaded.
 
 Recommended layout inside `release-gate-v<X.Y.Z>.zip`:
 

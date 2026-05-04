@@ -1740,4 +1740,86 @@ describe("runCli (rerun body-refresh integration)", () => {
     expect(stdout).toContain("Skipping body update on release PR #42");
     expect(stdout).toContain("`## Release gate sign-off` marker");
   });
+
+  it("composes the gate-doc URL from `git remote get-url origin` and `git symbolic-ref` end-to-end", () => {
+    // Glue-code coverage: helper-level tests for parseGitRemoteUrl,
+    // resolveDefaultBranchFromGit, and resolveGateDocUrl pass independently;
+    // this exercises runCli's orchestration to ensure the assembled URL
+    // reaches buildPrBody.
+    const ghCalls: Array<{ args: string[] }> = [];
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const branch = "release/v2.1.0";
+    const ghRoutes: Record<string, string> = {
+      "release list --limit 100 --json tagName,publishedAt,isPrerelease": JSON.stringify([
+        { tagName: "v2.0.0", publishedAt: "2026-04-07T00:00:00Z", isPrerelease: false },
+      ]),
+      "pr list --state merged --base main --search merged:>2026-04-07T00:00:00Z base:main --json number,title,body,labels,url --limit 1000":
+        JSON.stringify([]),
+      [`pr list --head ${branch} --state open --json number`]: JSON.stringify([]),
+    };
+    runCli({
+      argv: ["--version", "2.1.0"],
+      env: { RELEASE_APP_BOT_USER_ID: "999000" },
+      readFile: (path) => {
+        if (path === "package.json")
+          return `${JSON.stringify({ name: "x", version: "2.0.0" }, null, 2)}\n`;
+        if (path === "package-lock.json")
+          return `${JSON.stringify(
+            {
+              name: "x",
+              version: "2.0.0",
+              lockfileVersion: 3,
+              requires: true,
+              packages: { "": { name: "x", version: "2.0.0" } },
+            },
+            null,
+            2,
+          )}\n`;
+        if (path === "CHANGELOG.md")
+          return "# Changelog\n\n## [2.0.0] - 2026-04-07\n\n- prior\n";
+        throw new Error(`unexpected read: ${path}`);
+      },
+      writeFile: () => undefined,
+      runGh: (args) => {
+        ghCalls.push({ args: [...args] });
+        if (args[0] === "pr" && args[1] === "create") return "";
+        const key = args.join(" ");
+        const value = ghRoutes[key];
+        if (value === undefined) throw new Error(`unrouted gh: ${key}`);
+        return value;
+      },
+      runGit: (args) => {
+        if (args[0] === "ls-remote" && args[1] === "--tags") return "abc\trefs/tags/v2.0.0\n";
+        if (args[0] === "ls-remote" && args[1] === "--heads") return "";
+        if (args[0] === "log" && args.includes("--format=%cI")) return "2026-04-07T00:00:00Z\n";
+        if (args[0] === "log" && args.includes("--format=%H%x09%ae%x09%ce")) return "";
+        if (args[0] === "diff" && args.includes("--cached"))
+          return "package.json\npackage-lock.json\nCHANGELOG.md\n";
+        // The pieces that compose the gate-doc URL:
+        if (args[0] === "remote" && args[1] === "get-url" && args[2] === "origin") {
+          return "git@github.fork.example:team/fork-repo.git\n";
+        }
+        if (args[0] === "symbolic-ref" && args[1] === "refs/remotes/origin/HEAD") {
+          return "refs/remotes/origin/trunk\n";
+        }
+        return "";
+      },
+      today: () => "2026-05-01",
+      stdoutWrite: (chunk) => stdout.push(chunk),
+      stderrWrite: (chunk) => stderr.push(chunk),
+    });
+
+    expect(stderr.join("")).toBe("");
+    const createCall = ghCalls.find((c) => c.args[0] === "pr" && c.args[1] === "create");
+    expect(createCall).toBeDefined();
+    const bodyArg = createCall?.args[createCall.args.indexOf("--body") + 1] ?? "";
+    // Repo and host come from `git remote get-url origin`; branch comes
+    // from `git symbolic-ref refs/remotes/origin/HEAD`.
+    expect(bodyArg).toContain(
+      "https://github.fork.example/team/fork-repo/blob/trunk/docs/release-gate.md",
+    );
+    // Hard-coded upstream URL must NOT appear since git fallback resolved.
+    expect(bodyArg).not.toContain("milanhorvatovic/codex-ai-code-review-action");
+  });
 });
