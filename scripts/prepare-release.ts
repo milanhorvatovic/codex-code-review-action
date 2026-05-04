@@ -378,8 +378,14 @@ export function existingBodyHasMaintainerSignoff(body: string | null | undefined
   // lines, making a signed-off body look untouched on rerun.
   const idx = findSignoffSectionStart(body);
   const target = idx >= 0 ? body.slice(idx) : body;
+  // Strip code blocks before regex matching so example labels inside fences
+  // do not register as sign-off. Both GFM fence styles (` ``` ` and ` ~~~ `)
+  // are stripped; a tilde fence inside a backtick-fenced block (or vice
+  // versa) is not a real concern because they nest by precedence (the
+  // outer fence wins).
   const stripped = target
     .replace(/```[\s\S]*?```/g, "")
+    .replace(/~~~[\s\S]*?~~~/g, "")
     .replace(/`[^`\n]*`/g, "");
   return SIGNOFF_LINE_PATTERN.test(stripped);
 }
@@ -397,6 +403,10 @@ export function existingBodyHasMaintainerSignoff(body: string | null | undefined
 export const SIGNOFF_SECTION_HEADER = "## Release gate sign-off";
 
 // Heading match is tolerant of:
+//   - Up to three leading spaces (`[ ]{0,3}`): GitHub-flavored Markdown
+//     treats `   ## Heading` as a heading; only four-or-more spaces would
+//     turn the line into an indented code block. Tolerating innocent
+//     indentation reformats keeps the marker robust.
 //   - Trailing horizontal whitespace (`[ \t]*`): GitHub-flavored Markdown
 //     treats `## Heading  ` as the same heading as `## Heading`, so an
 //     innocent reformat by a maintainer or editor must not break the
@@ -406,7 +416,8 @@ export const SIGNOFF_SECTION_HEADER = "## Release gate sign-off";
 //     Without the optional `\r` the heading would not match because
 //     JavaScript's multiline `$` matches just before `\n`, leaving the
 //     `\r` inside the matched line.
-const SIGNOFF_SECTION_HEADER_LINE_PATTERN = /^## Release gate sign-off[ \t]*\r?$/m;
+const SIGNOFF_SECTION_HEADER_LINE_PATTERN =
+  /^[ ]{0,3}## Release gate sign-off[ \t]*\r?$/m;
 
 export function findSignoffSectionStart(body: string): number {
   const match = SIGNOFF_SECTION_HEADER_LINE_PATTERN.exec(body);

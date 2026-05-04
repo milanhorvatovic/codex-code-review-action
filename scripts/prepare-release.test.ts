@@ -936,6 +936,20 @@ describe("findSignoffSectionStart", () => {
     expect(idx).toBeGreaterThan(-1);
   });
 
+  it("tolerates up to three leading spaces (still a valid GFM heading)", () => {
+    for (const indent of ["", " ", "  ", "   "]) {
+      const body = `intro\n\n${indent}${SIGNOFF_SECTION_HEADER}\n\ncontent`;
+      const idx = findSignoffSectionStart(body);
+      expect(idx, `indent=${indent.length}`).toBeGreaterThan(-1);
+    }
+  });
+
+  it("does not match a four-space-indented heading (GFM treats four spaces as a code block)", () => {
+    const body = `intro\n\n    ${SIGNOFF_SECTION_HEADER}\n\ncontent`;
+    const idx = findSignoffSectionStart(body);
+    expect(idx).toBe(-1);
+  });
+
   it("ignores occurrences of the heading text inside a PR title in the auto-header (line-anchored)", () => {
     const body = [
       "Release prepared by `scripts/prepare-release.ts` for v2.1.0.",
@@ -1192,8 +1206,13 @@ describe("existingBodyHasMaintainerSignoff", () => {
     expect(existingBodyHasMaintainerSignoff(body)).toBe(true);
   });
 
-  it("ignores Verified by / Waived occurrences inside fenced code blocks", () => {
+  it("ignores Verified by / Waived occurrences inside backtick-fenced code blocks", () => {
     const body = "```\nVerified by: example — 2026-01-01\n```\n";
+    expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
+  });
+
+  it("ignores Verified by / Waived occurrences inside tilde-fenced code blocks (GFM)", () => {
+    const body = "~~~\nVerified by: example — 2026-01-01\n~~~\n";
     expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
   });
 
@@ -1226,6 +1245,20 @@ describe("existingBodyHasMaintainerSignoff", () => {
       "- [ ] Required validation block runs cleanly on the merge candidate",
     ].join("\n");
     expect(existingBodyHasMaintainerSignoff(body)).toBe(false);
+  });
+
+  it("does not match PR titles starting with `Verified by:` / `Waived:` in legacy bodies without the gate marker (whole-body fallback scan)", () => {
+    const legacyBody = [
+      "Release prepared by `scripts/prepare-release.ts` for v2.1.0.",
+      "",
+      "**PRs included (2):**",
+      "",
+      "- #100 `release: minor` — Verified by: rename module",
+      "- #101 `release: patch` — Waived: skip release docs",
+      "",
+      "Merge this PR to trigger `release-on-merge.yaml`.",
+    ].join("\n");
+    expect(existingBodyHasMaintainerSignoff(legacyBody)).toBe(false);
   });
 
   it("does not match a PR title containing Waived: or Verified by:", () => {
