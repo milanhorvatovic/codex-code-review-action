@@ -916,6 +916,13 @@ describe("findSignoffSectionStart", () => {
     expect(body.slice(idx).startsWith(SIGNOFF_SECTION_HEADER)).toBe(true);
   });
 
+  it("matches the heading even when the body uses CRLF line endings (Windows editor paste)", () => {
+    const body = `intro\r\n\r\n${SIGNOFF_SECTION_HEADER}\r\n\r\ncontent`;
+    const idx = findSignoffSectionStart(body);
+    expect(idx).toBeGreaterThan(-1);
+    expect(body.slice(idx).startsWith(SIGNOFF_SECTION_HEADER)).toBe(true);
+  });
+
   it("ignores occurrences of the heading text inside a PR title in the auto-header (line-anchored)", () => {
     const body = [
       "Release prepared by `scripts/prepare-release.ts` for v2.1.0.",

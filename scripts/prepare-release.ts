@@ -396,7 +396,12 @@ export function existingBodyHasMaintainerSignoff(body: string | null | undefined
 // otherwise be mistaken for the delimiter and corrupt the body on rerun.
 export const SIGNOFF_SECTION_HEADER = "## Release gate sign-off";
 
-const SIGNOFF_SECTION_HEADER_LINE_PATTERN = /^## Release gate sign-off$/m;
+// `\r?$` makes the line-end anchor CRLF-tolerant: PR bodies fetched from
+// GitHub can carry CRLF line endings (e.g. content pasted from a Windows
+// editor). Without the optional `\r` the heading would not match because
+// JavaScript's multiline `$` matches just before `\n`, leaving the `\r`
+// inside the matched line.
+const SIGNOFF_SECTION_HEADER_LINE_PATTERN = /^## Release gate sign-off\r?$/m;
 
 export function findSignoffSectionStart(body: string): number {
   const match = SIGNOFF_SECTION_HEADER_LINE_PATTERN.exec(body);
