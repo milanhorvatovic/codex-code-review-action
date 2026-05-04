@@ -121,12 +121,12 @@ release-gate-v<X.Y.Z>/
   manual-checks.md    # short notes on the manual security regression checks (and base-mode checks if applicable)
 ```
 
-After the tag pushes and the GitHub Release exists (created by `release.yaml`), upload the zip:
+After the tag pushes, the GitHub Release exists (created by `release.yaml`), the self-pin refresh PR has merged, and every post-tag gate item — including any release-specific post-tag rows recorded under [Release-specific items](#release-specific-items) — has been signed off, upload the zip:
 
 ```bash
 gh release upload v<X.Y.Z> release-gate-v<X.Y.Z>.zip --clobber
 ```
 
-`--clobber` makes the upload retry-safe: a partial-upload retry, an evidence-zip regeneration, or a re-upload after fixing typos in the snapshot all overwrite the existing asset instead of failing.
+`--clobber` makes the upload retry-safe: a partial-upload retry, an evidence-zip regeneration, or a re-upload after a late post-tag verification all overwrite the existing asset instead of failing. Use this freedom — it is normal to upload a first cut as soon as the immediate post-tag items are confirmed, then re-upload with `--clobber` later when slower release-specific items resolve.
 
 The zip is the durable record. If automation of this step proves useful after the first cycle, the upload can move into `release.yaml` — until then, it is a maintainer-driven step documented in the release process.
