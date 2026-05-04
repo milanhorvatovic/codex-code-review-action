@@ -324,23 +324,34 @@ jobs:
           }
 
           # Enable GitHub auto-merge, verify the call took, and revert it if the
-          # trust-boundary label is now present.  Returns 0 on full success, 1 on any
-          # verification or revert failure (with appropriate `::error::` annotations).
-          # Disable-auto on a trust-boundary PR is a hard failure: silently logging it as a
-          # warning would let auto-merge stay armed on a PR the policy says must remain
-          # manual, which is a worse outcome than a noisy workflow failure.
+          # trust-boundary label is now present (or its state has become unknown).
+          # Returns 0 on full success, 1 on any verification or revert failure (with
+          # appropriate `::error::` annotations). Disable-auto on a trust-boundary PR
+          # is a hard failure: silently logging it as a warning would let auto-merge
+          # stay armed on a PR the policy says must remain manual, which is a worse
+          # outcome than a noisy workflow failure. Same fail-closed treatment for the
+          # `unknown` post-check: if we can't verify the label state after arming, we
+          # defensively disable auto-merge and fail rather than risk a policy bypass.
           arm_auto_merge() {
             gh pr merge --auto --squash "$PR_URL" 2>&1 || true
             if ! verify_auto_merge_or_terminal; then
               return 1
             fi
-            if [ "$(trust_boundary_state)" = "true" ]; then
-              echo "trust-boundary label is now present; reverting auto-merge."
-              if ! gh pr merge --disable-auto "$PR_URL"; then
-                echo "::error::Failed to disable auto-merge on a trust-boundary PR. The PR may still merge automatically when conditions are met, bypassing the policy that requires manual maintainer review. Investigate immediately."
-                return 1
-              fi
-            fi
+            case "$(trust_boundary_state)" in
+              true)
+                echo "trust-boundary label is now present; reverting auto-merge."
+                if ! gh pr merge --disable-auto "$PR_URL"; then
+                  echo "::error::Failed to disable auto-merge on a trust-boundary PR. The PR may still merge automatically when conditions are met, bypassing the policy that requires manual maintainer review. Investigate immediately."
+                  return 1
+                fi
+                return 1 ;;
+              unknown)
+                echo "::error::Failed to verify trust-boundary state after arming auto-merge. Defensively disabling auto-merge to avoid a possible policy bypass — if the label is actually present, we cannot rely on the reactive disable job to backstop us (it only fires on the labeled event, which may have already run before this point)."
+                if ! gh pr merge --disable-auto "$PR_URL"; then
+                  echo "::error::Failed to defensively disable auto-merge on a possibly-trust-boundary PR. Investigate immediately."
+                fi
+                return 1 ;;
+            esac
             return 0
           }
 
@@ -356,14 +367,20 @@ jobs:
             exit 0
           }
 
-          # Pre-poll trust-boundary check.
+          # Pre-poll trust-boundary check. `unknown` fails closed: if we can't see the
+          # label state and it's actually present, the reactive disable-auto-merge job
+          # may have already run on the labeled event before we reach here — arming
+          # auto-merge with `fall_back_to_auto_merge` would leave it active on a PR the
+          # policy says must be manual. A workflow failure is recoverable via re-run; a
+          # silent policy bypass isn't.
           case "$(trust_boundary_state)" in
             true)
               echo "trust-boundary label is now present (applied after workflow start); skipping merge."
               exit 0
               ;;
             unknown)
-              fall_back_to_auto_merge "Failed to query trust-boundary label state pre-poll"
+              echo "::error::Failed to query trust-boundary label state pre-poll. Refusing to arm auto-merge: if the label is actually present, the reactive disable-auto-merge-on-trust-boundary job may have already run before we'd arm auto-merge here, leaving an unrevoked merge on a PR the policy says must be manual. Investigate the gh pr view error above and re-run."
+              exit 1
               ;;
           esac
 
@@ -385,14 +402,16 @@ jobs:
             exit 1
           fi
 
-          # Post-poll trust-boundary re-check.
+          # Post-poll trust-boundary re-check. Same fail-closed treatment as the pre-poll
+          # check — see the comment there for the policy-bypass reasoning.
           case "$(trust_boundary_state)" in
             true)
               echo "trust-boundary label was applied while waiting for checks; skipping merge."
               exit 0
               ;;
             unknown)
-              fall_back_to_auto_merge "Failed to query trust-boundary label state post-poll"
+              echo "::error::Failed to query trust-boundary label state post-poll. Refusing to arm auto-merge: see the pre-poll comment above for why a possibly-present trust-boundary label cannot be safely backstopped from this point. Investigate the gh pr view error above and re-run."
+              exit 1
               ;;
           esac
 
