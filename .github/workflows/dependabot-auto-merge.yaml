@@ -206,35 +206,44 @@ jobs:
             exit 0
           fi
 
-      - name: Auto-merge patch and minor updates
+      # Wait for every required status check to reach a terminal state, then squash-merge
+      # synchronously inside this workflow run. The previous flow called `gh pr merge --auto`,
+      # which delegated the actual merge to GitHub's server-side auto-merge worker. That
+      # worker occasionally failed to fire after the last required check transitioned green,
+      # leaving the PR open with auto-merge enabled, no merge attempt, and no failure event
+      # (see PR #114 for a confirmed instance). Merging inline under the bot's still-valid
+      # GITHUB_TOKEN eliminates the enable→fire race and surfaces any merge error as a
+      # workflow failure instead of a silent stall.
+      #
+      # Trust-boundary handling: the label is re-checked twice — once before polling (so we
+      # don't waste minutes waiting on a PR we won't merge) and again immediately before the
+      # merge (closing the race where a maintainer applies the label while checks run).
+      - name: Wait for required checks, then squash-merge
         if: >-
           steps.effective.outputs.update-type != 'version-update:semver-major'
           && !contains(steps.metadata.outputs.dependency-names, 'openai/codex-action')
           && !contains(github.event.pull_request.labels.*.name, 'trust-boundary')
         env:
-          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          PR_URL: "${{ github.event.pull_request.html_url }}"
-        # Two runtime checks close the race the `if:` cannot:
-        #   - Pre-check: skip if the trust-boundary label is now present (applied between
-        #     workflow start and this step).
-        #   - Post-check: if the label is applied while we are enabling auto-merge, revert
-        #     the auto-merge state. The disable-auto-merge job below cannot help in that
-        #     window because it would fire before auto-merge was set, find nothing to
-        #     disable, and exit cleanly.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
           set -euo pipefail
           has_trust_boundary() {
             gh pr view "$PR_URL" --json labels --jq 'any(.labels[]; .name == "trust-boundary")'
           }
           if [ "$(has_trust_boundary)" = "true" ]; then
-            echo "trust-boundary label is now present (applied after workflow start); skipping auto-merge."
+            echo "trust-boundary label is now present (applied after workflow start); skipping merge."
             exit 0
           fi
-          gh pr merge --auto --squash "$PR_URL"
+          # `--required` filters to checks listed in the branch ruleset's required_status_checks.
+          # `--watch` polls until each reaches a terminal conclusion. `--fail-fast` aborts on the
+          # first required check that fails, surfacing the failure rather than waiting on the rest.
+          gh pr checks "$PR_URL" --required --watch --fail-fast
           if [ "$(has_trust_boundary)" = "true" ]; then
-            echo "trust-boundary label was applied while enabling auto-merge; reverting."
-            gh pr merge --disable-auto "$PR_URL"
+            echo "trust-boundary label was applied while waiting for checks; skipping merge."
+            exit 0
           fi
+          gh pr merge --squash "$PR_URL"
 
   # Reactive disable: if a maintainer applies the `trust-boundary` label after auto-merge has
   # already been enabled by the auto-merge job above, the label-guard `if:` on that step only
