@@ -134,9 +134,15 @@ jobs:
     # so a 30-minute cap surfaces a genuine hang as a workflow failure without flaking
     # on normal runs.
     timeout-minutes: 30
+    # `checks: read` and `statuses: read` are required by `gh pr checks --required
+    # --watch` to read check-run and legacy commit-status state. With an explicit
+    # `permissions:` block any unspecified scope defaults to `none`, so these must be
+    # listed here even though `pull-requests: write` is also set.
     permissions:
+      checks: read
       contents: write
       pull-requests: write
+      statuses: read
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
