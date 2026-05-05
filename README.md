@@ -154,11 +154,12 @@ Fork PRs cannot run the `review` job under `pull_request`. GitHub does not pass 
 
 Diffs leave the repository boundary and reach OpenAI via [`openai/codex-action`](https://github.com/openai/codex-action). Adopt this action only if that data transfer is acceptable under your organization's policy.
 
-Apply every recommendation from [Public repos](#public-repos) — `pull_request`, SHA pinning, `allow-users`, minimum `permissions:` — and add three private-repo controls:
+Apply every recommendation from [Public repos](#public-repos) — `pull_request`, SHA pinning, `allow-users`, minimum `permissions:` — and add four private-repo controls:
 
 - **Environment-scoped secret.** Bind `OPENAI_API_KEY` to a GitHub Environment so jobs must declare `environment:` to receive it. This is a scoping guardrail, not airtight enforcement — any maintainer-authored workflow that names the same environment can still read the secret. Add branch-restriction deployment protection rules if your policy needs harder gating; required reviewers are not viable here because the matrix `review` job would prompt once per chunk. The [Production workflow example](#production-workflow-example) demonstrates the `environment: codex-review` pattern.
 - **Same-repo restriction.** Gate every job on `github.event.pull_request.head.repo.full_name == github.repository` so a fork PR cannot trigger a private-repo review.
 - **Default `retain-findings`.** Leave `retain-findings` at its default (`false`). Long-lived artifacts retain the diff and the model's findings; opt in only when an auditor or compliance regime requires it.
+- **Lock policy against in-PR edits when customizing the reference.** If you set `review-reference-file`, also set `review-reference-source: base` so the file is read from the PR base SHA rather than the head. Same-repo PRs cannot then edit `.github/codex/review-reference.md` and have those edits steer the review of that same PR. See [Customizing review rules per repository](#customizing-review-rules-per-repository).
 
 For organizations whose policy forbids running non-vendor public actions even when SHA-pinned, the [fork/internal-mirror adoption path](#adopting-in-enterprise-environments) describes how to host a wrapped fork inside the org instead.
 
@@ -282,12 +283,12 @@ jobs:
           fail-on-missing-chunks: "true" # explicit for auditors (consumer-controls.md item 8)
 ```
 
-> **`review-reference-file` is PR-controlled in workspace mode.** Two separate guarantees apply, and they are not the same thing:
+> **`review-reference-file` has two independent guarantees; choose `review-reference-source` deliberately.**
 >
 > - **Workspace-safety constraints (always on).** The prepare step rejects empty values, absolute paths, NUL/backslash, traversal, paths that resolve through a symlink leaf or ancestor, non-regular files, the runner's `.git` directory, and files over 64 KiB before any read. See [Constraints on `review-reference-file`](#constraints-on-review-reference-file). These constraints close file-disclosure attacks (a PR cannot point the input at `/proc/self/environ` or a runner-local secret).
-> - **Tamper resistance (opt-in, future).** The constraints above do not pin policy to the base branch. The reference file is checked out from `${{ github.event.pull_request.head.sha }}`, so a same-repo PR can legitimately edit `.github/codex/review-reference.md` and steer the review prompt. An opt-in `review-reference-source: base` mode that reads the file from the base SHA is tracked in [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) and is the recommended setting for repositories that need policy locked against PR edits.
+> - **Tamper resistance (opt-in via `review-reference-source: base`).** The constraints above do not pin policy to the base branch. In the default `workspace` mode the reference file is checked out from `${{ github.event.pull_request.head.sha }}`, so a same-repo PR can legitimately edit `.github/codex/review-reference.md` and steer the review prompt. Setting `review-reference-source: base` reads the file from the PR base SHA via `git show` instead, so an in-flight PR cannot edit policy that applies to its own review. Recommended for repositories with less-trusted contributors and as the default for org-owned wrapper workflows.
 >
-> Treat workspace-mode references as policy that same-repo PR authors can edit until base mode ships.
+> Workspace mode trusts same-repo PR authors with policy edits; base mode does not. Pick the one that matches your contributor trust model.
 
 ## Architecture
 
@@ -323,6 +324,7 @@ upload artifacts ────────── ▶                             
 | `github-token` | No | `github.token` | GitHub token for fetching PR base commit |
 | `allow-users` | No | all users | Comma-separated list of GitHub usernames who can run this action |
 | `review-reference-file` | No | built-in | Workspace-relative path to a custom review reference (regular file, no symlinks, ≤ 64 KiB). See [Customizing review rules per repository](#customizing-review-rules-per-repository). |
+| `review-reference-source` | No | `workspace` | Where to read `review-reference-file` from. `workspace`: PR head, convenient for PR-driven policy iteration. `base`: PR base SHA, locks policy against in-PR edits. See [Customizing review rules per repository](#customizing-review-rules-per-repository). |
 | `max-chunk-bytes` | No | `204800` | Target max bytes per diff chunk (splits at file boundaries) |
 
 ### Prepare action outputs
@@ -379,24 +381,51 @@ To customize, create `.github/codex/review-reference.md` in your repository and 
   uses: milanhorvatovic/codex-ai-code-review-action/prepare@v2
   with:
     review-reference-file: .github/codex/review-reference.md
+    review-reference-source: base # recommended; reads policy from the PR base SHA
 ```
 
 See [`defaults/review-reference.md`](defaults/review-reference.md) for the structure and examples.
 
+### Choosing a `review-reference-source`
+
+| Mode | Reads from | Trust trade-off |
+|------|------------|-----------------|
+| `workspace` (default) | The PR head SHA, as checked out into the runner's workspace. | A same-repo PR can edit `.github/codex/review-reference.md` in the same PR and steer its own review. Convenient for PR-driven policy iteration; trusts every same-repo contributor with policy edits. |
+| `base` (recommended for less-trusted contributors) | The PR base SHA, via `git show`. | Policy is locked at the base commit, so an in-flight PR cannot edit policy that applies to its own review. Cost: you cannot land a policy update and reference it in the same PR — the new policy takes effect on PRs opened after the policy commit lands on base. |
+
+Recommend `base` for repositories with less-trusted contributors and as the locked default in org-owned wrapper workflows.
+
 ### Constraints on `review-reference-file`
 
-The path is read from the checked-out workspace. To close off file-disclosure attacks where a PR replaces the reference with a symlink to a runner-local secret, the prepare step rejects values that:
+Some path-shape rules apply to every value of `review-reference-source`. Mode-specific rules are listed below.
+
+#### Path-shape rules (both modes)
+
+The prepare step rejects values that:
 
 - are empty, absolute (`/proc/self/environ`, `/tmp/...`, `C:\...`), contain a NUL byte, or contain a backslash;
 - normalize to the workspace root (`.`) or escape it (`../...`);
-- target the runner's `.git` directory (any casing of the first component);
+- target the runner's `.git` directory (any casing of the first component).
+
+Failures surface as `Invalid review-reference-file: <reason>` before any read.
+
+#### Workspace-mode rules
+
+The path is resolved against the runner's checked-out workspace. To close off file-disclosure attacks where a PR replaces the reference with a symlink to a runner-local secret, the prepare step additionally rejects values that:
+
 - resolve through a symbolic link, either as the leaf or via any ancestor directory;
 - point to anything other than a regular file (a directory, FIFO, device);
-- exceed 64 KiB.
+- exceed 64 KiB on disk.
 
-If the value violates any of these rules, the prepare step fails closed with `Invalid review-reference-file: <reason>` before reading the file.
+#### Base-mode rules
 
-> **Tamper-resistance caveat.** Because the file is checked out from `github.event.pull_request.head.sha`, a PR can still legitimately edit `.github/codex/review-reference.md` and steer the review prompt. The constraints above prevent a PR from reading arbitrary runner-local files; they do not pin the policy to the base branch. If you want the reference to be read from `base` regardless of PR contents, follow [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97).
+The path is read from the PR base SHA via `git show` — the file is never resolved against the runner filesystem, so workspace symlinks cannot point the read at runner-local secrets. The prepare step rejects:
+
+- tracked symbolic links (git mode `120000`) — the git form does not follow filesystem symlinks, but returning the link target string as policy would be a footgun;
+- non-regular-file modes (notably submodules, mode `160000`);
+- blobs whose returned content exceeds 64 KiB.
+
+Base-mode failures use the same `Invalid review-reference-file:` prefix when the input or tree shape is at fault. Git-shell failures (path absent at the base SHA, base SHA unreachable) surface with a distinct prefix `Failed to read review-reference-file at base SHA:` so input problems and git problems can be debugged separately.
 
 ## Adopting in enterprise environments
 
@@ -578,7 +607,7 @@ The wrapper threads four `prepare` outputs (`skipped`, `has-changes`, `chunk-cou
 The example above only exposes the OpenAI API key via `workflow_call.secrets`. The wrapper is the org's policy boundary, so the default surface is deliberately tiny — every input exposed becomes a policy decision the wrapper has to enforce. Use these categories when deciding whether to add an input:
 
 - **Safe to expose for product repos.** Operational tuning that does not change trust boundaries: `allow-users`, `max-chunk-bytes`, `min-confidence`, `max-comments`, `model`, `effort`, `review-effort`. Add these to `on.workflow_call.inputs:` and thread them into the matching `with:` blocks.
-- **Defer until `review-reference-source: base` ships.** Reference-policy knobs decide what the model treats as review policy. Today the only one available is `review-reference-file`, and in workspace mode the policy file is read from the PR head — so exposing it through the wrapper lets any same-repo PR in a product repo edit the policy and steer the prompt (see [the production-example callout above](#production-workflow-example)). The opt-in `review-reference-source: base` mode that pins policy to the base SHA is tracked in [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) and is not yet available. Until it lands, do not expose `review-reference-file` from the wrapper without an explicit trust decision; once #97 ships, expose both inputs together and set `review-reference-source: base` in the wrapper's defaults. That pins the *source* of the policy file to the consumer repo's base SHA, so an in-flight PR can no longer edit `.github/codex/review-reference.md` and have those edits apply to its own review. Note: policy *content* still lives in the consumer repo and is controlled by whoever can land changes to base — base mode protects against in-PR edits, not against trusted maintainers merging policy changes through normal review. The wrapper centralizes the mode choice (product repos cannot opt back to workspace), not the policy text.
+- **Expose with `review-reference-source: base` locked in the wrapper.** Reference-policy knobs decide what the model treats as review policy. Expose `review-reference-file` only together with `review-reference-source`, and set the wrapper's default to `base` so product repos cannot opt back to workspace mode. Base mode pins the *source* of the policy file to the consumer repo's base SHA: an in-flight PR cannot edit `.github/codex/review-reference.md` and have those edits apply to its own review. Policy *content* still lives in the consumer repo and is controlled by whoever can land changes to base — base mode protects against in-PR edits, not against trusted maintainers merging policy changes through normal review. The wrapper centralizes the mode choice (product repos cannot opt back to workspace), not the policy text. Exposing `review-reference-file` without locking `review-reference-source: base` in the wrapper is not recommended: in workspace mode the policy file is read from the PR head, so any same-repo PR in a product repo can edit the policy and steer its own review (see [the production-example callout above](#production-workflow-example)).
 - **Do not expose by default.** Data-destination and retention knobs (`retain-findings`, `retain-findings-days`), permission scoping, the OpenAI key surface beyond the existing `workflow_call.secrets.openai-api-key`, and the same-repo / draft / fork gates. These belong to the wrapper repo's centralized policy; exposing them lets product repos opt out of the controls the wrapper exists to enforce.
 
 ### Enterprise adoption checklist
@@ -602,14 +631,14 @@ The recommended setup matches the [Production workflow example](#production-work
 
 1. Configure the `codex-review` GitHub Environment and add `OPENAI_API_KEY` as an **environment secret** as described in [One-time repo setup](#one-time-repo-setup). Remove any repo-scoped copy of `OPENAI_API_KEY` once the environment-scoped secret is confirmed working. The `review` job that declares `environment: codex-review` reads the environment-scoped secret regardless of whether a repo-scoped duplicate exists, so the duplicate is invisible to that specific job — but any other workflow or job in the repository that does not declare the environment can still read the repo-scoped copy, which silently defeats the scoping guardrail.
 2. Create the workflow file using the [Production workflow example](#production-workflow-example). Pin `prepare`, `review`, and `publish` to the same reviewed full SHA, gate every job on `github.event.pull_request.head.repo.full_name == github.repository`, and set `allow-users` to the maintainers who may trigger reviews.
-3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules. Note the trust trade-off: in the default `workspace` mode the file is read from the PR head and a same-repo PR can edit it to steer the prompt. The workspace-safety constraints described in [Constraints on `review-reference-file`](#constraints-on-review-reference-file) close file-disclosure attacks but do not pin policy to the base branch. If you need policy locked against PR edits, follow [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97) and adopt `review-reference-source: base` once it ships.
+3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules. When you set `review-reference-file`, also set `review-reference-source: base` to read the policy from the PR base SHA so a same-repo PR cannot edit `.github/codex/review-reference.md` and steer its own review. See [Choosing a `review-reference-source`](#choosing-a-review-reference-source) for the trade-off.
 4. Open a pull request — the review appears automatically.
 
 ### Minimal quick start (evaluation only)
 
 1. Add `OPENAI_API_KEY` as a repository secret (Settings > Secrets and variables > Actions). This makes the secret visible to every workflow in the repo, so use it for evaluation only — switch to the environment-scoped path above before opening the workflow to other contributors.
 2. Create the workflow file as shown in [Minimal quick start](#minimal-quick-start).
-3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules (same trust trade-off as above).
+3. Optionally create `.github/codex/review-reference.md` for repo-specific review rules. Pair it with `review-reference-source: base` for the same lock-in described above.
 4. Open a pull request — the review appears automatically.
 
 ## Development
