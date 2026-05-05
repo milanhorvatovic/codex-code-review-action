@@ -11,6 +11,30 @@
 
 PR diffs and metadata leave the runner only via two destinations: **GitHub** (PR context, posting the review, artifact storage) and **OpenAI** (via the SHA-pinned [`openai/codex-action`](https://github.com/openai/codex-action) invoked from `review/action.yaml`). This repository operates no maintainer-owned backend, proxy, analytics service, or telemetry pipeline that receives diffs. See the [Trust model](../README.md#trust-model) section in the README for the full statement.
 
+## Reviewing security-relevant changes
+
+Maintainers gate two complementary classes of change behind explicit security review and dedicated CHANGELOG callouts so adopters who have already hardened their workflow can re-audit before pulling a new SHA.
+
+**Trust-boundary changes** — *what* data crosses what boundary:
+
+- outbound HTTP destinations (any new host or external API call);
+- data sent to OpenAI via the prompt (new fields, larger excerpts, new metadata);
+- analytics, logging, or telemetry that leaves the GitHub Actions runner;
+- `permissions:` required by the action (new scope, new token usage);
+- artifact contents that change what callers must trust;
+- default exit-code contract (a scenario the action previously exited 0 on now exits non-zero, or vice versa);
+- transitive dependency SHA flips that touch any of the above (notably `openai/codex-action`).
+
+**Containment-mechanism changes** — *how* those boundaries stay enforced:
+
+- event trigger surface, especially adding or expanding `pull_request_target`, `workflow_run`, or `issue_comment` (the existing `pull_request` trigger is the safe baseline);
+- secret scoping, passing, naming, or job-level exposure;
+- model-execution sandboxing, including any `openai/codex-action` input that controls network access, filesystem access, or process execution under the model;
+- `review-reference-file` and `review-reference-source` validation, resolution, or sourcing;
+- workflow job-boundary moves between `prepare`, `review`, and `publish` that cross a permission or secret scope.
+
+PRs in either class carry the matching label (`trust-boundary`, `security-review-required`, or both), get a dedicated CHANGELOG callout at release time, and require maintainer security-review sign-off recorded against the release gate. The full criteria, label rules, Dependabot enforcement, and CHANGELOG callout shapes live in [`CONTRIBUTING.md` → Security-review-required changes](../CONTRIBUTING.md#security-review-required-changes); this section is the auditor-facing summary.
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in this project, please report it responsibly:

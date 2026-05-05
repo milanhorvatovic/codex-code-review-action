@@ -15,7 +15,7 @@ import {
   consolidateRcSections,
   existingBodyHasMaintainerEdits,
   existingBodyHasMaintainerSignoff,
-  extractTrustBoundaryImpact,
+  extractSecurityReviewImpact,
   findSignoffSectionStart,
   formatPullRequestEntry,
   parseGitRemoteUrl,
@@ -141,6 +141,38 @@ describe("categorizePullRequest", () => {
     expect(sections).toContain("Added");
     expect(sections).toContain("⚠️ Trust boundary change");
   });
+
+  it("adds the containment-mechanism section additively for security-review-required", () => {
+    const sections = categorizePullRequest(
+      makePr({
+        number: 1,
+        labels: [
+          { name: "release: minor" },
+          { name: "enhancement" },
+          { name: "security-review-required" },
+        ],
+      }),
+    );
+    expect(sections).toContain("Added");
+    expect(sections).toContain("🔒 Containment-mechanism change");
+    expect(sections).not.toContain("⚠️ Trust boundary change");
+  });
+
+  it("adds both security-review sections when a PR carries both labels", () => {
+    const sections = categorizePullRequest(
+      makePr({
+        number: 1,
+        labels: [
+          { name: "release: minor" },
+          { name: "enhancement" },
+          { name: "trust-boundary" },
+          { name: "security-review-required" },
+        ],
+      }),
+    );
+    expect(sections).toContain("⚠️ Trust boundary change");
+    expect(sections).toContain("🔒 Containment-mechanism change");
+  });
 });
 
 describe("formatPullRequestEntry", () => {
@@ -153,51 +185,74 @@ describe("formatPullRequestEntry", () => {
   });
 });
 
-describe("extractTrustBoundaryImpact", () => {
+describe("extractSecurityReviewImpact", () => {
   it("extracts a paragraph and strips comments", () => {
     const body = [
       "## Summary",
       "stuff",
       "",
-      "## Trust boundary impact",
+      "## Security-review impact",
       "<!-- helper -->",
       "Adds outbound HTTP to api.example.com.",
       "",
       "## Test plan",
       "- run tests",
     ].join("\n");
-    expect(extractTrustBoundaryImpact(body)).toBe(
+    expect(extractSecurityReviewImpact(body)).toBe(
       "Adds outbound HTTP to api.example.com.",
     );
   });
 
   it("collapses multi-line paragraphs to a single line", () => {
     const body = [
-      "## Trust boundary impact",
+      "## Security-review impact",
       "Adds outbound HTTP",
       "to api.example.com.",
     ].join("\n");
-    expect(extractTrustBoundaryImpact(body)).toBe(
+    expect(extractSecurityReviewImpact(body)).toBe(
       "Adds outbound HTTP to api.example.com.",
     );
   });
 
   it("throws when the heading is missing", () => {
-    expect(() => extractTrustBoundaryImpact("## Summary\nfoo")).toThrow(
-      /Missing '## Trust boundary impact' heading/,
+    expect(() => extractSecurityReviewImpact("## Summary\nfoo")).toThrow(
+      /Missing '## Security-review impact' heading/,
     );
   });
 
   it("throws when the body is the template default 'None.'", () => {
     expect(() =>
-      extractTrustBoundaryImpact("## Trust boundary impact\nNone.\n"),
+      extractSecurityReviewImpact("## Security-review impact\nNone.\n"),
     ).toThrow(/template default 'None\.'/);
   });
 
   it("throws when only HTML comments remain", () => {
     expect(() =>
-      extractTrustBoundaryImpact("## Trust boundary impact\n<!-- placeholder -->\n"),
+      extractSecurityReviewImpact("## Security-review impact\n<!-- placeholder -->\n"),
     ).toThrow(/empty after stripping HTML comments/);
+  });
+
+  it("accepts the legacy `## Trust boundary impact` heading for PRs merged before the rename", () => {
+    const body = [
+      "## Summary",
+      "stuff",
+      "",
+      "## Trust boundary impact",
+      "<!-- helper -->",
+      "Adds new permission scope.",
+      "",
+      "## Test plan",
+      "- run tests",
+    ].join("\n");
+    expect(extractSecurityReviewImpact(body)).toBe(
+      "Adds new permission scope.",
+    );
+  });
+
+  it("rejects the legacy heading when its body is the template default 'None.'", () => {
+    expect(() =>
+      extractSecurityReviewImpact("## Trust boundary impact\nNone.\n"),
+    ).toThrow(/template default 'None\.'/);
   });
 });
 
@@ -255,12 +310,55 @@ describe("renderChangelogEntry", () => {
           { name: "enhancement" },
           { name: "trust-boundary" },
         ],
-        body: "## Trust boundary impact\nAdds new permission scope.",
+        body: "## Security-review impact\nAdds new permission scope.",
       }),
     ];
     const result = renderChangelogEntry(prs, "2.1.0", "2026-05-01");
     expect(result).toContain("### ⚠️ Trust boundary change");
     expect(result).toContain("Adds new permission scope");
+  });
+
+  it("renders containment-mechanism callout for security-review-required PRs", () => {
+    const prs = [
+      makePr({
+        number: 11,
+        title: "Tighten sandbox",
+        labels: [
+          { name: "release: patch" },
+          { name: "security" },
+          { name: "security-review-required" },
+        ],
+        body: "## Security-review impact\nFlips openai/codex-action sandbox to read-only.",
+      }),
+    ];
+    const result = renderChangelogEntry(prs, "2.1.0", "2026-05-01");
+    expect(result).toContain("### 🔒 Containment-mechanism change");
+    expect(result).toContain("Flips openai/codex-action sandbox to read-only");
+    expect(result).not.toContain("### ⚠️ Trust boundary change");
+  });
+
+  it("renders both callouts when a PR carries both security-review labels", () => {
+    const prs = [
+      makePr({
+        number: 12,
+        title: "Boundary + containment",
+        labels: [
+          { name: "release: minor" },
+          { name: "enhancement" },
+          { name: "trust-boundary" },
+          { name: "security-review-required" },
+        ],
+        body: "## Security-review impact\nAdds outbound destination AND tightens sandbox.",
+      }),
+    ];
+    const result = renderChangelogEntry(prs, "2.1.0", "2026-05-01");
+    const trustIdx = result.indexOf("### ⚠️ Trust boundary change");
+    const containIdx = result.indexOf("### 🔒 Containment-mechanism change");
+    expect(trustIdx).toBeGreaterThan(0);
+    expect(containIdx).toBeGreaterThan(trustIdx);
+    expect(
+      result.match(/Adds outbound destination AND tightens sandbox/g),
+    ).toHaveLength(2);
   });
 
   it("emits a placeholder when nothing notable changed", () => {
@@ -611,7 +709,8 @@ describe("gate doc / PR body checklist drift", () => {
     "codex-prepare", // Prompt-artifact leakage check (artifact name shared by both)
     "review-reference-source: base", // Conditional base-mode checks
     "Release-specific items",
-    "Trust-boundary",
+    "Security-review-required cross-reference",
+    "Security-review sign-off",
     "Archiving the gate",
   ] as const;
 
@@ -685,19 +784,27 @@ describe("buildPrBody", () => {
     expect(body).toContain("widen `allow-users`");
     expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
     expect(body).toContain("- [ ] Release-specific items table is filled below this checklist");
-    expect(body).toContain("- [ ] Trust-boundary CHANGELOG callout");
-    expect(body).toContain("contributing a release level (i.e. not `release: skip`)");
+    expect(body).toContain("- [ ] Security-review CHANGELOG callouts");
+    expect(body).toContain("`### ⚠️ Trust boundary change`");
+    expect(body).toContain("`### 🔒 Containment-mechanism change`");
+    expect(body).toContain("- [ ] Security-review sign-off table is filled below this checklist");
+    expect(body).toContain("contributing a release level");
+    expect(body).toContain("Skipped PRs do not appear in CHANGELOG entries");
     expect(body).toContain("- [ ] Gate evidence zip attached to the GitHub Release");
     expect(body).toContain("### Release-specific items");
     expect(body).toContain("| # | Item | Owning work | State |");
+    expect(body).toContain("### Security-review sign-off");
+    expect(body).toContain("| # | PR | Class | Surfaces touched | State |");
 
     const preMergeIndex = body.indexOf("**Pre-merge:**");
     const postTagIndex = body.indexOf("**Post-tag:**");
     const evidenceZipIndex = body.indexOf("Gate evidence zip");
-    const tableIndex = body.indexOf("| # | Item | Owning work | State |");
+    const releaseSpecificTableIndex = body.indexOf("| # | Item | Owning work | State |");
+    const securityReviewTableIndex = body.indexOf("| # | PR | Class | Surfaces touched | State |");
     expect(postTagIndex).toBeGreaterThan(preMergeIndex);
     expect(evidenceZipIndex).toBeGreaterThan(postTagIndex);
-    expect(tableIndex).toBeGreaterThan(evidenceZipIndex);
+    expect(releaseSpecificTableIndex).toBeGreaterThan(evidenceZipIndex);
+    expect(securityReviewTableIndex).toBeGreaterThan(releaseSpecificTableIndex);
   });
 });
 
@@ -900,6 +1007,8 @@ describe("buildSignoffSection (with explicit gateDocUrl)", () => {
     expect(section).toContain(`(${url})`);
     expect(section).toContain(`(${url}#required-validation)`);
     expect(section).toContain(`(${url}#release-specific-items)`);
+    expect(section).toContain(`(${url}#security-review-required-cross-reference)`);
+    expect(section).toContain(`(${url}#security-review-sign-off)`);
     expect(section).toContain(`(${url}#archiving-the-gate)`);
     expect(section).not.toContain("milanhorvatovic/codex-ai-code-review-action");
   });

@@ -51,10 +51,13 @@ export const SECTION_ORDER = [
   "Documentation",
   "Process",
   "⚠️ Trust boundary change",
+  "🔒 Containment-mechanism change",
 ] as const;
 
 const TRUST_BOUNDARY_SECTION = "⚠️ Trust boundary change";
 const TRUST_BOUNDARY_LABEL = "trust-boundary";
+const CONTAINMENT_MECHANISM_SECTION = "🔒 Containment-mechanism change";
+const SECURITY_REVIEW_LABEL = "security-review-required";
 
 export function parseTargetVersion(input: string): string {
   return parseVersion(input);
@@ -124,6 +127,9 @@ export function categorizePullRequest(pr: PullRequest): readonly string[] {
   if (pr.labels.some((l) => l.name === TRUST_BOUNDARY_LABEL)) {
     sections.add(TRUST_BOUNDARY_SECTION);
   }
+  if (pr.labels.some((l) => l.name === SECURITY_REVIEW_LABEL)) {
+    sections.add(CONTAINMENT_MECHANISM_SECTION);
+  }
   return [...sections];
 }
 
@@ -131,11 +137,23 @@ export function formatPullRequestEntry(pr: PullRequest): string {
   return `- ${pr.title} ([#${pr.number}](${pr.url}))`;
 }
 
-export function extractTrustBoundaryImpact(prBody: string): string {
-  const headingMatch = /^## Trust boundary impact\s*$/m.exec(prBody);
+export function extractSecurityReviewImpact(prBody: string): string {
+  // Match either the current `## Security-review impact` heading or the legacy
+  // `## Trust boundary impact` heading. The PR template heading was renamed by
+  // #117 along with the extractor; trust-boundary PRs merged from the legacy
+  // template before that rename had a valid `## Trust boundary impact` section
+  // at merge time. This fallback lets those PRs flow through CHANGELOG
+  // generation between the last release and the first release that follows
+  // #117 — without it, a trust-boundary-labeled PR merged before the heading
+  // rename would throw here when included in a release window. Once a release
+  // ships and the legacy-bodied PRs are behind us, the `Trust boundary impact`
+  // alternative can be dropped (tracked as a future cleanup; the cost of
+  // keeping it is one regex alternation).
+  const headingMatch =
+    /^## (?:Security-review impact|Trust boundary impact)\s*$/m.exec(prBody);
   if (!headingMatch) {
     throw new Error(
-      "Missing '## Trust boundary impact' heading. Trust-boundary PRs must include the section from .github/PULL_REQUEST_TEMPLATE.md.",
+      "Missing '## Security-review impact' heading (legacy '## Trust boundary impact' also accepted for PRs merged before the rename). Security-review-required PRs must include the section from .github/PULL_REQUEST_TEMPLATE.md.",
     );
   }
   const after = prBody.slice(headingMatch.index + headingMatch[0].length);
@@ -148,7 +166,7 @@ export function extractTrustBoundaryImpact(prBody: string): string {
   }
   if (withoutComments.includes("<!--")) {
     throw new Error(
-      "'## Trust boundary impact' section contains an unclosed HTML comment; fix the PR body.",
+      "'## Security-review impact' section contains an unclosed HTML comment; fix the PR body.",
     );
   }
   const stripped = withoutComments
@@ -159,12 +177,12 @@ export function extractTrustBoundaryImpact(prBody: string): string {
     .trim();
   if (stripped === "") {
     throw new Error(
-      "'## Trust boundary impact' section is empty after stripping HTML comments.",
+      "'## Security-review impact' section is empty after stripping HTML comments.",
     );
   }
   if (stripped === "None." || stripped === "None") {
     throw new Error(
-      "'## Trust boundary impact' section still contains the template default 'None.' for a trust-boundary-labeled PR.",
+      "'## Security-review impact' section still contains the template default 'None.' for a PR labeled trust-boundary or security-review-required.",
     );
   }
   return stripped;
@@ -173,19 +191,30 @@ export function extractTrustBoundaryImpact(prBody: string): string {
 type SectionEntries = {
   standard: Map<string, Map<number, string>>;
   trustBoundary: Map<number, string>;
+  containmentMechanism: Map<number, string>;
 };
 
 function collectEntries(prs: PullRequest[]): SectionEntries {
   const standard = new Map<string, Map<number, string>>();
   const trustBoundary = new Map<number, string>();
+  const containmentMechanism = new Map<number, string>();
   for (const pr of prs) {
     if (releaseLevelOf(pr) === "skip") continue;
     const sections = categorizePullRequest(pr);
     const entry = formatPullRequestEntry(pr);
+    // Both security-review labels share a single `## Security-review impact`
+    // section in the PR body. Extract it once when either callout applies; the
+    // same impact text is bulleted under each matching callout heading, so a
+    // PR labeled with both classes appears under both with consistent prose.
+    const needsImpact =
+      sections.includes(TRUST_BOUNDARY_SECTION) ||
+      sections.includes(CONTAINMENT_MECHANISM_SECTION);
+    const impact = needsImpact ? extractSecurityReviewImpact(pr.body) : "";
     for (const section of sections) {
       if (section === TRUST_BOUNDARY_SECTION) {
-        const impact = extractTrustBoundaryImpact(pr.body);
         trustBoundary.set(pr.number, `${entry} — ${impact}`);
+      } else if (section === CONTAINMENT_MECHANISM_SECTION) {
+        containmentMechanism.set(pr.number, `${entry} — ${impact}`);
       } else {
         let bucket = standard.get(section);
         if (bucket === undefined) {
@@ -196,7 +225,7 @@ function collectEntries(prs: PullRequest[]): SectionEntries {
       }
     }
   }
-  return { standard, trustBoundary };
+  return { standard, trustBoundary, containmentMechanism };
 }
 
 export function renderChangelogEntry(
@@ -204,11 +233,12 @@ export function renderChangelogEntry(
   version: string,
   today: string,
 ): string {
-  const { standard, trustBoundary } = collectEntries(prs);
+  const { standard, trustBoundary, containmentMechanism } = collectEntries(prs);
   const lines: string[] = [`## [${version}] - ${today}`, ""];
   let appended = false;
   for (const section of SECTION_ORDER) {
     if (section === TRUST_BOUNDARY_SECTION) continue;
+    if (section === CONTAINMENT_MECHANISM_SECTION) continue;
     const bucket = standard.get(section);
     if (bucket === undefined || bucket.size === 0) continue;
     const sorted = [...bucket.values()].sort((a, b) => a.localeCompare(b));
@@ -220,6 +250,15 @@ export function renderChangelogEntry(
   if (trustBoundary.size > 0) {
     const sorted = [...trustBoundary.values()].sort((a, b) => a.localeCompare(b));
     lines.push(`### ${TRUST_BOUNDARY_SECTION}`, "");
+    for (const entry of sorted) lines.push(entry);
+    lines.push("");
+    appended = true;
+  }
+  if (containmentMechanism.size > 0) {
+    const sorted = [...containmentMechanism.values()].sort((a, b) =>
+      a.localeCompare(b),
+    );
+    lines.push(`### ${CONTAINMENT_MECHANISM_SECTION}`, "");
     for (const entry of sorted) lines.push(entry);
     lines.push("");
     appended = true;
@@ -589,7 +628,7 @@ export function parseGitRemoteUrl(
 // boxes) still fires regardless, so real sign-off on an older template is
 // still preserved.
 export const SIGNOFF_TEMPLATE_VERSION_MARKER =
-  "<!-- release-gate-template-version:v1 -->";
+  "<!-- release-gate-template-version:v2 -->";
 
 export function buildSignoffSection(gateDocUrl: string = resolveGateDocUrl()): string {
   const lines: string[] = [
@@ -606,7 +645,8 @@ export function buildSignoffSection(gateDocUrl: string = resolveGateDocUrl()): s
     "- [ ] Prompt-artifact leakage check: the resolved `reviewReference` flowing into the assembled prompt comes only from the validated path-resolver, never raw runner-local content. Confirmed by `src/prepare/referenceFile.test.ts` (path validation) and `src/prepare/main.test.ts` ('uses the resolved custom reference content for each prompt'). Direct artifact inspection requires the dogfood workflow's `allow-users` (in `.github/workflows/codex-review.yaml`) to include the inspecting maintainer's account; release-bot PRs and scratch PRs from other accounts are skipped. The allow-listed maintainer can open a scratch PR against the merge candidate and run `gh run download <run-id> --name codex-prepare` within the prepare job's retention window. Other maintainers either widen `allow-users` on a scratch branch first or rely on the unit-test coverage above.",
     "- [ ] Conditional `review-reference-source: base` checks are run, or waived with a rationale.",
     `- [ ] Release-specific items table is filled below this checklist with cross-references to owning PRs/issues, and each row resolved to \`Verified by:\` or \`Waived:\` (see [Release-specific items](${gateDocUrl}#release-specific-items)).`,
-    "- [ ] Trust-boundary CHANGELOG callout is present if any merged PR contributing a release level (i.e. not `release: skip`) is labeled `trust-boundary`. (Skipped PRs do not appear in CHANGELOG entries, so they cannot trigger the callout requirement.)",
+    `- [ ] Security-review CHANGELOG callouts are present per the [Security-review-required cross-reference](${gateDocUrl}#security-review-required-cross-reference) rule: \`### ⚠️ Trust boundary change\` for every merged \`trust-boundary\`-labeled PR contributing a release level, \`### 🔒 Containment-mechanism change\` for every merged \`security-review-required\`-labeled PR contributing a release level, both when a PR carries both labels. (Skipped PRs do not appear in CHANGELOG entries, so they cannot trigger the callout requirement.)`,
+    `- [ ] Security-review sign-off table is filled below this checklist with one row per merged PR labeled \`trust-boundary\` or \`security-review-required\` (or \`_None — release contains no security-review-required changes._\` if applicable), each row resolved to \`Verified by:\` or \`Waived:\` (see [Security-review sign-off](${gateDocUrl}#security-review-sign-off)).`,
     "",
     "**Post-tag:**",
     "",
@@ -619,6 +659,14 @@ export function buildSignoffSection(gateDocUrl: string = resolveGateDocUrl()): s
     "| # | Item | Owning work | State |",
     "|---|---|---|---|",
     "| 1 | _short description_ | _PR # / issue # / workflow file_ | _`Verified by: <maintainer> — <YYYY-MM-DD>` or `Waived: <rationale + tracked follow-up>`_ |",
+    "",
+    "### Security-review sign-off",
+    "",
+    `Populate the table below per [docs/release-gate.md → Security-review sign-off](${gateDocUrl}#security-review-sign-off). Add one row per merged PR labeled \`trust-boundary\` or \`security-review-required\`; resolve each State to \`Verified by:\` or \`Waived:\` per the sign-off convention. If the release contains no PRs in either class, replace the example row with \`_None — release contains no security-review-required changes._\` and add a Verified-by line.`,
+    "",
+    "| # | PR | Class | Surfaces touched | State |",
+    "|---|---|---|---|---|",
+    "| 1 | _#PR_ | _`trust-boundary` / `security-review-required` / both_ | _e.g. data sent to OpenAI; secret scoping_ | _`Verified by: <maintainer> — <YYYY-MM-DD>` or `Waived: <rationale + tracked follow-up>`_ |",
   ];
   return lines.join("\n");
 }
