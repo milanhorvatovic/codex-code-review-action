@@ -110,4 +110,4 @@ jobs:
           min-confidence: ${{ vars.CODEX_MIN_CONFIDENCE || '0' }} # 0 = no filtering until tune recommends a cutoff
           max-comments: ${{ vars.CODEX_MAX_COMMENTS || '' }} # empty = unlimited
           model: ${{ vars.CODEX_MODEL || '' }} # footer label; pairs with the review job's model
-          fail-on-missing-chunks: "true" # explicit for auditors; matches the action default (consumer-controls.md item 8)
+          fail-on-missing-chunks: "true" # explicit for auditors (consumer-controls.md item 8)

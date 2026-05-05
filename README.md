@@ -279,7 +279,7 @@ jobs:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
           retain-findings: "false" # explicit for auditors; matches the action default
-          fail-on-missing-chunks: "true" # explicit for auditors; matches the action default
+          fail-on-missing-chunks: "true" # explicit for auditors (consumer-controls.md item 8)
 ```
 
 > **`review-reference-file` is PR-controlled in workspace mode.** Two separate guarantees apply, and they are not the same thing:
@@ -549,7 +549,7 @@ jobs:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
           retain-findings: "false"
-          fail-on-missing-chunks: "true" # explicit for auditors; matches the action default
+          fail-on-missing-chunks: "true" # explicit for auditors (consumer-controls.md item 8)
 ```
 
 #### Differences from the Production workflow example
