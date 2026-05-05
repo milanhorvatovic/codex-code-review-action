@@ -101,12 +101,28 @@ Every line in this gate ends in one of two states:
 
 Acceptance bars:
 
-- **Before tagging.** Every pre-merge gate item (Required validation, Dist reproducibility, Manual security regression checks, Conditional base-mode checks, Release-specific items, Trust-boundary cross-reference) is verified or waived; every waiver names its follow-up; the maintainer cutting the tag has signed off on the rollup.
+- **Before tagging.** Every pre-merge gate item (Required validation, Dist reproducibility, Manual security regression checks, Conditional base-mode checks, Release-specific items, Security-review-required cross-reference, Security-review sign-off) is verified or waived; every waiver names its follow-up; the maintainer cutting the tag has signed off on the rollup.
 - **After tagging.** The post-tag item ([Archiving the gate](#archiving-the-gate)) is verified once `release.yaml` has created the GitHub Release and the evidence zip has been uploaded. The release is not considered complete until this final item is signed off in the release PR thread or evidence record.
 
-## Trust-boundary cross-reference
+## Security-review-required cross-reference
 
-If the release contains any PR labeled `trust-boundary` that also contributes a release level (i.e. not `release: skip`), the CHANGELOG must include the dedicated `### ⚠️ Trust boundary change` callout per the [Release process / Trust-boundary changes](../CONTRIBUTING.md#trust-boundary-changes) rule in `CONTRIBUTING.md`. Skipped PRs do not appear in CHANGELOG entries, so a `trust-boundary` label on a `release: skip` PR (e.g. release-prep or internal infra) does not by itself trigger the callout requirement. The release PR's CHANGELOG diff is the source of truth — the gate does not re-list the trust-boundary policy here, only confirms it was applied.
+If the release contains any PR labeled `trust-boundary` or `security-review-required` that also contributes a release level (i.e. not `release: skip`), the CHANGELOG must include the matching dedicated callout(s) per the [Release process / Security-review-required changes](../CONTRIBUTING.md#security-review-required-changes) rule in `CONTRIBUTING.md`:
+
+- a PR labeled `trust-boundary` requires a `### ⚠️ Trust boundary change` subsection with a bullet for that PR;
+- a PR labeled `security-review-required` requires a `### 🔒 Containment-mechanism change` subsection with a bullet for that PR;
+- a PR carrying both labels appears as a bullet under both callouts.
+
+Skipped PRs do not appear in CHANGELOG entries, so either label on a `release: skip` PR (e.g. release-prep or internal infra) does not by itself trigger a callout requirement. The release PR's CHANGELOG diff is the source of truth — the gate does not re-list the policy here, only confirms it was applied.
+
+## Security-review sign-off
+
+Every PR in this release labeled `trust-boundary` or `security-review-required` is listed below with a Verified-by line confirming the security review actually happened. This is separate from normal PR approval — the reviewer walked the criteria list in [`CONTRIBUTING.md` → Security-review-required changes](../CONTRIBUTING.md#security-review-required-changes), classified the surface(s) touched, and judged the change.
+
+| # | PR | Class | Surfaces touched | State |
+|---|---|---|---|---|
+| 1 | _#PR_ | _`trust-boundary` / `security-review-required` / both_ | _e.g. data sent to OpenAI; secret scoping_ | _`Verified by: <maintainer> — <YYYY-MM-DD>` or `Waived: <rationale + tracked follow-up>`_ |
+
+If the release contains no PRs in either class, replace the example row with `_None — release contains no security-review-required changes._` and add a Verified-by line so the section is not left ambiguously empty.
 
 ## Archiving the gate
 
