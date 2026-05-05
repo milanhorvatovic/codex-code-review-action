@@ -28,7 +28,7 @@ Do NOT copy `node_modules/`, `dist/`, `.git/`, source code, or anything large.
 Hand-authored `findings.json` files conformant with `defaults/review-output-schema.json`. Each file targets one diagnosis surface area:
 
 - `low-confidence-verdict.json` — `overall_correctness: "patch is correct"` with `overall_confidence_score < 0.9` and findings clustered in the 0.5–0.7 confidence band. Drives `scripts/lib/diagnoses/low_confidence.py`.
-- `noisy-p3.json` — many `priority: 3` findings whose `confidence_score` would be pruned by a higher `min-confidence`. Drives `scripts/lib/diagnoses/noisy_p3.py`.
+- `noisy-p3.json` — many `priority: 3` findings whose `confidence_score` would be pruned by a higher `min-confidence`; tests also mark selected titles from this file as maintainer-confirmed false positives. Drives `scripts/lib/diagnoses/noisy_p3.py` and `scripts/lib/diagnoses/false_positive.py`.
 - `truncation.json` — `summary` containing the literal "Incomplete review" banner phrase. Drives `scripts/lib/diagnoses/truncation.py`.
 
 These files are NOT sourced from this repository's own runs; the dogfood workflow keeps `retain-findings: "false"` per consumer-controls item 7. If a real artifact ever becomes available it can be added alongside these fixtures, but the skill does not depend on one.

@@ -10,6 +10,7 @@ rationales.
 from __future__ import annotations
 
 from ..findings_loader import Findings
+from .false_positive import false_positive_diagnosis
 from .low_confidence import low_confidence_diagnosis
 from .noisy_p3 import noisy_p3_diagnosis
 from .truncation import truncation_diagnosis
@@ -23,6 +24,7 @@ from .types import (
 )
 
 ALL_DIAGNOSES: tuple[DiagnosisFn, ...] = (
+    false_positive_diagnosis,
     low_confidence_diagnosis,
     noisy_p3_diagnosis,
     truncation_diagnosis,

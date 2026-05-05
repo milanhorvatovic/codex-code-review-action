@@ -1,4 +1,4 @@
-"""Unit tests for the three diagnoses in lib.diagnoses."""
+"""Unit tests for the diagnoses in lib.diagnoses."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from lib.diagnoses import DiagnosisContext
+from lib.diagnoses.false_positive import false_positive_diagnosis
 from lib.diagnoses.low_confidence import low_confidence_diagnosis
 from lib.diagnoses.noisy_p3 import noisy_p3_diagnosis
 from lib.diagnoses.truncation import truncation_diagnosis
@@ -21,6 +22,26 @@ def _load(name: str) -> Findings:
 
 def _ctx() -> DiagnosisContext:
     return DiagnosisContext()
+
+
+class FalsePositiveTests(unittest.TestCase):
+    def test_triggers_on_confirmed_false_positive_titles(self) -> None:
+        ctx = DiagnosisContext(
+            false_positive_titles=("Opaque variable name `f`", "Trailing whitespace"),
+            reference_path=".codex/policy.md",
+        )
+        out = false_positive_diagnosis(_load("noisy-p3.json"), ctx)
+
+        self.assertTrue(out.triggered)
+        rec = out.recommendations[0]
+        self.assertEqual(rec.target, "reference-file")
+        self.assertIn("False-positive calibration", rec.diff)
+        self.assertIn("Opaque variable name `f`", rec.diff)
+        self.assertIn("Trailing whitespace", rec.diff)
+        self.assertIn("--- a/.codex/policy.md", rec.diff)
+
+    def test_does_not_trigger_without_confirmed_titles(self) -> None:
+        self.assertFalse(false_positive_diagnosis(_load("noisy-p3.json"), _ctx()).triggered)
 
 
 class LowConfidenceTests(unittest.TestCase):

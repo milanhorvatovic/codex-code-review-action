@@ -26,6 +26,7 @@ class TuneError(Exception):
 
 @dataclass(frozen=True)
 class TuneInputs:
+    false_positive_titles: tuple[str, ...] = ()
     findings_path: str | None = None
     findings_text: str | None = None
     reference_path: str | None = None
@@ -56,6 +57,37 @@ def _load_findings(inputs: TuneInputs) -> Findings:
         raise TuneError(str(exc)) from exc
 
 
+def _normalize_title(title: str) -> str:
+    return " ".join(title.casefold().split())
+
+
+def _validate_false_positive_titles(findings: Findings, titles: tuple[str, ...]) -> tuple[str, ...]:
+    normalized_to_title = {_normalize_title(finding.title): finding.title for finding in findings.findings}
+    out: list[str] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+    for raw in titles:
+        title = raw.strip()
+        if title == "":
+            continue
+        key = _normalize_title(title)
+        if key not in normalized_to_title:
+            missing.append(title)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(normalized_to_title[key])
+    if missing:
+        available = "; ".join(finding.title for finding in findings.findings)
+        requested = "; ".join(missing)
+        raise TuneError(
+            "false-positive title(s) not found in findings.json: "
+            f"{requested}. Pass the finding title exactly as retained in the artifact. Available titles: {available}"
+        )
+    return tuple(out)
+
+
 def _render_report(findings: Findings, diagnoses: tuple[Diagnosis, ...]) -> str:
     triggered = [diagnosis for diagnosis in diagnoses if diagnosis.triggered]
     skipped = [diagnosis for diagnosis in diagnoses if not diagnosis.triggered]
@@ -74,7 +106,7 @@ def _render_report(findings: Findings, diagnoses: tuple[Diagnosis, ...]) -> str:
         lines.append("## Recommendations")
         lines.append("")
         lines.append(
-            "No diagnoses fired. The verdict is well-calibrated, the P3 surface is below the noise threshold, and the summary contains no truncation banner. No changes recommended."
+            "No diagnoses fired. No confirmed false positives were supplied, the verdict is well-calibrated, the P3 surface is below the noise threshold, and the summary contains no truncation banner. No changes recommended."
         )
         lines.append("")
     else:
@@ -113,7 +145,9 @@ def _render_report(findings: Findings, diagnoses: tuple[Diagnosis, ...]) -> str:
 
 def run_tune(inputs: TuneInputs) -> TuneOutputs:
     findings = _load_findings(inputs)
+    false_positive_titles = _validate_false_positive_titles(findings, inputs.false_positive_titles)
     ctx = DiagnosisContext(
+        false_positive_titles=false_positive_titles,
         reference_path=inputs.reference_path or DiagnosisContext().reference_path,
         workflow_path=inputs.workflow_path or DiagnosisContext().workflow_path,
     )
@@ -147,6 +181,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Path to the consumer's current workflow file (optional context). The codex-review "
             "workflow may live anywhere under .github/workflows/; pass whichever filename your repo uses."
+        ),
+    )
+    parser.add_argument(
+        "--false-positive-title",
+        action="append",
+        default=[],
+        help=(
+            "Exact title of a finding the integrator confirmed is a false positive. "
+            "Repeat for multiple findings; titles are matched case-insensitively after whitespace normalization."
         ),
     )
     parser.add_argument(
@@ -194,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
         out = run_tune(
             TuneInputs(
                 findings_path=args.findings_path,
+                false_positive_titles=tuple(args.false_positive_title),
                 reference_path=args.reference_path,
                 workflow_path=args.workflow_path,
             )

@@ -50,6 +50,29 @@ class TuneTests(unittest.TestCase):
         out = run_tune(TuneInputs(findings_text=clean_findings))
         self.assertIn("No diagnoses fired", out.report)
 
+    def test_false_positive_titles_drive_calibration_recommendation(self) -> None:
+        out = run_tune(
+            TuneInputs(
+                false_positive_titles=("Opaque variable name `f`", "trailing whitespace"),
+                findings_path=str(_FIXTURES / "noisy-p3.json"),
+                reference_path=".codex/policy.md",
+            )
+        )
+        fired = sorted(d.kind for d in out.diagnoses if d.triggered)
+        self.assertIn("false-positive", fired)
+        self.assertIn("Recommendation: false-positive", out.report)
+        self.assertIn("False-positive calibration", out.report)
+        self.assertIn(".codex/policy.md", out.report)
+
+    def test_unknown_false_positive_title_raises_controlled_error(self) -> None:
+        with self.assertRaisesRegex(TuneError, "not found"):
+            run_tune(
+                TuneInputs(
+                    false_positive_titles=("Not in retained artifact",),
+                    findings_path=str(_FIXTURES / "noisy-p3.json"),
+                )
+            )
+
     def test_no_input_raises(self) -> None:
         with self.assertRaises(TuneError):
             run_tune(TuneInputs())
@@ -82,6 +105,8 @@ class TuneTests(unittest.TestCase):
             str(_FIXTURES / "noisy-p3.json"),
             "--workflow-path",
             ".github/workflows/code-review.yaml",
+            "--false-positive-title",
+            "Opaque variable name `f`",
             "--json",
         ]
 
@@ -93,6 +118,7 @@ class TuneTests(unittest.TestCase):
         self.assertEqual(payload["verdict"]["total_findings"], 12)
         self.assertIn("report", payload)
         self.assertIn("diagnoses", payload)
+        self.assertTrue(any(item["kind"] == "false-positive" and item["triggered"] for item in payload["diagnoses"]))
         self.assertTrue(any(item["kind"] == "noisy-p3" and item["triggered"] for item in payload["diagnoses"]))
 
 

@@ -7,7 +7,7 @@ from typing import Callable, Literal
 
 from ..findings_loader import Findings
 
-type DiagnosisKind = Literal["low-confidence", "noisy-p3", "truncation"]
+type DiagnosisKind = Literal["false-positive", "low-confidence", "noisy-p3", "truncation"]
 type RecommendationTarget = Literal["reference-file", "workflow"]
 
 
@@ -25,6 +25,7 @@ class DiagnosisContext:
 
     reference_path: str = "<your-review-reference-path>"
     workflow_path: str = "<your-workflow-path>"
+    false_positive_titles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
