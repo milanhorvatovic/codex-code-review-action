@@ -80,6 +80,13 @@ describe("rewriteShaTagNote", () => {
     );
   });
 
+  it("rewrites a pre-release-suffixed source note to the stable target version", () => {
+    const content = "        # SHA corresponds to tag v2.1.0-rc.1 — update when adopting a new release.";
+    expect(rewriteShaTagNote(content, "2.1.0")).toBe(
+      "        # SHA corresponds to tag v2.1.0 — update when adopting a new release.",
+    );
+  });
+
   it("leaves unrelated comments untouched", () => {
     const content = "        # explicit for auditors; matches the action default";
     expect(rewriteShaTagNote(content, "2.1.0")).toBe(content);

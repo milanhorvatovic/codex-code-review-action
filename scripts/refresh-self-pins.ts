@@ -6,7 +6,7 @@ import { parseVersion } from "./changelog.js";
 const SELF_PIN_PATTERN =
   /(milanhorvatovic\/codex-ai-code-review-action)(\/[\w./-]+?)?@[0-9a-f]{40}(?:[ \t]*#[ \t]*[\w.+-]+)?/g;
 
-const SHA_TAG_NOTE = /(# SHA corresponds to tag )v\d+\.\d+\.\d+( — update when adopting a new release\.)/g;
+const SHA_TAG_NOTE = /(# SHA corresponds to tag )v\d+\.\d+\.\d+(?:-[\w.]+)?( — update when adopting a new release\.)/g;
 
 function validateSelfPinInputs(version: string, sha: string): void {
   if (!/^[0-9a-f]{40}$/.test(sha)) {

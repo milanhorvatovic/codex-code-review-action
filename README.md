@@ -217,8 +217,8 @@ jobs:
           persist-credentials: false
 
       - id: prepare
-        # SHA corresponds to tag v2.0.0 — update when adopting a new release.
-        uses: milanhorvatovic/codex-ai-code-review-action/prepare@af72a5bd7330432cee97137b04d04edebde80149 # v2.0.0
+        # SHA corresponds to tag v2.1.0-rc.1 — update when adopting a new release.
+        uses: milanhorvatovic/codex-ai-code-review-action/prepare@357e3f341a63345c381ad390ed2afa9aa2c366d5 # v2.1.0-rc.1
         with:
           allow-users: alice,bob,charlie # replace with real GitHub usernames; an empty value allows everyone
 
@@ -248,7 +248,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: milanhorvatovic/codex-ai-code-review-action/review@af72a5bd7330432cee97137b04d04edebde80149 # v2.0.0
+      - uses: milanhorvatovic/codex-ai-code-review-action/review@357e3f341a63345c381ad390ed2afa9aa2c366d5 # v2.1.0-rc.1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           chunk: ${{ matrix.chunk }}
@@ -274,7 +274,7 @@ jobs:
           path: .codex/
           merge-multiple: true
 
-      - uses: milanhorvatovic/codex-ai-code-review-action/publish@af72a5bd7330432cee97137b04d04edebde80149 # v2.0.0
+      - uses: milanhorvatovic/codex-ai-code-review-action/publish@357e3f341a63345c381ad390ed2afa9aa2c366d5 # v2.1.0-rc.1
         with:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
@@ -496,7 +496,7 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
       - id: prepare
-        uses: <org>/codex-ai-code-review-action-fork/prepare@<full-sha> # v2.0.0
+        uses: <org>/codex-ai-code-review-action-fork/prepare@<full-sha> # v2.1.0-rc.1
         with:
           allow-users: alice,bob,charlie
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -522,7 +522,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.chunk-matrix) }}
     steps:
-      - uses: <org>/codex-ai-code-review-action-fork/review@<full-sha> # v2.0.0
+      - uses: <org>/codex-ai-code-review-action-fork/review@<full-sha> # v2.1.0-rc.1
         with:
           chunk: ${{ matrix.chunk }}
           openai-api-key: ${{ secrets.openai-api-key }}
@@ -544,7 +544,7 @@ jobs:
         with:
           path: .codex/
           merge-multiple: true
-      - uses: <org>/codex-ai-code-review-action-fork/publish@<full-sha> # v2.0.0
+      - uses: <org>/codex-ai-code-review-action-fork/publish@<full-sha> # v2.1.0-rc.1
         with:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
