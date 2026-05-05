@@ -1,5 +1,5 @@
 name: "Codex Review — Publish"
-description: "Merge chunk reviews and publish as a GitHub PR review with inline comments. Requires .codex/ artifacts from the prepare and review steps. Artifacts must be downloaded with merge-multiple: true so chunk outputs land directly under .codex/. Partial reviews (when chunks are missing) are published with an 'Incomplete review' banner; set fail-on-missing-chunks: true to additionally fail the step after publishing."
+description: "Merge chunk reviews and publish as a GitHub PR review with inline comments. Requires .codex/ artifacts from the prepare and review steps. Artifacts must be downloaded with merge-multiple: true so chunk outputs land directly under .codex/. Partial reviews (when chunks are missing) are published with an 'Incomplete review' banner and the publish step then fails red; set fail-on-missing-chunks: false to keep the step green and rely on the banner alone."
 
 branding:
   color: "green"
@@ -7,14 +7,14 @@ branding:
 
 inputs:
   expected-chunks:
-    description: "Expected number of chunk review outputs. When set, a warning is logged and an 'Incomplete review' banner is rendered in the published review body if some chunks are missing. Pair with `fail-on-missing-chunks: true` to additionally fail the step after publishing the partial review. Empty = skip validation."
+    description: "Expected number of chunk review outputs. When set, a warning is logged and an 'Incomplete review' banner is rendered in the published review body if some chunks are missing. By default the publish step then fails red; set `fail-on-missing-chunks: false` to keep it green and rely on the banner alone. Empty = skip validation."
     required: false
     default: ""
 
   fail-on-missing-chunks:
-    description: "After publishing, fail the publish step if any `expected-chunks` were missing from the review artifacts. Partial reviews are always published with an 'Incomplete review' banner regardless of this setting. Default false."
+    description: "After publishing a partial review, fail the publish step if any `expected-chunks` were missing from the review artifacts. Default true: a missing chunk surfaces as a red CI check on the PR. Partial reviews are always published with an 'Incomplete review' banner regardless of this setting. Set to `false` to opt out and keep the publish step green when chunks are missing."
     required: false
-    default: "false"
+    default: "true"
 
   github-token:
     description: "GitHub token for posting PR reviews. Requires pull-requests: write permission."

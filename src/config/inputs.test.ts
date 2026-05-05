@@ -230,14 +230,14 @@ describe("getPublishInputs", () => {
     expect(result.failOnMissingChunks).toBe(false);
   });
 
-  it("defaults fail-on-missing-chunks to false when omitted (action.yaml default)", () => {
+  it("defaults fail-on-missing-chunks to true when omitted (action.yaml default)", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : "",
     );
-    mockBooleans({});
+    mockBooleans({ "fail-on-missing-chunks": true });
 
     const result = getPublishInputs();
-    expect(result.failOnMissingChunks).toBe(false);
+    expect(result.failOnMissingChunks).toBe(true);
   });
 
   it("throws for non-integer retain-findings-days when retain-findings is enabled", () => {

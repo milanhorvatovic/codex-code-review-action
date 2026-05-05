@@ -157,7 +157,6 @@ async function run(): Promise<void> {
     published = await publishReview({
       diffText,
       expectedChunks: inputs.expectedChunks,
-      failOnMissingChunks: inputs.failOnMissingChunks,
       githubToken: inputs.githubToken,
       maxComments: inputs.maxComments,
       minConfidence: inputs.minConfidence,
@@ -207,7 +206,7 @@ async function run(): Promise<void> {
   ) {
     core.setFailed(
       `Published a partial review. Missing chunk(s): ${missingIndices.join(", ")}. ` +
-      `Failing because fail-on-missing-chunks is enabled.`,
+      `Re-run the failed legs of the review matrix, or inspect their logs to determine why those chunks did not produce output.`,
     );
   }
 }
