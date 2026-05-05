@@ -57,7 +57,7 @@ A non-empty diff means the merge candidate ships a stale bundle or a `package.js
 
 ## Manual security regression checks
 
-These checks exercise the path-validation hardening landed in [`src/prepare/referenceFile.ts`](../src/prepare/referenceFile.ts) (PR [#98](https://github.com/milanhorvatovic/codex-ai-code-review-action/pull/98), closing issue [#89](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/89)) plus the prompt-artifact composition path. The unit suites in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) and [`src/prepare/main.test.ts`](../src/prepare/main.test.ts) cover them; running `npm test` against the merge candidate confirms the protections still bite. The cases are listed here as an audit checklist, not as a separate test harness.
+These checks exercise the path-validation hardening implemented in [`src/prepare/referenceFile.ts`](../src/prepare/referenceFile.ts) plus the prompt-artifact composition path. The unit suites in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) and [`src/prepare/main.test.ts`](../src/prepare/main.test.ts) cover them; running `npm test` against the merge candidate confirms the protections still bite. The cases are listed here as an audit checklist, not as a separate test harness.
 
 - `review-reference-file: /proc/self/environ` is rejected with `must be workspace-relative, not absolute` before any read happens. The unit covers this in the `rejects an absolute POSIX path` case.
 - `review-reference-file: ../outside.md` is rejected with `escapes the workspace` before any read happens. The unit covers this in the `rejects a path that escapes the workspace via '..'` case.
