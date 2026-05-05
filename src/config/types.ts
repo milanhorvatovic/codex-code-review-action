@@ -40,11 +40,14 @@ export interface NormalizedFinding {
   title: string;
 }
 
+export type ReviewReferenceSource = "workspace" | "base";
+
 export interface PrepareInputs {
   allowedUsers: string;
   githubToken: string;
   maxChunkBytes: number;
   reviewReferenceFile: string;
+  reviewReferenceSource: ReviewReferenceSource;
 }
 
 export interface PublishInputs {
