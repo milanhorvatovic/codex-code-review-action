@@ -70,8 +70,19 @@ describe("getPrepareInputs", () => {
 });
 
 describe("getPublishInputs", () => {
+  // Mirror the boolean-input defaults declared in publish/action.yaml so that
+  // `mockBooleans({})` simulates "input omitted, action default applied" rather
+  // than "input set to false." Tests that need a specific value still pass it
+  // explicitly via the `values` argument.
+  const ACTION_YAML_BOOLEAN_DEFAULTS: Record<string, boolean> = {
+    "fail-on-missing-chunks": true,
+    "retain-findings": false,
+  };
+
   function mockBooleans(values: Record<string, boolean>): void {
-    mockGetBooleanInput.mockImplementation((name: string) => values[name] ?? false);
+    mockGetBooleanInput.mockImplementation(
+      (name: string) => values[name] ?? ACTION_YAML_BOOLEAN_DEFAULTS[name] ?? false,
+    );
   }
 
   it("parses all inputs correctly", () => {
@@ -230,14 +241,14 @@ describe("getPublishInputs", () => {
     expect(result.failOnMissingChunks).toBe(false);
   });
 
-  it("defaults fail-on-missing-chunks to false when omitted (action.yaml default)", () => {
+  it("defaults fail-on-missing-chunks to true when omitted (action.yaml default)", () => {
     mockGetInput.mockImplementation((name: string) =>
       name === "github-token" ? "token" : "",
     );
     mockBooleans({});
 
     const result = getPublishInputs();
-    expect(result.failOnMissingChunks).toBe(false);
+    expect(result.failOnMissingChunks).toBe(true);
   });
 
   it("throws for non-integer retain-findings-days when retain-findings is enabled", () => {

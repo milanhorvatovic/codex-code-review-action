@@ -6,12 +6,7 @@ import { parseVersion } from "./changelog.js";
 const SELF_PIN_PATTERN =
   /(milanhorvatovic\/codex-ai-code-review-action)(\/[\w./-]+?)?@[0-9a-f]{40}(?:[ \t]*#[ \t]*[\w.+-]+)?/g;
 
-const FAIL_ON_MISSING_COMMENTED =
-  /^(\s*)#\s*fail-on-missing-chunks:\s*"true"\s*(?:#[^\n]*)?$/;
-
-const ISSUE_44_INTRO_LINE = /^When you adopt a release that contains \[issue #44\]/;
-
-const SHA_TAG_NOTE = /(# SHA corresponds to tag )v\d+\.\d+\.\d+( — update when adopting a new release\.)/g;
+const SHA_TAG_NOTE = /(# SHA corresponds to tag )v\d+\.\d+\.\d+(?:-[\w.-]+)?( — update when adopting a new release\.)/g;
 
 function validateSelfPinInputs(version: string, sha: string): void {
   if (!/^[0-9a-f]{40}$/.test(sha)) {
@@ -40,34 +35,6 @@ export function rewriteAllSelfPins(content: string, version: string, sha: string
     .join("\n");
 }
 
-export function uncommentFailOnMissingChunks(content: string): string {
-  return content
-    .split("\n")
-    .map((line) => {
-      const match = FAIL_ON_MISSING_COMMENTED.exec(line);
-      if (!match) return line;
-      const indent = match[1] ?? "";
-      return `${indent}fail-on-missing-chunks: "true"`;
-    })
-    .join("\n");
-}
-
-export function removeIssue44Paragraph(content: string): string {
-  const lines = content.split("\n");
-  const idx = lines.findIndex((line) => ISSUE_44_INTRO_LINE.test(line));
-  if (idx === -1) return content;
-  const before = idx > 0 && (lines[idx - 1] ?? "") === "" ? idx - 1 : idx;
-  let after = idx + 1;
-  while (after < lines.length && (lines[after] ?? "") !== "") after++;
-  while (after < lines.length && (lines[after] ?? "") === "") after++;
-  const beforeLines = lines.slice(0, before);
-  const afterLines = lines.slice(after);
-  if (beforeLines.length === 0 || afterLines.length === 0) {
-    return [...beforeLines, ...afterLines].join("\n");
-  }
-  return [...beforeLines, "", ...afterLines].join("\n");
-}
-
 export function rewriteShaTagNote(content: string, version: string): string {
   parseVersion(version);
   return content.replace(SHA_TAG_NOTE, (_match, prefix: string, suffix: string) => {
@@ -78,8 +45,6 @@ export function rewriteShaTagNote(content: string, version: string): string {
 export function refreshReadme(content: string, version: string, sha: string): string {
   let next = rewriteAllSelfPins(content, version, sha);
   next = rewriteShaTagNote(next, version);
-  next = uncommentFailOnMissingChunks(next);
-  next = removeIssue44Paragraph(next);
   return next;
 }
 

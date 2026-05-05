@@ -378,7 +378,6 @@ describe("publish/main", () => {
     const params = mockPublishReview.mock.calls[0][0] as Record<string, unknown>;
     expect(params.missingChunks).toEqual([1, 2]);
     expect(params.expectedChunks).toBe(3);
-    expect(params.failOnMissingChunks).toBe(false);
     expect(mockSetFailed).not.toHaveBeenCalled();
   });
 
@@ -400,7 +399,6 @@ describe("publish/main", () => {
     );
     const params = mockPublishReview.mock.calls[0][0] as Record<string, unknown>;
     expect(params.missingChunks).toEqual([1, 2]);
-    expect(params.failOnMissingChunks).toBe(true);
     expect(mockSetFailed).toHaveBeenCalledWith(
       expect.stringContaining("Published a partial review. Missing chunk(s): 1, 2"),
     );

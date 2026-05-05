@@ -135,6 +135,7 @@ A change is trust-boundary-affecting if it:
 - adds any analytics, logging, or telemetry that leaves the GitHub Actions runner;
 - changes the permissions required by the action (new `permissions:` scope, new token usage);
 - alters the artifact contents in a way that changes what callers must trust;
+- changes the default exit-code contract — a scenario the action previously exited 0 on now exits non-zero (or vice versa), including via a default-input flip;
 - updates a transitive dependency that itself changes any of the above (e.g. updating the `openai/codex-action` SHA pin in `review/action.yaml`).
 
 When in doubt, treat the change as trust-boundary-affecting.

@@ -3,12 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   refreshReadme,
   refreshWorkflow,
-  removeIssue44Paragraph,
   rewriteAllSelfPins,
   rewriteSelfPin,
   rewriteShaTagNote,
   runCli,
-  uncommentFailOnMissingChunks,
 } from "./refresh-self-pins.js";
 
 const NEW_SHA = "1111111111111111111111111111111111111111";
@@ -74,75 +72,23 @@ describe("rewriteAllSelfPins", () => {
   });
 });
 
-describe("uncommentFailOnMissingChunks", () => {
-  it("uncomments the line and strips the scaffolding comment", () => {
-    const content = [
-      `          retain-findings: false # explicit for auditors; matches the action default`,
-      `          # fail-on-missing-chunks: "true" # available in the next tagged release; uncomment after bumping the SHAs above`,
-    ].join("\n");
-    const result = uncommentFailOnMissingChunks(content);
-    expect(result.split("\n")[1]).toBe(`          fail-on-missing-chunks: "true"`);
-  });
-
-  it("uncomments the bare commented form (no trailing 'next tagged release' note)", () => {
-    const content = [
-      `          retain-findings: "false"`,
-      `          # fail-on-missing-chunks: "true"`,
-    ].join("\n");
-    const result = uncommentFailOnMissingChunks(content);
-    expect(result.split("\n")[1]).toBe(`          fail-on-missing-chunks: "true"`);
-  });
-
-  it("leaves the file unchanged when the commented form is absent", () => {
-    const content = `          fail-on-missing-chunks: "true"`;
-    expect(uncommentFailOnMissingChunks(content)).toBe(content);
-  });
-});
-
-describe("removeIssue44Paragraph", () => {
-  it("removes the paragraph and one surrounding blank line", () => {
-    const content = [
-      "previous content",
-      "",
-      "When you adopt a release that contains [issue #44](https://example), bump the SHAs.",
-      "",
-      "next content",
-      "",
-    ].join("\n");
-    const result = removeIssue44Paragraph(content);
-    expect(result).not.toContain("issue #44");
-    expect(result).toContain("previous content");
-    expect(result).toContain("next content");
-    expect(result).not.toContain("\n\n\n");
-  });
-
-  it("returns the input unchanged when the paragraph is absent", () => {
-    const content = "no issue 44 mention here\n";
-    expect(removeIssue44Paragraph(content)).toBe(content);
-  });
-
-  it("removes the paragraph when it is the last text in the file (no trailing newline)", () => {
-    const content = [
-      "previous content",
-      "",
-      "When you adopt a release that contains [issue #44](https://example), bump the SHAs.",
-    ].join("\n");
-    const result = removeIssue44Paragraph(content);
-    expect(result).not.toContain("issue #44");
-    expect(result).toContain("previous content");
-    expect(result).not.toContain("\n\n\n");
-  });
-
-  it("removes the paragraph when it is the only text in the file", () => {
-    const content =
-      "When you adopt a release that contains [issue #44](https://example), bump the SHAs.";
-    expect(removeIssue44Paragraph(content)).toBe("");
-  });
-});
-
 describe("rewriteShaTagNote", () => {
   it("updates the inline 'SHA corresponds to tag vX.Y.Z' note", () => {
     const content = "        # SHA corresponds to tag v2.0.0 — update when adopting a new release.";
+    expect(rewriteShaTagNote(content, "2.1.0")).toBe(
+      "        # SHA corresponds to tag v2.1.0 — update when adopting a new release.",
+    );
+  });
+
+  it("rewrites a pre-release-suffixed source note to the stable target version", () => {
+    const content = "        # SHA corresponds to tag v2.1.0-rc.1 — update when adopting a new release.";
+    expect(rewriteShaTagNote(content, "2.1.0")).toBe(
+      "        # SHA corresponds to tag v2.1.0 — update when adopting a new release.",
+    );
+  });
+
+  it("rewrites a pre-release identifier that contains hyphens", () => {
+    const content = "        # SHA corresponds to tag v2.1.0-rc-hotfix.1 — update when adopting a new release.";
     expect(rewriteShaTagNote(content, "2.1.0")).toBe(
       "        # SHA corresponds to tag v2.1.0 — update when adopting a new release.",
     );
@@ -155,26 +101,19 @@ describe("rewriteShaTagNote", () => {
 });
 
 describe("refreshReadme", () => {
-  it("applies SHA refresh, uncomments fail-on-missing-chunks, and strips the issue-44 paragraph in one pass", () => {
+  it("applies SHA refresh and tag-note rewrite in one pass", () => {
     const content = [
       "# Project",
       "",
       `      uses: milanhorvatovic/codex-ai-code-review-action/publish@${OLD_SHA} # v2.0.0`,
-      `        with:`,
-      `          retain-findings: false # explicit`,
-      `          # fail-on-missing-chunks: "true" # available in the next tagged release; uncomment after bumping the SHAs above`,
-      "```",
-      "",
-      "When you adopt a release that contains [issue #44](https://example), bump the SHAs.",
+      `        # SHA corresponds to tag v2.0.0 — update when adopting a new release.`,
       "",
       "## Architecture",
       "",
     ].join("\n");
     const result = refreshReadme(content, "2.1.0", NEW_SHA);
     expect(result).toContain(`@${NEW_SHA} # v2.1.0`);
-    expect(result).toContain(`fail-on-missing-chunks: "true"`);
-    expect(result).not.toContain("available in the next tagged release");
-    expect(result).not.toContain("issue #44");
+    expect(result).toContain("# SHA corresponds to tag v2.1.0 —");
     expect(result).toContain("## Architecture");
   });
 });

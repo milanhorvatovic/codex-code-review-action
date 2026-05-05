@@ -27,7 +27,6 @@ interface ReviewComment {
 export interface PublishParams {
   diffText: string;
   expectedChunks: number | null;
-  failOnMissingChunks: boolean;
   githubToken: string;
   maxComments: number;
   minConfidence: number;
@@ -232,7 +231,6 @@ interface ReviewBodyParams {
   changes: string[];
   commentCount: number;
   expectedChunks: number | null;
-  failOnMissingChunks: boolean;
   files: ReviewOutput["files"];
   isFirstReview: boolean;
   missingChunks: number[];
@@ -263,12 +261,10 @@ export function buildReviewBody(params: ReviewBodyParams): string {
 function buildIncompleteBanner(
   missing: number[],
   expected: number | null,
-  failOnMissingChunks: boolean,
 ): string {
   if (missing.length === 0 || expected === null) return "";
-  const level = failOnMissingChunks ? "CAUTION" : "WARNING";
   return (
-    `> [!${level}]\n> **Incomplete review**\n>\n` +
+    `> [!WARNING]\n> **Incomplete review**\n>\n` +
     `> ${missing.length} of ${expected} chunks were missing (indices: ${missing.join(", ")}). ` +
     `The findings below represent only the parts that were successfully reviewed. ` +
     `Check the review job logs for the missing chunks.`
@@ -281,7 +277,6 @@ function buildFirstReviewBody(params: ReviewBodyParams): string {
   const banner = buildIncompleteBanner(
     params.missingChunks,
     params.expectedChunks,
-    params.failOnMissingChunks,
   );
   if (banner) sections.push(banner);
 
@@ -328,7 +323,6 @@ function buildSubsequentReviewBody(params: ReviewBodyParams): string {
   const banner = buildIncompleteBanner(
     params.missingChunks,
     params.expectedChunks,
-    params.failOnMissingChunks,
   );
   if (banner) sections.push(banner);
   sections.push(reviewedLine);
@@ -559,7 +553,6 @@ export async function publishReview(params: PublishParams): Promise<boolean> {
     changes,
     commentCount: reviewComments.length,
     expectedChunks: params.expectedChunks,
-    failOnMissingChunks: params.failOnMissingChunks,
     files,
     isFirstReview,
     missingChunks: params.missingChunks,
@@ -581,7 +574,6 @@ export async function publishReview(params: PublishParams): Promise<boolean> {
       JSON.stringify(output, null, 2),
       params.missingChunks,
       params.expectedChunks,
-      params.failOnMissingChunks,
     );
   } else {
     reviewBody = buildReviewBody(bodyParams);
@@ -611,7 +603,6 @@ export async function publishReview(params: PublishParams): Promise<boolean> {
               JSON.stringify(output, null, 2),
               params.missingChunks,
               params.expectedChunks,
-              params.failOnMissingChunks,
             )
           : buildReviewBody(bodyParams);
 
@@ -640,9 +631,8 @@ function buildFallbackBody(
   rawReview: string,
   missingChunks: number[],
   expectedChunks: number | null,
-  failOnMissingChunks: boolean,
 ): string {
-  const banner = buildIncompleteBanner(missingChunks, expectedChunks, failOnMissingChunks);
+  const banner = buildIncompleteBanner(missingChunks, expectedChunks);
   const prefix = banner ? `${banner}\n\n` : "";
   const raw = rawReview.trim();
   if (!raw) {
