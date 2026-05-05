@@ -6,8 +6,8 @@ name: Codex code review (dogfood)
 # maintainer; the three self-action SHAs are pinned to a reviewed commit on
 # main and refreshed to the latest release tag by
 # scripts/refresh-self-pins.ts after each release; `fail-on-missing-chunks`
-# ships uncommented because the pinned SHA already includes the input;
-# retain-findings is quoted to match docs/consumer-controls.md item 7.
+# and `retain-findings` are quoted explicitly to match the auditor-visible
+# pattern documented in docs/consumer-controls.md items 7 and 8.
 # paths-ignore on dist is a partial mitigation for token cost on Dependabot
 # bumps; diff-level path exclusion is tracked in issue #106.
 
@@ -110,4 +110,4 @@ jobs:
           min-confidence: ${{ vars.CODEX_MIN_CONFIDENCE || '0' }} # 0 = no filtering until tune recommends a cutoff
           max-comments: ${{ vars.CODEX_MAX_COMMENTS || '' }} # empty = unlimited
           model: ${{ vars.CODEX_MODEL || '' }} # footer label; pairs with the review job's model
-          fail-on-missing-chunks: "true" # pinned SHA includes this input; consumer-controls.md item 8 requires it for v2.1+
+          fail-on-missing-chunks: "true" # explicit for auditors; matches the action default (consumer-controls.md item 8)

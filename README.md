@@ -279,10 +279,8 @@ jobs:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
           retain-findings: "false" # explicit for auditors; matches the action default
-          # fail-on-missing-chunks: "true" # available in the next tagged release; uncomment after bumping the SHAs above
+          fail-on-missing-chunks: "true" # explicit for auditors; matches the action default
 ```
-
-When you adopt a release that contains [issue #44](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/44), bump the three `codex-ai-code-review-action` SHAs to that release and uncomment `fail-on-missing-chunks: "true"` to make the publish step fail closed when any chunk is missing.
 
 > **`review-reference-file` is PR-controlled in workspace mode.** Two separate guarantees apply, and they are not the same thing:
 >
@@ -352,8 +350,8 @@ The review action wraps [`openai/codex-action`](https://github.com/openai/codex-
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `github-token` | Yes | — | Token for posting reviews (`pull-requests: write`) |
-| `expected-chunks` | No | — | Expected chunk count. On mismatch, the publish step logs a warning, renders an "Incomplete review" banner in the published review body (v2.1.0+), and (when `fail-on-missing-chunks: true`, also v2.1.0+) fails the step after publishing. |
-| `fail-on-missing-chunks` | No | `false` | _Since v2.1.0._ After publishing, fail the publish step when any expected chunks are missing from the review artifacts. Partial reviews are always published with an "Incomplete review" banner regardless of this setting; the banner uses the `WARNING` admonition by default and `CAUTION` when this input is `true`. "Missing" here means the chunk artifact is absent **or** present but failed schema validation. No-op when `expected-chunks` is unset or `0`. Setting this input on `@v2.0.0` (or any earlier SHA) typically produces an `Unexpected input(s)` warning and the input is ignored rather than failing the workflow; pin the action to `@v2.1.0` or later before enabling it. |
+| `expected-chunks` | No | — | Expected chunk count. On mismatch, the publish step logs a warning, renders an "Incomplete review" banner in the published review body (v2.1.0+), and by default fails the publish step after publishing the partial review. Set `fail-on-missing-chunks: false` to opt out of the failure and keep the step green. |
+| `fail-on-missing-chunks` | No | `true` | _Since v2.1.0._ After publishing a partial review, fail the publish step when any expected chunks are missing from the review artifacts. Default `true`: a missing chunk surfaces as a red CI check on the PR rather than a green one with the warning buried in the review body. Set to `false` to keep the publish step green; the "Incomplete review" `WARNING` banner is published either way. "Missing" here means the chunk artifact is absent **or** present but failed schema validation. No-op when `expected-chunks` is unset or `0`. Setting this input on `@v2.0.0` (or any earlier SHA) typically produces an `Unexpected input(s)` warning and the input is ignored rather than failing the workflow; pin the action to `@v2.1.0` or later. |
 | `model` | No | — | Model name for review footer (overridden by the model field in review output) |
 | `review-effort` | No | — | Effort label for review footer |
 | `min-confidence` | No | `0` | Minimum confidence threshold (0.0-1.0) |
@@ -551,7 +549,7 @@ jobs:
           github-token: ${{ github.token }}
           expected-chunks: ${{ needs.prepare.outputs.chunk-count }}
           retain-findings: "false"
-          # fail-on-missing-chunks: "true" # available in the next tagged release; uncomment after bumping the SHAs above
+          fail-on-missing-chunks: "true" # explicit for auditors; matches the action default
 ```
 
 #### Differences from the Production workflow example
