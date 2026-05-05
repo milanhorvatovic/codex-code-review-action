@@ -5,8 +5,9 @@ description: >
   verdict, finding count, or noise pattern it did, and propose minimal-diff
   tweaks they can accept or reject individually. Triggers when an integrator
   asks why a verdict had a low confidence score, why most findings were
-  filtered out, why P3 noise dominates, or why the published review carries
-  an "Incomplete review" banner.
+  filtered out, why P3 noise dominates, how to reduce confirmed false
+  positives, or why the published review carries an "Incomplete review"
+  banner.
 ---
 
 # tune
@@ -24,8 +25,9 @@ python3 scripts/tune.py --findings-path /path/to/findings.json --help
 
 - `--reference-path` — the integrator's current review-reference file, wherever they store it. The action's `review-reference-file` input does not constrain the location.
 - `--workflow-path` — the integrator's current workflow file, wherever they named it under `.github/workflows/`.
+- `--false-positive-title` — exact title of a retained finding the integrator confirmed is a false positive. Repeat for multiple findings. The title must exist in `findings.json`; this keeps the diagnosis grounded in human labels rather than guessing from confidence alone.
 
-The script validates the findings against the runtime contract, runs the three diagnoses (low-confidence verdict, noisy P3 surface, truncation banner), and prints a markdown report with one fenced-diff `## Recommendation` per fired diagnosis plus a per-finding rationale.
+The script validates the findings against the runtime contract, runs the four diagnoses (confirmed false positives, low-confidence verdict, noisy P3 surface, truncation banner), and prints a markdown report with one fenced-diff `## Recommendation` per fired diagnosis plus a per-finding rationale.
 
 Pass `--json` when the calling agent/runtime needs structured diagnoses and recommendations instead of parsing the Markdown report.
 
@@ -33,7 +35,8 @@ Pass `--json` when the calling agent/runtime needs structured diagnoses and reco
 
 Engage with the integrator on the report:
 
-- For each fired diagnosis, walk the contributing findings and the proposed diff. Help the integrator decide whether the diff matches their intent or whether a different cut would fit better — e.g., a sharper focus-area edit instead of an `effort` bump, or pruning a reference-file section instead of raising `min-confidence`.
+- For each fired diagnosis, walk the contributing findings and the proposed diff. Help the integrator decide whether the diff matches their intent or whether a different cut would fit better — e.g., a sharper focus-area edit instead of an `effort` bump, pruning a reference-file section instead of raising `min-confidence`, or adding false-positive calibration for maintainer-confirmed misses.
+- For false positives, do not infer labels from low confidence alone. Ask the integrator which retained finding titles they confirmed were false positives, pass those titles with `--false-positive-title`, and treat the resulting recommendation as human calibration that should be reviewed before committing.
 - Recommendations stay within the action's public input surface (`min-confidence`, `effort`, `model`, `max-chunk-bytes`, reference-file edits). They never propose changes that would violate `CC-01..CC-09` — those are non-negotiable security guardrails. If a finding seems to suggest one, surface the conflict and help the integrator pick a different angle.
 - The diff hunks use whatever paths the integrator passed via `--reference-path` and `--workflow-path`. When the flags are omitted, the hunks emit visible placeholder paths (`<your-review-reference-path>`, `<your-workflow-path>`) so the integrator notices and re-runs with the right values rather than applying a diff against the wrong file.
 - If the integrator asks about a pattern the script doesn't yet diagnose (missed-issue audits, docs-only noise reduction, paths-filter recommendations), say so directly and help them reason through the tweak by hand. Don't fabricate a structured recommendation the script wouldn't produce.
@@ -43,6 +46,6 @@ The script never writes to the working tree. The integrator applies any diff wit
 ## References
 
 - [`../../references/invariants.md`](../../references/invariants.md) — guardrails every recommendation respects.
-- [`../../scripts/lib/diagnoses/low_confidence.py`](../../scripts/lib/diagnoses/low_confidence.py), [`../../scripts/lib/diagnoses/noisy_p3.py`](../../scripts/lib/diagnoses/noisy_p3.py), [`../../scripts/lib/diagnoses/truncation.py`](../../scripts/lib/diagnoses/truncation.py) — the deterministic recommendation modules; read the relevant file when an integrator asks how a recommendation was derived.
+- [`../../scripts/lib/diagnoses/false_positive.py`](../../scripts/lib/diagnoses/false_positive.py), [`../../scripts/lib/diagnoses/low_confidence.py`](../../scripts/lib/diagnoses/low_confidence.py), [`../../scripts/lib/diagnoses/noisy_p3.py`](../../scripts/lib/diagnoses/noisy_p3.py), [`../../scripts/lib/diagnoses/truncation.py`](../../scripts/lib/diagnoses/truncation.py) — the deterministic recommendation modules; read the relevant file when an integrator asks how a recommendation was derived.
 - The action's `defaults/review-output-schema.json` — the findings shape the script validates against.
 - The action's `review-reference-file` input documentation — supports any workspace-relative path subject to the safety constraints.

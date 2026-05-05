@@ -4,7 +4,8 @@ description: >
   Helps integrators adopt and tune the milanhorvatovic/codex-ai-code-review-action
   GitHub Action in consumer repositories. Routes to capabilities for generating
   a hardened workflow plus starter review-reference (adopt) and for diagnosing
-  a retained findings.json with minimal-diff tuning recommendations (tune).
+  a retained findings.json, including confirmed false positives, with
+  minimal-diff tuning recommendations (tune).
   Triggers when an integrator asks to set up Codex review, audit an existing
   workflow, or improve review quality from saved findings.
 license: MIT
@@ -36,7 +37,7 @@ Route to the appropriate capability based on the integrator's intent:
 | Capability | Trigger | Path |
 |---|---|---|
 | adopt | Generate a hardened workflow + starter review-reference + audit-mapped report for a consumer repository that is adopting or refreshing the action | capabilities/adopt/capability.md |
-| tune | Read a retained `findings.json` artifact and propose concrete, minimal-diff tweaks to the consumer's review-reference and workflow | capabilities/tune/capability.md |
+| tune | Read a retained `findings.json` artifact and propose concrete, minimal-diff tweaks to the consumer's review-reference and workflow, including calibration from integrator-confirmed false positives | capabilities/tune/capability.md |
 
 Read only the capability that matches the task. Do not load both unless the task explicitly spans them.
 
@@ -46,7 +47,7 @@ Read only the capability that matches the task. Do not load both unless the task
 - `references/pin-resolution.md` — the runtime contract for resolving the latest reviewed SHA and tag for the action's three sub-actions via `gh api`. No static pin table is shipped.
 - `scripts/adopt.py`, `scripts/tune.py` — entry-point CLIs invoked by the capabilities. Each accepts `--help` and operates on explicit paths; no environment-variable inputs.
 - `scripts/lib/detect.py`, `scripts/lib/reference_layerer.py`, `scripts/lib/workflow_templates.py`, `scripts/lib/pin_resolver.py`, `scripts/lib/findings_loader.py`, `scripts/lib/workflow_parser.py` — stdlib-only support modules for repository detection, workflow rendering, pin resolution, findings parsing, and invariant checks.
-- `scripts/lib/diagnoses/low_confidence.py`, `scripts/lib/diagnoses/noisy_p3.py`, `scripts/lib/diagnoses/truncation.py` — deterministic tuning diagnoses used by `tune`.
+- `scripts/lib/diagnoses/false_positive.py`, `scripts/lib/diagnoses/low_confidence.py`, `scripts/lib/diagnoses/noisy_p3.py`, `scripts/lib/diagnoses/truncation.py` — deterministic tuning diagnoses used by `tune`.
 
 ## Trust boundary
 
