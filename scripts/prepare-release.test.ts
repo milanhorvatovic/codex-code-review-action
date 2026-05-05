@@ -231,6 +231,29 @@ describe("extractSecurityReviewImpact", () => {
       extractSecurityReviewImpact("## Security-review impact\n<!-- placeholder -->\n"),
     ).toThrow(/empty after stripping HTML comments/);
   });
+
+  it("accepts the legacy `## Trust boundary impact` heading for PRs merged before the rename", () => {
+    const body = [
+      "## Summary",
+      "stuff",
+      "",
+      "## Trust boundary impact",
+      "<!-- helper -->",
+      "Adds new permission scope.",
+      "",
+      "## Test plan",
+      "- run tests",
+    ].join("\n");
+    expect(extractSecurityReviewImpact(body)).toBe(
+      "Adds new permission scope.",
+    );
+  });
+
+  it("rejects the legacy heading when its body is the template default 'None.'", () => {
+    expect(() =>
+      extractSecurityReviewImpact("## Trust boundary impact\nNone.\n"),
+    ).toThrow(/template default 'None\.'/);
+  });
 });
 
 describe("renderChangelogEntry", () => {

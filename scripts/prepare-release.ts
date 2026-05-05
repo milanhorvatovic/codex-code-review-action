@@ -138,10 +138,22 @@ export function formatPullRequestEntry(pr: PullRequest): string {
 }
 
 export function extractSecurityReviewImpact(prBody: string): string {
-  const headingMatch = /^## Security-review impact\s*$/m.exec(prBody);
+  // Match either the current `## Security-review impact` heading or the legacy
+  // `## Trust boundary impact` heading. The PR template heading was renamed by
+  // #117 along with the extractor; trust-boundary PRs merged from the legacy
+  // template before that rename had a valid `## Trust boundary impact` section
+  // at merge time. This fallback lets those PRs flow through CHANGELOG
+  // generation between the last release and the first release that follows
+  // #117 — without it, a trust-boundary-labeled PR merged before the heading
+  // rename would throw here when included in a release window. Once a release
+  // ships and the legacy-bodied PRs are behind us, the `Trust boundary impact`
+  // alternative can be dropped (tracked as a future cleanup; the cost of
+  // keeping it is one regex alternation).
+  const headingMatch =
+    /^## (?:Security-review impact|Trust boundary impact)\s*$/m.exec(prBody);
   if (!headingMatch) {
     throw new Error(
-      "Missing '## Security-review impact' heading. Security-review-required PRs must include the section from .github/PULL_REQUEST_TEMPLATE.md.",
+      "Missing '## Security-review impact' heading (legacy '## Trust boundary impact' also accepted for PRs merged before the rename). Security-review-required PRs must include the section from .github/PULL_REQUEST_TEMPLATE.md.",
     );
   }
   const after = prBody.slice(headingMatch.index + headingMatch[0].length);
