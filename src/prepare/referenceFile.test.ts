@@ -2,11 +2,18 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockReadPathAtSha = vi.fn();
+
+vi.mock("../github/git.js", () => ({
+  readPathAtSha: (...args: unknown[]) => mockReadPathAtSha(...args),
+}));
 
 import {
   REFERENCE_MAX_BYTES,
   ReviewReferenceFileError,
+  resolveReviewReferenceFromBase,
   resolveReviewReferenceFromWorkspace,
   validateReviewReferencePath,
 } from "./referenceFile.js";
@@ -293,5 +300,127 @@ describe("resolveReviewReferenceFromWorkspace", () => {
       expect(error).toBeInstanceOf(ReviewReferenceFileError);
       expect((error as Error).name).toBe("ReviewReferenceFileError");
     }
+  });
+});
+
+describe("resolveReviewReferenceFromBase", () => {
+  beforeEach(() => {
+    mockReadPathAtSha.mockReset();
+  });
+
+  it("returns blob content for a regular tracked file", async () => {
+    mockReadPathAtSha.mockResolvedValueOnce({
+      content: "policy content\n",
+      mode: "100644",
+    });
+
+    await expect(
+      resolveReviewReferenceFromBase(
+        ".github/codex/review-reference.md",
+        "abc123",
+      ),
+    ).resolves.toBe("policy content\n");
+
+    expect(mockReadPathAtSha).toHaveBeenCalledWith(
+      "abc123",
+      ".github/codex/review-reference.md",
+    );
+  });
+
+  it("normalizes a leading './' prefix before reading", async () => {
+    mockReadPathAtSha.mockResolvedValueOnce({
+      content: "ok\n",
+      mode: "100644",
+    });
+
+    await resolveReviewReferenceFromBase("./ref.md", "abc123");
+
+    expect(mockReadPathAtSha).toHaveBeenCalledWith("abc123", "ref.md");
+  });
+
+  it("rejects path-shape violations before invoking git", async () => {
+    await expect(
+      resolveReviewReferenceFromBase("/etc/passwd", "abc123"),
+    ).rejects.toThrow(ReviewReferenceFileError);
+    await expect(
+      resolveReviewReferenceFromBase("../escape.md", "abc123"),
+    ).rejects.toThrow(/escapes the workspace/);
+    await expect(
+      resolveReviewReferenceFromBase(".git/config", "abc123"),
+    ).rejects.toThrow(/\.git directory/);
+
+    expect(mockReadPathAtSha).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty base SHA", async () => {
+    await expect(
+      resolveReviewReferenceFromBase("ref.md", "   "),
+    ).rejects.toThrow(/base SHA is empty/);
+
+    expect(mockReadPathAtSha).not.toHaveBeenCalled();
+  });
+
+  it("rejects a tracked symbolic link (mode 120000)", async () => {
+    mockReadPathAtSha.mockResolvedValueOnce({
+      content: "../target",
+      mode: "120000",
+    });
+
+    await expect(
+      resolveReviewReferenceFromBase("link.md", "abc123"),
+    ).rejects.toThrow(/symbolic link at base SHA/);
+  });
+
+  it("rejects an unsupported git mode", async () => {
+    mockReadPathAtSha.mockResolvedValueOnce({
+      content: "",
+      mode: "160000",
+    });
+
+    await expect(
+      resolveReviewReferenceFromBase("submodule", "abc123"),
+    ).rejects.toThrow(/unsupported git mode 160000/);
+  });
+
+  it("accepts an executable regular file (mode 100755)", async () => {
+    mockReadPathAtSha.mockResolvedValueOnce({
+      content: "ok\n",
+      mode: "100755",
+    });
+
+    await expect(
+      resolveReviewReferenceFromBase("ref.md", "abc123"),
+    ).resolves.toBe("ok\n");
+  });
+
+  it("rejects content larger than the byte cap", async () => {
+    mockReadPathAtSha.mockResolvedValueOnce({
+      content: "x".repeat(REFERENCE_MAX_BYTES + 1),
+      mode: "100644",
+    });
+
+    await expect(
+      resolveReviewReferenceFromBase("big.md", "abc123"),
+    ).rejects.toThrow(/exceeds \d+-byte limit/);
+  });
+
+  it("accepts content at exactly the byte cap", async () => {
+    mockReadPathAtSha.mockResolvedValueOnce({
+      content: "x".repeat(REFERENCE_MAX_BYTES),
+      mode: "100644",
+    });
+
+    const result = await resolveReviewReferenceFromBase("edge.md", "abc123");
+    expect(result.length).toBe(REFERENCE_MAX_BYTES);
+  });
+
+  it("propagates git-shell failures from readPathAtSha", async () => {
+    mockReadPathAtSha.mockRejectedValueOnce(
+      new Error("path 'missing.md' does not exist at abc123"),
+    );
+
+    await expect(
+      resolveReviewReferenceFromBase("missing.md", "abc123"),
+    ).rejects.toThrow(/'missing\.md' does not exist at abc123/);
   });
 });

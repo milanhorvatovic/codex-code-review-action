@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { readPathAtSha } from "../github/git.js";
+
 export const REFERENCE_MAX_BYTES = 64 * 1024;
 
 export class ReviewReferenceFileError extends Error {
@@ -108,6 +110,37 @@ export function resolveReviewReferenceFromWorkspace(input: string, cwd: string):
   }
 
   return fs.readFileSync(current, "utf8");
+}
+
+export async function resolveReviewReferenceFromBase(
+  input: string,
+  baseSha: string,
+): Promise<string> {
+  const normalized = validateReviewReferencePath(input);
+  if (baseSha.trim() === "") {
+    throw new ReviewReferenceFileError("base SHA is empty");
+  }
+
+  const entry = await readPathAtSha(baseSha, normalized);
+  if (entry.mode === "120000") {
+    throw new ReviewReferenceFileError(
+      `path '${input.trim()}' is a symbolic link at base SHA; symlinks are not allowed`,
+    );
+  }
+  if (entry.mode !== "100644" && entry.mode !== "100755") {
+    throw new ReviewReferenceFileError(
+      `path '${input.trim()}' has unsupported git mode ${entry.mode}; expected a regular file`,
+    );
+  }
+
+  const size = Buffer.byteLength(entry.content, "utf8");
+  if (size > REFERENCE_MAX_BYTES) {
+    throw new ReviewReferenceFileError(
+      `file '${input.trim()}' is ${size} bytes at base SHA, exceeds ${REFERENCE_MAX_BYTES}-byte limit`,
+    );
+  }
+
+  return entry.content;
 }
 
 function describeError(error: unknown): string {
