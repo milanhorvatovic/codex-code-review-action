@@ -10,7 +10,7 @@ vi.mock("@actions/core", () => ({
 
 import { getExecOutput } from "@actions/exec";
 
-import { buildDiff, fetchBaseSha } from "./git.js";
+import { buildDiff, fetchBaseSha, readPathAtSha } from "./git.js";
 
 const mockGetExecOutput = vi.mocked(getExecOutput);
 
@@ -166,5 +166,118 @@ describe("buildDiff", () => {
     const result = await buildDiff("same-sha", "same-sha");
 
     expect(result).toBe("");
+  });
+});
+
+describe("readPathAtSha", () => {
+  it("returns blob content and file mode for a tracked file", async () => {
+    mockGetExecOutput
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout:
+          "100644 blob abcdef1234567890abcdef1234567890abcdef12\t.github/codex/review-reference.md\0",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: "policy content\n",
+      });
+
+    const result = await readPathAtSha("base-sha", ".github/codex/review-reference.md");
+
+    expect(result).toEqual({ content: "policy content\n", mode: "100644" });
+    expect(mockGetExecOutput).toHaveBeenNthCalledWith(
+      1,
+      "git",
+      [
+        "ls-tree",
+        "-z",
+        "--full-tree",
+        "base-sha",
+        "--",
+        ".github/codex/review-reference.md",
+      ],
+      { ignoreReturnCode: true, silent: true },
+    );
+    expect(mockGetExecOutput).toHaveBeenNthCalledWith(
+      2,
+      "git",
+      ["cat-file", "blob", "abcdef1234567890abcdef1234567890abcdef12"],
+      { ignoreReturnCode: true, silent: true },
+    );
+  });
+
+  it("returns mode 120000 for a tracked symbolic link", async () => {
+    mockGetExecOutput
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout:
+          "120000 blob 0000000000000000000000000000000000000001\tlinked.md\0",
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "../target" });
+
+    const result = await readPathAtSha("base-sha", "linked.md");
+
+    expect(result.mode).toBe("120000");
+  });
+
+  it("throws when the path is absent at the SHA (empty ls-tree output)", async () => {
+    mockGetExecOutput.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout: "",
+    });
+
+    await expect(readPathAtSha("base-sha", "missing.md")).rejects.toThrow(
+      /'missing\.md' does not exist at base-sha/,
+    );
+    expect(mockGetExecOutput).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws when ls-tree itself fails (e.g. unknown SHA)", async () => {
+    mockGetExecOutput.mockResolvedValueOnce({
+      exitCode: 128,
+      stderr: "fatal: not a valid object name unknown-sha",
+      stdout: "",
+    });
+
+    await expect(readPathAtSha("unknown-sha", "ref.md")).rejects.toThrow(
+      /git ls-tree failed for 'ref\.md' at unknown-sha: fatal: not a valid object name/,
+    );
+    expect(mockGetExecOutput).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a tree entry (directory at the path)", async () => {
+    mockGetExecOutput.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout:
+        "040000 tree 0000000000000000000000000000000000000002\tdocs\0",
+    });
+
+    await expect(readPathAtSha("base-sha", "docs")).rejects.toThrow(
+      /'docs' at base-sha is a tree, not a file/,
+    );
+  });
+
+  it("propagates cat-file failure with stderr context", async () => {
+    mockGetExecOutput
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout:
+          "100644 blob deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\tref.md\0",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 128,
+        stderr: "fatal: Not a valid object name deadbeef",
+        stdout: "",
+      });
+
+    await expect(readPathAtSha("base-sha", "ref.md")).rejects.toThrow(
+      /git cat-file failed for blob deadbeefdeadbeefdeadbeefdeadbeefdeadbeef/,
+    );
   });
 });
