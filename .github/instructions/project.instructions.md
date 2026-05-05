@@ -59,7 +59,7 @@ The `review` action is a composite wrapper around `openai/codex-action` and has 
 
 ## Pull request authoring
 
-- PR descriptions follow [`.github/PULL_REQUEST_TEMPLATE.md`](../PULL_REQUEST_TEMPLATE.md): `## Summary`, `## Trust boundary impact`, `## Test plan`.
-- Fill every section. If the PR does not change a trust boundary, leave `None.` in that section rather than deleting the heading.
-- Apply the `trust-boundary` label when the Trust boundary impact section describes a real change.
-- See [`CONTRIBUTING.md` → Trust-boundary changes](../../CONTRIBUTING.md#trust-boundary-changes) for the criteria and the maintainer-side review process.
+- PR descriptions follow [`.github/PULL_REQUEST_TEMPLATE.md`](../PULL_REQUEST_TEMPLATE.md): `## Summary`, `## Security-review impact`, `## Release label`, `## Test plan`.
+- Fill every section. If the PR does not affect any trust-boundary or containment-mechanism surface, leave `None.` in the Security-review impact section rather than deleting the heading.
+- Apply the `trust-boundary` label when the change touches a trust-boundary surface, the `security-review-required` label when it touches a containment-mechanism surface, or both when it touches both.
+- See [`CONTRIBUTING.md` → Security-review-required changes](../../CONTRIBUTING.md#security-review-required-changes) for the criteria and the maintainer-side review process.
