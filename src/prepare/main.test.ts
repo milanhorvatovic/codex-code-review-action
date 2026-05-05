@@ -24,7 +24,7 @@ vi.mock("node:fs", () => ({
   writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
 }));
 
-const mockResolveReviewReferenceContent = vi.fn();
+const mockResolveReviewReferenceFromWorkspace = vi.fn();
 
 vi.mock("./referenceFile.js", async () => {
   const actual = await vi.importActual<typeof import("./referenceFile.js")>(
@@ -32,8 +32,8 @@ vi.mock("./referenceFile.js", async () => {
   );
   return {
     ...actual,
-    resolveReviewReferenceContent: (...args: unknown[]) =>
-      mockResolveReviewReferenceContent(...args),
+    resolveReviewReferenceFromWorkspace: (...args: unknown[]) =>
+      mockResolveReviewReferenceFromWorkspace(...args),
   };
 });
 
@@ -109,7 +109,7 @@ describe("prepare/main error handling", () => {
     mockBuildDiff.mockReset();
     mockSplitDiff.mockReset();
     mockAssemblePrompt.mockReset();
-    mockResolveReviewReferenceContent.mockReset();
+    mockResolveReviewReferenceFromWorkspace.mockReset();
     mockGetPrepareInputs.mockReset();
     mockGetPullRequestContext.mockReset();
 
@@ -218,7 +218,7 @@ describe("prepare/main error handling", () => {
       expect(mockAssemblePrompt).toHaveBeenCalled();
     });
 
-    expect(mockResolveReviewReferenceContent).not.toHaveBeenCalled();
+    expect(mockResolveReviewReferenceFromWorkspace).not.toHaveBeenCalled();
     expect(mockAssemblePrompt.mock.calls[0]?.[0]).toMatchObject({
       reference: "default-reference",
     });
@@ -232,14 +232,14 @@ describe("prepare/main error handling", () => {
     mockFetchBaseSha.mockResolvedValueOnce(undefined);
     mockBuildDiff.mockResolvedValueOnce("diff content");
     mockSplitDiff.mockReturnValueOnce(["chunk0", "chunk1"]);
-    mockResolveReviewReferenceContent.mockReturnValueOnce("custom-reference");
+    mockResolveReviewReferenceFromWorkspace.mockReturnValueOnce("custom-reference");
 
     await import("./main.js");
     await vi.waitFor(() => {
       expect(mockAssemblePrompt).toHaveBeenCalledTimes(2);
     });
 
-    expect(mockResolveReviewReferenceContent).toHaveBeenCalledWith(
+    expect(mockResolveReviewReferenceFromWorkspace).toHaveBeenCalledWith(
       ".github/codex/review-reference.md",
       expect.any(String),
     );
@@ -256,7 +256,7 @@ describe("prepare/main error handling", () => {
     mockFetchBaseSha.mockResolvedValueOnce(undefined);
     mockBuildDiff.mockResolvedValueOnce("diff content");
     mockSplitDiff.mockReturnValueOnce(["chunk0"]);
-    mockResolveReviewReferenceContent.mockImplementationOnce(() => {
+    mockResolveReviewReferenceFromWorkspace.mockImplementationOnce(() => {
       throw new ReviewReferenceFileError(
         "path '/etc/passwd' must be workspace-relative, not absolute",
       );
@@ -281,7 +281,7 @@ describe("prepare/main error handling", () => {
     mockFetchBaseSha.mockResolvedValueOnce(undefined);
     mockBuildDiff.mockResolvedValueOnce("diff content");
     mockSplitDiff.mockReturnValueOnce(["chunk0"]);
-    mockResolveReviewReferenceContent.mockImplementationOnce(() => {
+    mockResolveReviewReferenceFromWorkspace.mockImplementationOnce(() => {
       throw new Error("unexpected boom");
     });
 
