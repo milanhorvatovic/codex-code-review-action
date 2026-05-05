@@ -108,19 +108,17 @@ The action defaults `retain-findings` to `false`. Production workflows should le
 
 **How to apply:** the [Production workflow example](../README.md#production-workflow-example) sets `retain-findings: false` explicitly so an auditor reading the workflow file sees the choice was deliberate. See the [Publish action inputs](../README.md#publish-action-inputs) table for the input definition and the upstream cap behavior of `retain-findings-days`.
 
-### 8. Set `fail-on-missing-chunks: "true"` for v2.1+
+### 8. Verify `fail-on-missing-chunks` default; do not override to `"false"` without documented consent
 
-> **Owner:** Consumer responsibility.
+> **Owner:** Upstream default; consumer must not override without approval.
 
-Once `prepare`, `review`, and `publish` are pinned to a v2.1.0-or-later SHA, the `publish` job must set `fail-on-missing-chunks: "true"`. This is the steady-state production setting from v2.1.0 onward.
+From v2.1.0 onward, `fail-on-missing-chunks` defaults to `"true"`: when any expected chunk is missing, the publish step fails red after publishing the partial review. Production workflows should leave this default in place. Setting it to `"false"` is allowed only as an explicit, documented team decision — annotate the override on the workflow line so an auditor can see the choice was deliberate, not a default copy-paste.
 
-**Important: the input is recognized only on v2.1.0 and later.** If the SHAs are still on `@v2.0.0` (or any pre-v2.1.0 commit), GitHub emits an `Unexpected input(s)` warning and silently ignores the value. A consumer who copies this checklist line without first bumping the SHAs gets neither the protection nor a hard failure — only a warning buried in the workflow log. Pin to v2.1.0+ first, then enable the input.
+**Important: the input is recognized only on v2.1.0 and later.** If the SHAs are still on `@v2.0.0` (or any pre-v2.1.0 commit), GitHub emits an `Unexpected input(s)` warning and silently ignores the value, falling back to the v2.0.x behavior in which a missing chunk silently passed. Pin to v2.1.0+ first; the default-on protection only applies once the SHAs are bumped.
 
-**Why:** when one or more review chunks are missing (job failure, invalid output, artifact lost), the partial review is always published with an "Incomplete review" banner. With the default `fail-on-missing-chunks: false`, the publish step still exits 0 — CI status stays green, and a reviewer who sees "Codex review posted" may miss the banner and assume full diff coverage. With `true`, the same banner is posted **and** the publish step then fails, so the missing-chunks case surfaces as a red CI check on the PR rather than a green one with the warning buried in the body.
+**Why:** when one or more review chunks are missing (job failure, invalid output, artifact lost), the partial review is always published with an "Incomplete review" banner. With `fail-on-missing-chunks: false`, the publish step still exits 0 — CI status stays green, and a reviewer who sees "Codex review posted" may miss the banner and assume full diff coverage. With the default `true`, the same banner is posted **and** the publish step then fails, so the missing-chunks case surfaces as a red CI check on the PR rather than a green one with the warning buried in the body.
 
-The default remains `false` for backward compatibility — flipping it in a v2.x minor release would change the CI status of a workflow that previously stayed green. The explicit recommendation to set it to `"true"` exists precisely because the default does not.
-
-**How to apply:** see the [Publish action inputs](../README.md#publish-action-inputs) table for the v2.1.0 behavior contract and the `Unexpected input(s)` warning note. The [Production workflow example](../README.md#production-workflow-example) shows the line uncommented after the action is pinned to v2.1.0.
+**How to apply:** see the [Publish action inputs](../README.md#publish-action-inputs) table for the input definition and the `Unexpected input(s)` warning note for pre-v2.1.0 SHAs. The [Production workflow example](../README.md#production-workflow-example) sets `fail-on-missing-chunks: "true"` explicitly so an auditor reading the workflow file sees the choice was deliberate.
 
 ### 9. Do not pass `review-reference-file` until `review-reference-source: base` is available and enabled
 
@@ -167,7 +165,7 @@ The fork-and-wrap adoption path documented in [Adopting in enterprise environmen
 - A company fork **does not replace SHA pinning.** The fork still references composite-action `uses:` lines internally, and those references must be pinned to immutable SHAs inside the fork — including the transitive `openai/codex-action` pin. Forking moves the trust dependency from the upstream maintainer account to the fork's maintainers, but it does not eliminate the SHA-pinning discipline.
 - The `allow-users` allowlist **does not replace fork gating.** `allow-users` controls *who* may trigger the prepare step among same-repo PR authors; the same-repo gate from item 3 controls *which PRs* the workflow runs on at all. A workflow with `allow-users` set but without the same-repo gate still runs on fork PRs (and fails noisily, see above). Both controls are required.
 
-Wrapper consumers calling the org-internal reusable workflow inherit items 2, 3, 4, 5, 6, 7, and the wrapper-side half of item 9 from the wrapper's own workflow definition. Items 1 and 8, plus the direct-consumer half of item 9, remain the wrapper maintainer's responsibility.
+Wrapper consumers calling the org-internal reusable workflow inherit items 2, 3, 4, 5, 6, 7, 8, and the wrapper-side half of item 9 from the wrapper's own workflow definition. Item 1, plus the direct-consumer half of item 9, remains the wrapper maintainer's responsibility.
 
 ## Audit summary
 
