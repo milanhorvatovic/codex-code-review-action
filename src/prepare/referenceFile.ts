@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { readPathAtSha } from "../github/git.js";
+import { readBlobBySha, statPathAtSha } from "../github/git.js";
 
 export const REFERENCE_MAX_BYTES = 64 * 1024;
 
@@ -121,26 +121,31 @@ export async function resolveReviewReferenceFromBase(
     throw new ReviewReferenceFileError("base SHA is empty");
   }
 
-  const entry = await readPathAtSha(baseSha, normalized);
-  if (entry.mode === "120000") {
+  const trimmed = input.trim();
+  const info = await statPathAtSha(baseSha, normalized);
+
+  if (info.type !== "blob") {
     throw new ReviewReferenceFileError(
-      `path '${input.trim()}' is a symbolic link at base SHA; symlinks are not allowed`,
+      `path '${trimmed}' has unsupported git mode ${info.mode} at base SHA; expected a regular file`,
     );
   }
-  if (entry.mode !== "100644" && entry.mode !== "100755") {
+  if (info.mode === "120000") {
     throw new ReviewReferenceFileError(
-      `path '${input.trim()}' has unsupported git mode ${entry.mode}; expected a regular file`,
+      `path '${trimmed}' is a symbolic link at base SHA; symlinks are not allowed`,
+    );
+  }
+  if (info.mode !== "100644" && info.mode !== "100755") {
+    throw new ReviewReferenceFileError(
+      `path '${trimmed}' has unsupported git mode ${info.mode}; expected a regular file`,
+    );
+  }
+  if (info.sizeBytes > REFERENCE_MAX_BYTES) {
+    throw new ReviewReferenceFileError(
+      `file '${trimmed}' is ${info.sizeBytes} bytes at base SHA, exceeds ${REFERENCE_MAX_BYTES}-byte limit`,
     );
   }
 
-  const size = Buffer.byteLength(entry.content, "utf8");
-  if (size > REFERENCE_MAX_BYTES) {
-    throw new ReviewReferenceFileError(
-      `file '${input.trim()}' is ${size} bytes at base SHA, exceeds ${REFERENCE_MAX_BYTES}-byte limit`,
-    );
-  }
-
-  return entry.content;
+  return readBlobBySha(info.objectId);
 }
 
 function describeError(error: unknown): string {

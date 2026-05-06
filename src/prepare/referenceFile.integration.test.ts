@@ -113,4 +113,41 @@ describe("resolveReviewReferenceFromBase (real git)", () => {
       ),
     ).rejects.toThrow(/git ls-tree failed for 'ref\.md'/);
   });
+
+  it("rejects a directory path under base SHA as Invalid review-reference-file", async () => {
+    fs.mkdirSync(path.join(repoDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(repoDir, "docs/inside.md"), "inside\n");
+    git(["add", "."], repoDir);
+    git(["commit", "--quiet", "-m", "directory"], repoDir);
+    const baseSha = git(["rev-parse", "HEAD"], repoDir).trim();
+
+    await expect(
+      resolveReviewReferenceFromBase("docs", baseSha),
+    ).rejects.toThrow(/unsupported git mode 040000 at base SHA/);
+  });
+
+  it("treats glob metacharacters in the path as literal (no pathspec interpretation)", async () => {
+    const literalPath = "weird*name.md";
+    const decoyPath = "weirdABCname.md";
+    fs.writeFileSync(path.join(repoDir, literalPath), "LITERAL star\n");
+    fs.writeFileSync(path.join(repoDir, decoyPath), "DECOY glob match\n");
+    git(["add", "."], repoDir);
+    git(["commit", "--quiet", "-m", "literal vs decoy"], repoDir);
+    const baseSha = git(["rev-parse", "HEAD"], repoDir).trim();
+
+    const result = await resolveReviewReferenceFromBase(literalPath, baseSha);
+    expect(result).toBe("LITERAL star\n");
+  });
+
+  it("rejects an oversize tracked blob without buffering it into memory", async () => {
+    const refPath = "huge.md";
+    fs.writeFileSync(path.join(repoDir, refPath), "x".repeat(64 * 1024 + 1));
+    git(["add", "."], repoDir);
+    git(["commit", "--quiet", "-m", "oversize"], repoDir);
+    const baseSha = git(["rev-parse", "HEAD"], repoDir).trim();
+
+    await expect(
+      resolveReviewReferenceFromBase(refPath, baseSha),
+    ).rejects.toThrow(/exceeds \d+-byte limit/);
+  });
 });

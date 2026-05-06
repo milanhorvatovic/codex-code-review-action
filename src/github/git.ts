@@ -55,15 +55,17 @@ export async function buildDiff(
   return result.stdout;
 }
 
-export interface PathAtSha {
-  content: string;
+export interface PathAtShaInfo {
   mode: string;
+  objectId: string;
+  sizeBytes: number;
+  type: string;
 }
 
-export async function readPathAtSha(sha: string, repoPath: string): Promise<PathAtSha> {
+export async function statPathAtSha(sha: string, repoPath: string): Promise<PathAtShaInfo> {
   const lsTree = await getExecOutput(
     "git",
-    ["ls-tree", "-z", "--full-tree", sha, "--", repoPath],
+    ["--literal-pathspecs", "ls-tree", "-z", "--full-tree", sha, "--", repoPath],
     { ignoreReturnCode: true, silent: true },
   );
   if (lsTree.exitCode !== 0) {
@@ -82,14 +84,36 @@ export async function readPathAtSha(sha: string, repoPath: string): Promise<Path
   const meta = tabIndex === -1 ? stdout : stdout.slice(0, tabIndex);
   const parts = meta.split(" ");
   const mode = parts[0] ?? "";
-  const objectType = parts[1] ?? "";
+  const type = parts[1] ?? "";
   const objectId = parts[2] ?? "";
-  if (objectType !== "blob") {
-    throw new Error(
-      `path '${repoPath}' at ${sha} is a ${objectType || "non-blob"}, not a file`,
+
+  let sizeBytes = 0;
+  if (type === "blob") {
+    const catFileSize = await getExecOutput(
+      "git",
+      ["cat-file", "-s", objectId],
+      { ignoreReturnCode: true, silent: true },
     );
+    if (catFileSize.exitCode !== 0) {
+      const stderr = catFileSize.stderr.trim();
+      throw new Error(
+        stderr === ""
+          ? `git cat-file -s failed for blob ${objectId} (exit ${catFileSize.exitCode})`
+          : `git cat-file -s failed for blob ${objectId}: ${stderr}`,
+      );
+    }
+    sizeBytes = Number.parseInt(catFileSize.stdout.trim(), 10);
+    if (!Number.isFinite(sizeBytes) || sizeBytes < 0) {
+      throw new Error(
+        `git cat-file -s returned non-numeric size for blob ${objectId}: ${catFileSize.stdout}`,
+      );
+    }
   }
 
+  return { mode, objectId, sizeBytes, type };
+}
+
+export async function readBlobBySha(objectId: string): Promise<string> {
   const catFile = await getExecOutput(
     "git",
     ["cat-file", "blob", objectId],
@@ -103,6 +127,5 @@ export async function readPathAtSha(sha: string, repoPath: string): Promise<Path
         : `git cat-file failed for blob ${objectId}: ${stderr}`,
     );
   }
-
-  return { content: catFile.stdout, mode };
+  return catFile.stdout;
 }

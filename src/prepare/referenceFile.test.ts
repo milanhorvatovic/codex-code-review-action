@@ -4,10 +4,12 @@ import * as path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockReadPathAtSha = vi.fn();
+const mockStatPathAtSha = vi.fn();
+const mockReadBlobBySha = vi.fn();
 
 vi.mock("../github/git.js", () => ({
-  readPathAtSha: (...args: unknown[]) => mockReadPathAtSha(...args),
+  readBlobBySha: (...args: unknown[]) => mockReadBlobBySha(...args),
+  statPathAtSha: (...args: unknown[]) => mockStatPathAtSha(...args),
 }));
 
 import {
@@ -305,14 +307,18 @@ describe("resolveReviewReferenceFromWorkspace", () => {
 
 describe("resolveReviewReferenceFromBase", () => {
   beforeEach(() => {
-    mockReadPathAtSha.mockReset();
+    mockStatPathAtSha.mockReset();
+    mockReadBlobBySha.mockReset();
   });
 
   it("returns blob content for a regular tracked file", async () => {
-    mockReadPathAtSha.mockResolvedValueOnce({
-      content: "policy content\n",
+    mockStatPathAtSha.mockResolvedValueOnce({
       mode: "100644",
+      objectId: "abc",
+      sizeBytes: 15,
+      type: "blob",
     });
+    mockReadBlobBySha.mockResolvedValueOnce("policy content\n");
 
     await expect(
       resolveReviewReferenceFromBase(
@@ -321,21 +327,25 @@ describe("resolveReviewReferenceFromBase", () => {
       ),
     ).resolves.toBe("policy content\n");
 
-    expect(mockReadPathAtSha).toHaveBeenCalledWith(
+    expect(mockStatPathAtSha).toHaveBeenCalledWith(
       "abc123",
       ".github/codex/review-reference.md",
     );
+    expect(mockReadBlobBySha).toHaveBeenCalledWith("abc");
   });
 
   it("normalizes a leading './' prefix before reading", async () => {
-    mockReadPathAtSha.mockResolvedValueOnce({
-      content: "ok\n",
+    mockStatPathAtSha.mockResolvedValueOnce({
       mode: "100644",
+      objectId: "obj",
+      sizeBytes: 3,
+      type: "blob",
     });
+    mockReadBlobBySha.mockResolvedValueOnce("ok\n");
 
     await resolveReviewReferenceFromBase("./ref.md", "abc123");
 
-    expect(mockReadPathAtSha).toHaveBeenCalledWith("abc123", "ref.md");
+    expect(mockStatPathAtSha).toHaveBeenCalledWith("abc123", "ref.md");
   });
 
   it("rejects path-shape violations before invoking git", async () => {
@@ -349,7 +359,8 @@ describe("resolveReviewReferenceFromBase", () => {
       resolveReviewReferenceFromBase(".git/config", "abc123"),
     ).rejects.toThrow(/\.git directory/);
 
-    expect(mockReadPathAtSha).not.toHaveBeenCalled();
+    expect(mockStatPathAtSha).not.toHaveBeenCalled();
+    expect(mockReadBlobBySha).not.toHaveBeenCalled();
   });
 
   it("rejects an empty base SHA", async () => {
@@ -357,70 +368,116 @@ describe("resolveReviewReferenceFromBase", () => {
       resolveReviewReferenceFromBase("ref.md", "   "),
     ).rejects.toThrow(/base SHA is empty/);
 
-    expect(mockReadPathAtSha).not.toHaveBeenCalled();
+    expect(mockStatPathAtSha).not.toHaveBeenCalled();
+  });
+
+  it("rejects a tree (directory) entry as Invalid review-reference-file", async () => {
+    mockStatPathAtSha.mockResolvedValueOnce({
+      mode: "040000",
+      objectId: "treeobj",
+      sizeBytes: 0,
+      type: "tree",
+    });
+
+    await expect(
+      resolveReviewReferenceFromBase("docs", "abc123"),
+    ).rejects.toThrow(/unsupported git mode 040000 at base SHA/);
+    expect(mockReadBlobBySha).not.toHaveBeenCalled();
+  });
+
+  it("rejects a submodule (commit) entry as Invalid review-reference-file", async () => {
+    mockStatPathAtSha.mockResolvedValueOnce({
+      mode: "160000",
+      objectId: "commitobj",
+      sizeBytes: 0,
+      type: "commit",
+    });
+
+    await expect(
+      resolveReviewReferenceFromBase("vendor/lib", "abc123"),
+    ).rejects.toThrow(/unsupported git mode 160000 at base SHA/);
+    expect(mockReadBlobBySha).not.toHaveBeenCalled();
   });
 
   it("rejects a tracked symbolic link (mode 120000)", async () => {
-    mockReadPathAtSha.mockResolvedValueOnce({
-      content: "../target",
+    mockStatPathAtSha.mockResolvedValueOnce({
       mode: "120000",
+      objectId: "linkobj",
+      sizeBytes: 9,
+      type: "blob",
     });
 
     await expect(
       resolveReviewReferenceFromBase("link.md", "abc123"),
     ).rejects.toThrow(/symbolic link at base SHA/);
-  });
-
-  it("rejects an unsupported git mode", async () => {
-    mockReadPathAtSha.mockResolvedValueOnce({
-      content: "",
-      mode: "160000",
-    });
-
-    await expect(
-      resolveReviewReferenceFromBase("submodule", "abc123"),
-    ).rejects.toThrow(/unsupported git mode 160000/);
+    expect(mockReadBlobBySha).not.toHaveBeenCalled();
   });
 
   it("accepts an executable regular file (mode 100755)", async () => {
-    mockReadPathAtSha.mockResolvedValueOnce({
-      content: "ok\n",
+    mockStatPathAtSha.mockResolvedValueOnce({
       mode: "100755",
+      objectId: "execobj",
+      sizeBytes: 3,
+      type: "blob",
     });
+    mockReadBlobBySha.mockResolvedValueOnce("ok\n");
 
     await expect(
       resolveReviewReferenceFromBase("ref.md", "abc123"),
     ).resolves.toBe("ok\n");
   });
 
-  it("rejects content larger than the byte cap", async () => {
-    mockReadPathAtSha.mockResolvedValueOnce({
-      content: "x".repeat(REFERENCE_MAX_BYTES + 1),
+  it("rejects content larger than the byte cap before reading the blob", async () => {
+    mockStatPathAtSha.mockResolvedValueOnce({
       mode: "100644",
+      objectId: "bigobj",
+      sizeBytes: REFERENCE_MAX_BYTES + 1,
+      type: "blob",
     });
 
     await expect(
       resolveReviewReferenceFromBase("big.md", "abc123"),
     ).rejects.toThrow(/exceeds \d+-byte limit/);
+    expect(mockReadBlobBySha).not.toHaveBeenCalled();
   });
 
   it("accepts content at exactly the byte cap", async () => {
-    mockReadPathAtSha.mockResolvedValueOnce({
-      content: "x".repeat(REFERENCE_MAX_BYTES),
+    mockStatPathAtSha.mockResolvedValueOnce({
       mode: "100644",
+      objectId: "edgeobj",
+      sizeBytes: REFERENCE_MAX_BYTES,
+      type: "blob",
     });
+    mockReadBlobBySha.mockResolvedValueOnce("x".repeat(REFERENCE_MAX_BYTES));
 
     const result = await resolveReviewReferenceFromBase("edge.md", "abc123");
     expect(result.length).toBe(REFERENCE_MAX_BYTES);
   });
 
-  it("propagates git-shell failures from readPathAtSha", async () => {
-    mockReadPathAtSha.mockRejectedValueOnce(
+  it("propagates git-shell failures from statPathAtSha", async () => {
+    mockStatPathAtSha.mockRejectedValueOnce(
       new Error("path 'missing.md' does not exist at abc123"),
     );
 
     await expect(
       resolveReviewReferenceFromBase("missing.md", "abc123"),
     ).rejects.toThrow(/'missing\.md' does not exist at abc123/);
+    expect(mockReadBlobBySha).not.toHaveBeenCalled();
+  });
+
+  it("propagates git-shell failures from readBlobBySha", async () => {
+    mockStatPathAtSha.mockResolvedValueOnce({
+      mode: "100644",
+      objectId: "obj",
+      sizeBytes: 5,
+      type: "blob",
+    });
+    mockReadBlobBySha.mockRejectedValueOnce(
+      new Error("git cat-file failed for blob obj"),
+    );
+
+    await expect(
+      resolveReviewReferenceFromBase("ref.md", "abc123"),
+    ).rejects.toThrow(/git cat-file failed for blob obj/);
   });
 });
