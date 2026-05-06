@@ -707,7 +707,7 @@ describe("gate doc / PR body checklist drift", () => {
     "Dist reproducibility",
     "Manual security regression checks",
     "codex-prepare", // Prompt-artifact leakage check (artifact name shared by both)
-    "review-reference-source: base", // Conditional base-mode checks
+    "review-reference-source: base", // Base-mode regression checks
     "Release-specific items",
     "Security-review-required cross-reference",
     "Security-review sign-off",
@@ -782,7 +782,8 @@ describe("buildPrBody", () => {
     expect(body).toContain("gh run download <run-id> --name codex-prepare");
     expect(body).toContain("`allow-users`");
     expect(body).toContain("widen `allow-users`");
-    expect(body).toContain("- [ ] Conditional `review-reference-source: base` checks");
+    expect(body).toContain("- [ ] Base-mode regression checks for `review-reference-source: base`");
+    expect(body).not.toContain("Conditional `review-reference-source: base` checks");
     expect(body).toContain("- [ ] Release-specific items table is filled below this checklist");
     expect(body).toContain("- [ ] Security-review CHANGELOG callouts");
     expect(body).toContain("`### ⚠️ Trust boundary change`");

@@ -10,7 +10,7 @@ vi.mock("@actions/core", () => ({
 
 import { getExecOutput } from "@actions/exec";
 
-import { buildDiff, fetchBaseSha } from "./git.js";
+import { buildDiff, fetchBaseSha, readBlobBySha, statPathAtSha } from "./git.js";
 
 const mockGetExecOutput = vi.mocked(getExecOutput);
 
@@ -166,5 +166,204 @@ describe("buildDiff", () => {
     const result = await buildDiff("same-sha", "same-sha");
 
     expect(result).toBe("");
+  });
+});
+
+describe("statPathAtSha", () => {
+  it("returns mode, type, objectId, and sizeBytes for a tracked blob", async () => {
+    mockGetExecOutput
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout:
+          "100644 blob abcdef1234567890abcdef1234567890abcdef12\t.github/codex/review-reference.md\0",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: "1234\n",
+      });
+
+    const result = await statPathAtSha("base-sha", ".github/codex/review-reference.md");
+
+    expect(result).toEqual({
+      mode: "100644",
+      objectId: "abcdef1234567890abcdef1234567890abcdef12",
+      sizeBytes: 1234,
+      type: "blob",
+    });
+    expect(mockGetExecOutput).toHaveBeenNthCalledWith(
+      1,
+      "git",
+      [
+        "--literal-pathspecs",
+        "ls-tree",
+        "-z",
+        "--full-tree",
+        "base-sha",
+        "--",
+        ".github/codex/review-reference.md",
+      ],
+      { ignoreReturnCode: true, silent: true },
+    );
+    expect(mockGetExecOutput).toHaveBeenNthCalledWith(
+      2,
+      "git",
+      ["cat-file", "-s", "abcdef1234567890abcdef1234567890abcdef12"],
+      { ignoreReturnCode: true, silent: true },
+    );
+  });
+
+  it("returns mode 120000 with type blob for a tracked symbolic link", async () => {
+    mockGetExecOutput
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout:
+          "120000 blob 0000000000000000000000000000000000000001\tlinked.md\0",
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "9\n" });
+
+    const result = await statPathAtSha("base-sha", "linked.md");
+
+    expect(result.mode).toBe("120000");
+    expect(result.type).toBe("blob");
+  });
+
+  it("returns type 'tree' with sizeBytes 0 for a directory entry without invoking cat-file", async () => {
+    mockGetExecOutput.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout:
+        "040000 tree 0000000000000000000000000000000000000002\tdocs\0",
+    });
+
+    const result = await statPathAtSha("base-sha", "docs");
+
+    expect(result).toEqual({
+      mode: "040000",
+      objectId: "0000000000000000000000000000000000000002",
+      sizeBytes: 0,
+      type: "tree",
+    });
+    expect(mockGetExecOutput).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns type 'commit' with sizeBytes 0 for a submodule entry without invoking cat-file", async () => {
+    mockGetExecOutput.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout:
+        "160000 commit 0000000000000000000000000000000000000003\tvendor/lib\0",
+    });
+
+    const result = await statPathAtSha("base-sha", "vendor/lib");
+
+    expect(result.mode).toBe("160000");
+    expect(result.type).toBe("commit");
+    expect(result.sizeBytes).toBe(0);
+    expect(mockGetExecOutput).toHaveBeenCalledTimes(1);
+  });
+
+  it("invokes ls-tree with --literal-pathspecs so glob metacharacters are not interpreted", async () => {
+    mockGetExecOutput
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout:
+          "100644 blob aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\tweird*name.md\0",
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "5\n" });
+
+    await statPathAtSha("base-sha", "weird*name.md");
+
+    const lsTreeArgs = mockGetExecOutput.mock.calls[0][1];
+    expect(lsTreeArgs).toEqual([
+      "--literal-pathspecs",
+      "ls-tree",
+      "-z",
+      "--full-tree",
+      "base-sha",
+      "--",
+      "weird*name.md",
+    ]);
+  });
+
+  it("throws when the path is absent at the SHA (empty ls-tree output)", async () => {
+    mockGetExecOutput.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout: "",
+    });
+
+    await expect(statPathAtSha("base-sha", "missing.md")).rejects.toThrow(
+      /'missing\.md' does not exist at base-sha/,
+    );
+    expect(mockGetExecOutput).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws when ls-tree itself fails (e.g. unknown SHA)", async () => {
+    mockGetExecOutput.mockResolvedValueOnce({
+      exitCode: 128,
+      stderr: "fatal: not a valid object name unknown-sha",
+      stdout: "",
+    });
+
+    await expect(statPathAtSha("unknown-sha", "ref.md")).rejects.toThrow(
+      /git ls-tree failed for 'ref\.md' at unknown-sha: fatal: not a valid object name/,
+    );
+    expect(mockGetExecOutput).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates cat-file -s failure with stderr context", async () => {
+    mockGetExecOutput
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout:
+          "100644 blob deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\tref.md\0",
+      })
+      .mockResolvedValueOnce({
+        exitCode: 128,
+        stderr: "fatal: Not a valid object name deadbeef",
+        stdout: "",
+      });
+
+    await expect(statPathAtSha("base-sha", "ref.md")).rejects.toThrow(
+      /git cat-file -s failed for blob deadbeefdeadbeefdeadbeefdeadbeefdeadbeef/,
+    );
+  });
+});
+
+describe("readBlobBySha", () => {
+  it("returns the blob content for a known object id", async () => {
+    mockGetExecOutput.mockResolvedValueOnce({
+      exitCode: 0,
+      stderr: "",
+      stdout: "policy content\n",
+    });
+
+    const result = await readBlobBySha("abcdef1234567890abcdef1234567890abcdef12");
+
+    expect(result).toBe("policy content\n");
+    expect(mockGetExecOutput).toHaveBeenCalledWith(
+      "git",
+      ["cat-file", "blob", "abcdef1234567890abcdef1234567890abcdef12"],
+      { ignoreReturnCode: true, silent: true },
+    );
+  });
+
+  it("propagates cat-file blob failure with stderr context", async () => {
+    mockGetExecOutput.mockResolvedValueOnce({
+      exitCode: 128,
+      stderr: "fatal: Not a valid object name deadbeef",
+      stdout: "",
+    });
+
+    await expect(
+      readBlobBySha("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"),
+    ).rejects.toThrow(
+      /git cat-file failed for blob deadbeefdeadbeefdeadbeefdeadbeefdeadbeef/,
+    );
   });
 });

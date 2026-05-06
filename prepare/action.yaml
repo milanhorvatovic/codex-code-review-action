@@ -26,6 +26,11 @@ inputs:
     required: false
     default: ""
 
+  review-reference-source:
+    description: "Where to read review-reference-file from: 'workspace' (PR head, default) or 'base' (PR base SHA — locks policy against in-PR edits)."
+    required: false
+    default: "workspace"
+
 outputs:
   chunk-count:
     description: "Number of diff chunks produced."

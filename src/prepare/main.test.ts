@@ -24,7 +24,9 @@ vi.mock("node:fs", () => ({
   writeFileSync: (...args: unknown[]) => mockWriteFileSync(...args),
 }));
 
-const mockResolveReviewReferenceContent = vi.fn();
+const mockResolveReviewReferenceFromWorkspace = vi.fn();
+
+const mockResolveReviewReferenceFromBase = vi.fn();
 
 vi.mock("./referenceFile.js", async () => {
   const actual = await vi.importActual<typeof import("./referenceFile.js")>(
@@ -32,8 +34,10 @@ vi.mock("./referenceFile.js", async () => {
   );
   return {
     ...actual,
-    resolveReviewReferenceContent: (...args: unknown[]) =>
-      mockResolveReviewReferenceContent(...args),
+    resolveReviewReferenceFromBase: (...args: unknown[]) =>
+      mockResolveReviewReferenceFromBase(...args),
+    resolveReviewReferenceFromWorkspace: (...args: unknown[]) =>
+      mockResolveReviewReferenceFromWorkspace(...args),
   };
 });
 
@@ -84,6 +88,7 @@ const defaultInputs = {
   githubToken: "token",
   maxChunkBytes: 200000,
   reviewReferenceFile: "",
+  reviewReferenceSource: "workspace" as const,
 };
 
 const defaultContext = {
@@ -109,7 +114,8 @@ describe("prepare/main error handling", () => {
     mockBuildDiff.mockReset();
     mockSplitDiff.mockReset();
     mockAssemblePrompt.mockReset();
-    mockResolveReviewReferenceContent.mockReset();
+    mockResolveReviewReferenceFromWorkspace.mockReset();
+    mockResolveReviewReferenceFromBase.mockReset();
     mockGetPrepareInputs.mockReset();
     mockGetPullRequestContext.mockReset();
 
@@ -218,7 +224,7 @@ describe("prepare/main error handling", () => {
       expect(mockAssemblePrompt).toHaveBeenCalled();
     });
 
-    expect(mockResolveReviewReferenceContent).not.toHaveBeenCalled();
+    expect(mockResolveReviewReferenceFromWorkspace).not.toHaveBeenCalled();
     expect(mockAssemblePrompt.mock.calls[0]?.[0]).toMatchObject({
       reference: "default-reference",
     });
@@ -232,14 +238,14 @@ describe("prepare/main error handling", () => {
     mockFetchBaseSha.mockResolvedValueOnce(undefined);
     mockBuildDiff.mockResolvedValueOnce("diff content");
     mockSplitDiff.mockReturnValueOnce(["chunk0", "chunk1"]);
-    mockResolveReviewReferenceContent.mockReturnValueOnce("custom-reference");
+    mockResolveReviewReferenceFromWorkspace.mockReturnValueOnce("custom-reference");
 
     await import("./main.js");
     await vi.waitFor(() => {
       expect(mockAssemblePrompt).toHaveBeenCalledTimes(2);
     });
 
-    expect(mockResolveReviewReferenceContent).toHaveBeenCalledWith(
+    expect(mockResolveReviewReferenceFromWorkspace).toHaveBeenCalledWith(
       ".github/codex/review-reference.md",
       expect.any(String),
     );
@@ -256,7 +262,7 @@ describe("prepare/main error handling", () => {
     mockFetchBaseSha.mockResolvedValueOnce(undefined);
     mockBuildDiff.mockResolvedValueOnce("diff content");
     mockSplitDiff.mockReturnValueOnce(["chunk0"]);
-    mockResolveReviewReferenceContent.mockImplementationOnce(() => {
+    mockResolveReviewReferenceFromWorkspace.mockImplementationOnce(() => {
       throw new ReviewReferenceFileError(
         "path '/etc/passwd' must be workspace-relative, not absolute",
       );
@@ -281,7 +287,7 @@ describe("prepare/main error handling", () => {
     mockFetchBaseSha.mockResolvedValueOnce(undefined);
     mockBuildDiff.mockResolvedValueOnce("diff content");
     mockSplitDiff.mockReturnValueOnce(["chunk0"]);
-    mockResolveReviewReferenceContent.mockImplementationOnce(() => {
+    mockResolveReviewReferenceFromWorkspace.mockImplementationOnce(() => {
       throw new Error("unexpected boom");
     });
 
@@ -291,5 +297,81 @@ describe("prepare/main error handling", () => {
     });
 
     expect(mockSetFailed).toHaveBeenCalledWith("unexpected boom");
+  });
+
+  it("uses the base-mode resolver when review-reference-source is 'base'", async () => {
+    mockGetPrepareInputs.mockReturnValue({
+      ...defaultInputs,
+      reviewReferenceFile: ".github/codex/review-reference.md",
+      reviewReferenceSource: "base",
+    });
+    mockFetchBaseSha.mockResolvedValueOnce(undefined);
+    mockBuildDiff.mockResolvedValueOnce("diff content");
+    mockSplitDiff.mockReturnValueOnce(["chunk0", "chunk1"]);
+    mockResolveReviewReferenceFromBase.mockResolvedValueOnce("base-policy");
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockAssemblePrompt).toHaveBeenCalledTimes(2);
+    });
+
+    expect(mockResolveReviewReferenceFromBase).toHaveBeenCalledWith(
+      ".github/codex/review-reference.md",
+      "base123",
+    );
+    expect(mockResolveReviewReferenceFromWorkspace).not.toHaveBeenCalled();
+    for (const call of mockAssemblePrompt.mock.calls) {
+      expect(call[0]).toMatchObject({ reference: "base-policy" });
+    }
+  });
+
+  it("calls setFailed with 'Invalid review-reference-file' when base-mode validation fails", async () => {
+    mockGetPrepareInputs.mockReturnValue({
+      ...defaultInputs,
+      reviewReferenceFile: ".git/config",
+      reviewReferenceSource: "base",
+    });
+    mockFetchBaseSha.mockResolvedValueOnce(undefined);
+    mockBuildDiff.mockResolvedValueOnce("diff content");
+    mockSplitDiff.mockReturnValueOnce(["chunk0"]);
+    mockResolveReviewReferenceFromBase.mockImplementationOnce(() => {
+      throw new ReviewReferenceFileError(
+        "path '.git/config' targets the .git directory; reading runner-managed git state is not allowed",
+      );
+    });
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockSetFailed).toHaveBeenCalled();
+    });
+
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      "Invalid review-reference-file: path '.git/config' targets the .git directory; reading runner-managed git state is not allowed",
+    );
+    expect(mockAssemblePrompt).not.toHaveBeenCalled();
+  });
+
+  it("calls setFailed with the base-SHA prefix when git-shell propagates an error", async () => {
+    mockGetPrepareInputs.mockReturnValue({
+      ...defaultInputs,
+      reviewReferenceFile: "missing.md",
+      reviewReferenceSource: "base",
+    });
+    mockFetchBaseSha.mockResolvedValueOnce(undefined);
+    mockBuildDiff.mockResolvedValueOnce("diff content");
+    mockSplitDiff.mockReturnValueOnce(["chunk0"]);
+    mockResolveReviewReferenceFromBase.mockRejectedValueOnce(
+      new Error("path 'missing.md' does not exist at base123"),
+    );
+
+    await import("./main.js");
+    await vi.waitFor(() => {
+      expect(mockSetFailed).toHaveBeenCalled();
+    });
+
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      "Failed to read review-reference-file at base SHA: path 'missing.md' does not exist at base123",
+    );
+    expect(mockAssemblePrompt).not.toHaveBeenCalled();
   });
 });

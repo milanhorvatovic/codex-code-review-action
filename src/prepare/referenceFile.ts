@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { readBlobBySha, statPathAtSha } from "../github/git.js";
+
 export const REFERENCE_MAX_BYTES = 64 * 1024;
 
 export class ReviewReferenceFileError extends Error {
@@ -10,7 +12,7 @@ export class ReviewReferenceFileError extends Error {
   }
 }
 
-export function resolveReviewReferenceContent(input: string, cwd: string): string {
+export function validateReviewReferencePath(input: string): string {
   const trimmed = input.trim();
   if (trimmed === "") {
     throw new ReviewReferenceFileError("path is empty");
@@ -47,6 +49,12 @@ export function resolveReviewReferenceContent(input: string, cwd: string): strin
     );
   }
 
+  return normalized;
+}
+
+export function resolveReviewReferenceFromWorkspace(input: string, cwd: string): string {
+  const normalized = validateReviewReferencePath(input);
+
   let realCwd: string;
   try {
     realCwd = fs.realpathSync.native(cwd);
@@ -67,19 +75,19 @@ export function resolveReviewReferenceContent(input: string, cwd: string): strin
     } catch (error) {
       if (isErrnoException(error) && error.code === "ENOENT") {
         throw new ReviewReferenceFileError(
-          `file not found: '${trimmed}' (resolved to '${current}')`,
+          `file not found: '${input.trim()}' (resolved to '${current}')`,
         );
       }
       throw new ReviewReferenceFileError(
-        `cannot stat '${trimmed}': ${describeError(error)}`,
+        `cannot stat '${input.trim()}': ${describeError(error)}`,
       );
     }
     if (stat.isSymbolicLink()) {
       const isLeaf = i === components.length - 1;
       throw new ReviewReferenceFileError(
         isLeaf
-          ? `path '${trimmed}' is a symbolic link; symlinks are not allowed`
-          : `path '${trimmed}' resolves through a symbolic link`,
+          ? `path '${input.trim()}' is a symbolic link; symlinks are not allowed`
+          : `path '${input.trim()}' resolves through a symbolic link`,
       );
     }
     leafStat = stat;
@@ -87,21 +95,57 @@ export function resolveReviewReferenceContent(input: string, cwd: string): strin
 
   if (leafStat === undefined) {
     throw new ReviewReferenceFileError(
-      `path '${trimmed}' did not resolve to a file`,
+      `path '${input.trim()}' did not resolve to a file`,
     );
   }
   if (!leafStat.isFile()) {
     throw new ReviewReferenceFileError(
-      `path '${trimmed}' is not a regular file`,
+      `path '${input.trim()}' is not a regular file`,
     );
   }
   if (leafStat.size > REFERENCE_MAX_BYTES) {
     throw new ReviewReferenceFileError(
-      `file '${trimmed}' is ${leafStat.size} bytes, exceeds ${REFERENCE_MAX_BYTES}-byte limit`,
+      `file '${input.trim()}' is ${leafStat.size} bytes, exceeds ${REFERENCE_MAX_BYTES}-byte limit`,
     );
   }
 
   return fs.readFileSync(current, "utf8");
+}
+
+export async function resolveReviewReferenceFromBase(
+  input: string,
+  baseSha: string,
+): Promise<string> {
+  const normalized = validateReviewReferencePath(input);
+  if (baseSha.trim() === "") {
+    throw new ReviewReferenceFileError("base SHA is empty");
+  }
+
+  const trimmed = input.trim();
+  const info = await statPathAtSha(baseSha, normalized);
+
+  if (info.type !== "blob") {
+    throw new ReviewReferenceFileError(
+      `path '${trimmed}' has unsupported git mode ${info.mode} at base SHA; expected a regular file`,
+    );
+  }
+  if (info.mode === "120000") {
+    throw new ReviewReferenceFileError(
+      `path '${trimmed}' is a symbolic link at base SHA; symlinks are not allowed`,
+    );
+  }
+  if (info.mode !== "100644" && info.mode !== "100755") {
+    throw new ReviewReferenceFileError(
+      `path '${trimmed}' has unsupported git mode ${info.mode}; expected a regular file`,
+    );
+  }
+  if (info.sizeBytes > REFERENCE_MAX_BYTES) {
+    throw new ReviewReferenceFileError(
+      `file '${trimmed}' is ${info.sizeBytes} bytes at base SHA, exceeds ${REFERENCE_MAX_BYTES}-byte limit`,
+    );
+  }
+
+  return readBlobBySha(info.objectId);
 }
 
 function describeError(error: unknown): string {

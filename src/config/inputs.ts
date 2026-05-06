@@ -1,6 +1,10 @@
 import * as core from "@actions/core";
 
-import type { PrepareInputs, PublishInputs } from "./types.js";
+import type {
+  PrepareInputs,
+  PublishInputs,
+  ReviewReferenceSource,
+} from "./types.js";
 
 const MAX_CHUNK_BYTES_DEFAULT = 204800;
 const RETAIN_FINDINGS_DAYS_DEFAULT = 90;
@@ -18,12 +22,26 @@ export function getPrepareInputs(): PrepareInputs {
       ? rawMaxChunkBytes
       : MAX_CHUNK_BYTES_DEFAULT;
 
+  const rawReviewReferenceSource = core.getInput("review-reference-source").trim();
+  const reviewReferenceSource: ReviewReferenceSource =
+    rawReviewReferenceSource === "" ? "workspace" : parseReviewReferenceSource(rawReviewReferenceSource);
+
   return {
     allowedUsers: core.getInput("allow-users"),
     githubToken,
     maxChunkBytes,
     reviewReferenceFile: core.getInput("review-reference-file"),
+    reviewReferenceSource,
   };
+}
+
+function parseReviewReferenceSource(value: string): ReviewReferenceSource {
+  if (value === "workspace" || value === "base") {
+    return value;
+  }
+  throw new Error(
+    `Input 'review-reference-source' must be 'workspace' or 'base' (got '${value}').`,
+  );
 }
 
 export function getPublishInputs(): PublishInputs {

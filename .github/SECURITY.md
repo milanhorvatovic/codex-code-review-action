@@ -53,17 +53,35 @@ For consumers wiring this action into a workflow, the auditable checklist of req
 
 ### Safe `review-reference-file` values
 
-The `review-reference-file` input names a path inside the checked-out workspace, which on a `pull_request` run contains PR-controlled content. To prevent a PR from coercing the prepare step into reading runner-local files outside the workspace (e.g. `/proc/self/environ`) or runner-managed git state (e.g. `.git/config`) and forwarding their contents to OpenAI in the prompt, the value must satisfy every rule below. Anything else fails closed before the file is read:
+The `review-reference-file` input names a workspace-relative path inside the consumer repository. In workspace mode the path is resolved against the runner's checked-out workspace, so any regular file under `$GITHUB_WORKSPACE` that satisfies the rules below can be read; in base mode the path must be a tracked file at the PR base SHA. Which mode applies is governed by `review-reference-source` — see [Safe `review-reference-source` modes](#safe-review-reference-source-modes) below. The path-shape rules below apply to every value of `review-reference-source`. They prevent a PR from coercing the prepare step into reading runner-local files outside the workspace (e.g. `/proc/self/environ`) or runner-managed git state (e.g. `.git/config`) and forwarding their contents to OpenAI in the prompt:
 
 - workspace-relative — absolute paths (POSIX or Windows-style), backslashes, and NUL bytes are rejected;
 - contained — the resolved path stays under `$GITHUB_WORKSPACE` after POSIX normalization (`../...` is rejected);
-- not under `.git` — paths whose first component is `.git` (any casing) are rejected, because the contents of the runner's `.git` directory are runtime state, not PR content;
-- a regular file — directories, FIFOs, devices, and any kind of symbolic link (leaf or ancestor directory) are rejected;
-- bounded — at most 64 KiB.
+- not under `.git` — paths whose first component is `.git` (any casing) are rejected, because the contents of the runner's `.git` directory are runtime state, not PR content.
 
-A workspace-relative path that meets these rules (for example, `.github/codex/review-reference.md`) still represents PR-controlled content: a PR can legitimately edit the reference and steer the review prompt, and any other workspace file the PR is allowed to commit can be referenced too. Tamper-resistant policy reads from the base branch are tracked in [issue #97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97); until that ships, treat workspace-mode references as PR-authored policy.
+In addition to the shared rules, **workspace mode** rejects:
+
+- any kind of symbolic link (leaf or ancestor directory);
+- non-regular files (directories, FIFOs, devices);
+- on-disk size over 64 KiB.
+
+A workspace-mode path that meets these rules (for example, `.github/codex/review-reference.md`) still represents PR-controlled content: a same-repo PR can legitimately edit the reference and steer the review prompt, and any other workspace file the PR is allowed to commit can be referenced too. Set `review-reference-source: base` to lock the policy against in-PR edits.
 
 Adopters on `<= v2.0.x` should either upgrade to a release that contains this hardening or stop passing `review-reference-file` until they do.
+
+### Safe `review-reference-source` modes
+
+The `review-reference-source` input controls *where* `review-reference-file` is read from. It accepts exactly two values; anything else fails closed at input parsing.
+
+- `workspace` (default) — the file is resolved against the runner's checked-out workspace at the PR head SHA. This is convenient for PR-driven policy iteration but trusts every same-repo PR author to edit policy in the same PR.
+- `base` (recommended for less-trusted contributors and hard-coded in org-owned wrapper workflows; do not expose this input from a `workflow_call` wrapper as a caller-controlled toggle) — the file is read at the PR base SHA via `git ls-tree --literal-pathspecs` (for the tree-entry mode) and `git cat-file blob` (for the content). The git form does not follow filesystem symlinks, so a PR cannot point the read at a runner-local secret by replacing the file with a symlink in the workspace. `--literal-pathspecs` keeps filenames containing pathspec metacharacters resolving to the exact validated path. The blob's size is queried via `git cat-file -s` and checked against the cap before any content is buffered. In addition to the shared path-shape rules, base mode rejects:
+  - tracked symbolic links (git mode `120000`) — returning the link target string as policy content would be a footgun;
+  - non-regular-file modes (notably submodules, mode `160000`);
+  - blobs whose returned content exceeds 64 KiB.
+
+Base-mode failures use the same `Invalid review-reference-file:` prefix when the input or tree shape is at fault. Git-shell failures (path absent at the base SHA, base SHA unreachable) surface with a distinct prefix `Failed to read review-reference-file at base SHA:` so input problems and git problems can be debugged separately.
+
+Base mode protects against in-PR edits, not against trusted maintainers merging policy changes through normal review — policy *content* still lives in the consumer repo and is controlled by whoever can land changes on the base branch.
 
 The three-job architecture splits responsibilities by permission scope:
 

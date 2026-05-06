@@ -57,7 +57,7 @@ A non-empty diff means the merge candidate ships a stale bundle or a `package.js
 
 ## Manual security regression checks
 
-These checks exercise the path-validation hardening landed in [`src/prepare/referenceFile.ts`](../src/prepare/referenceFile.ts) (PR [#98](https://github.com/milanhorvatovic/codex-ai-code-review-action/pull/98), closing issue [#89](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/89)) plus the prompt-artifact composition path. The unit suites in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) and [`src/prepare/main.test.ts`](../src/prepare/main.test.ts) cover them; running `npm test` against the merge candidate confirms the protections still bite. The cases are listed here as an audit checklist, not as a separate test harness.
+These checks exercise the path-validation hardening implemented in [`src/prepare/referenceFile.ts`](../src/prepare/referenceFile.ts) plus the prompt-artifact composition path. The unit suites in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) and [`src/prepare/main.test.ts`](../src/prepare/main.test.ts) cover them; running `npm test` against the merge candidate confirms the protections still bite. The cases are listed here as an audit checklist, not as a separate test harness.
 
 - `review-reference-file: /proc/self/environ` is rejected with `must be workspace-relative, not absolute` before any read happens. The unit covers this in the `rejects an absolute POSIX path` case.
 - `review-reference-file: ../outside.md` is rejected with `escapes the workspace` before any read happens. The unit covers this in the `rejects a path that escapes the workspace via '..'` case.
@@ -66,14 +66,15 @@ These checks exercise the path-validation hardening landed in [`src/prepare/refe
 
 If any of the unit cases above are missing from the test suite or are skipped on the merge candidate, the gate fails — re-add coverage before tagging.
 
-## Conditional base-mode checks
+## Base-mode regression checks
 
-Run these only if the release contains the `review-reference-source: base` mode (tracked in issue [#97](https://github.com/milanhorvatovic/codex-ai-code-review-action/issues/97)). Until that lands, mark the section waived with a rationale that names the tracked follow-up so the waiver passes the [Sign-off convention](#sign-off-convention) acceptance bar — for example: `Waived: \`review-reference-source: base\` not part of v<X.Y.Z>; tracked in issue #97, target release v<next-version>`.
+Run these for every release. The `review-reference-source: base` mode is part of the prepare action surface from v2.1.0 onward, and any release that touches the resolver, the input parser, or `src/github/git.ts` can regress one of the properties below.
 
-- A PR that edits `.github/codex/review-reference.md` does not alter the policy applied to its own review when `review-reference-source: base` is set on the workflow. The base-mode read pulls the policy from the PR's base SHA, not the head SHA, so in-PR edits do not steer the prompt.
-- A missing base-branch reference path fails fast with a clear diagnostic when `review-reference-source: base` is set. The error must name the missing path and the base SHA so a maintainer can identify whether the file was renamed, deleted, or never existed at the resolved base.
+- A PR that edits `.github/codex/review-reference.md` does not alter the policy applied to its own review when `review-reference-source: base` is set on the workflow. The base-mode read pulls the policy from the PR's base SHA, not the head SHA, so in-PR edits do not steer the prompt. Real-git coverage lives in [`src/prepare/referenceFile.integration.test.ts`](../src/prepare/referenceFile.integration.test.ts) (`returns the BASE-SHA content when the workspace copy diverges` and `returns the BASE-SHA content when a divergent commit advances HEAD`).
+- A missing base-branch reference path fails fast with a clear diagnostic when `review-reference-source: base` is set. The error must name the missing path and the base SHA so a maintainer can identify whether the file was renamed, deleted, or never existed at the resolved base. Covered in the integration suite (`rejects a path that does not exist at the base SHA with a diagnostic naming the SHA and path`).
+- A tracked symbolic link at the resolved path (git mode `120000`) is rejected at the resolver, not silently returned as the link target string. Covered in the integration suite (`rejects a tracked symbolic link committed at the base SHA`) and the unit suite in [`src/prepare/referenceFile.test.ts`](../src/prepare/referenceFile.test.ts) (`rejects a tracked symbolic link (mode 120000)`).
 
-Both checks should be exercised in a scratch PR against the merge candidate before sign-off, and the result captured in the gate evidence zip.
+The integration suite is part of `npm test` running against the merge candidate, so the gate's pre-merge validation block already verifies these properties. A scratch-PR exercise on the merge candidate is still recommended for the first two so the result lands in the evidence zip alongside the unit output.
 
 ## Release-specific items
 
